@@ -23,13 +23,25 @@ function scanToolInputs(): Record<string, string> {
 }
 
 /**
- * 部署到 Cloudflare Pages（根路径，<project>.pages.dev 或自定义域名）。
- * base 固定为 '/'。各页面内用 import.meta.env.BASE_URL 拼接链接，
- * 可自动跟随 base 变化——若将来改部署到子路径，只改这一处即可。
+ * base 路径：构建时由环境变量 BASE_PATH 决定，支持双平台部署。
+ *
+ * - Cloudflare Pages（根路径）：不设 BASE_PATH，默认 '/'。
+ * - GitHub Pages（子路径）：Actions 注入 BASE_PATH=/<repo>/，如 '/static-toolkit/'。
+ *
+ * 应用代码统一用 import.meta.env.BASE_URL 拼接链接，会自动等于此处的 base，
+ * 无需关心部署在哪。规范化：确保首尾都带斜杠（如 'static-toolkit' → '/static-toolkit/'）。
  */
+function resolveBase(): string {
+  const raw = process.env.BASE_PATH;
+  if (!raw) return '/';
+  let b = raw.trim();
+  if (!b.startsWith('/')) b = `/${b}`;
+  if (!b.endsWith('/')) b = `${b}/`;
+  return b;
+}
 
 export default defineConfig({
-  base: '/',
+  base: resolveBase(),
   plugins: [tailwindcss()],
   resolve: {
     alias: {

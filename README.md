@@ -1,6 +1,6 @@
 # 静态工具箱（static-toolkit）
 
-一个可部署到 Cloudflare Pages 的静态工具站。每个工具是一个独立页面，纯浏览器运行，数据不上传。基于 **Vite + TypeScript + Tailwind CSS**，多页面（MPA）架构。
+一个可同时部署到 Cloudflare Pages 或 GitHub Pages 的静态工具站。每个工具是一个独立页面，纯浏览器运行，数据不上传。基于 **Vite + TypeScript + Tailwind CSS**，多页面（MPA）架构。
 
 ## 技术栈
 
@@ -9,7 +9,7 @@
 | 构建 | Vite + TypeScript |
 | 架构 | 多页面 MPA（每个工具一个独立 HTML 页） |
 | 样式 | Tailwind CSS v4 |
-| 部署 | Cloudflare Pages（根路径，连 Git 自动构建） |
+| 部署 | Cloudflare Pages 或 GitHub Pages（`BASE_PATH` 自适应根/子路径） |
 
 ## 目录结构
 
@@ -69,28 +69,50 @@ npm run dev
 
 slug 规则：全小写、kebab-case，字母开头（如 `quote-card`、`fancy-text`）。
 
-## 部署（Cloudflare Pages）
+## 部署（双平台自适应）
 
-通过 Cloudflare 连接 GitHub 仓库实现自动部署：推送到默认分支即触发构建并发布。
+同一份代码可部署到 **Cloudflare Pages** 或 **GitHub Pages**，由构建时的 `BASE_PATH` 环境变量决定路径前缀，应用代码无需任何改动。
 
-### 首次配置
+### 工作原理
 
-1. 在 Cloudflare Dashboard 进入 **Workers & Pages → Create → Pages → Connect to Git**
-2. 授权并选择本仓库，设置：
-   - **Production branch**：`main`（推送到此分支发布到生产环境；其他分支生成 Preview）
+| 平台 | 路径 | BASE_PATH | 来源 |
+|------|------|-----------|------|
+| Cloudflare Pages | 根路径 `xxx.pages.dev/` | 不设（默认 `/`） | Dashboard 连 Git 自动构建 |
+| GitHub Pages | 子路径 `user.github.io/static-toolkit/` | `/static-toolkit/` | `.github/workflows/deploy.yml` 注入 |
+
+`vite.config.ts` 的 `resolveBase()` 读取 `BASE_PATH` 并规范化为 `/.../` 形式。
+应用代码统一用 `import.meta.env.BASE_URL` 拼接链接，自动等于该 base，
+所以一份代码同时兼容两种路径模型。
+
+### 方式一：Cloudflare Pages（根路径）
+
+1. Cloudflare Dashboard → **Workers & Pages → Create → Pages → Connect to Git**
+2. 选择本仓库，设置：
+   - **Production branch**：`main`
    - **Framework preset**：`Vite`
    - **Build command**：`npm run build`
    - **Build output directory**：`dist`
-   - **Environment variables**：`NODE_VERSION = 22`（项目根 `.nvmrc` 也已指定，二者任一即可）
-3. 保存并部署。之后每次 `git push main` 自动构建发布。
+   - **Environment variables**：`NODE_VERSION = 22`（`.nvmrc` 已含，可不重复设）
+3. **不要**设置 `BASE_PATH`——根路径部署即默认 `/`。
 
-部署 URL：`https://<project-name>.pages.dev/`（也可绑定自定义域名，仍在根路径）。
+访问 `https://<project>.pages.dev/`。
 
-### 路径说明
+### 方式二：GitHub Pages（子路径）
 
-部署在**根路径**，`vite.config.ts` 中 `base` 固定为 `'/'`。
-各页面用 `import.meta.env.BASE_URL` 拼接链接，会自动跟随 base——
-若将来改部署到子路径（如 `example.com/tools/`），只需把 `base` 改为 `'/tools/'`。
+1. 推送仓库到 GitHub，仓库名建议 `static-toolkit`（决定子路径）
+2. 仓库 **Settings → Pages → Source** 选择 **"GitHub Actions"**
+3. 推送到 `main` 自动触发 `.github/workflows/deploy.yml`，构建时注入 `BASE_PATH=/static-toolkit/`
+
+访问 `https://<用户名>.github.io/static-toolkit/`。
+
+> 改仓库名时，同步修改 `.github/workflows/deploy.yml` 里的 `BASE_PATH` 值即可。
+
+### 本地模拟子路径构建
+
+```bash
+BASE_PATH=/static-toolkit/ npm run build   # 产物资源路径带前缀，可用 npm run preview 验证
+npm run build                              # 不设则按根路径构建
+```
 
 ## 核心设计
 

@@ -1,0 +1,61 @@
+# 部署到 GitHub Pages（项目页子路径）。
+# 触发：推送到 main 分支，或手动在 Actions 页运行。
+#
+# 关键：注入 BASE_PATH=/<repo>/，使 Vite 把资源/链接路径都加上子路径前缀，
+# 否则部署到 username.github.io/<repo>/ 后资源会 404。
+# （Cloudflare Pages 不用本 workflow，它在后台连 Git 自行构建，且默认根路径不设 BASE_PATH。）
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        env:
+          # ← 部署到子路径 /<repo>/，仓库名改动时同步修改此处
+          BASE_PATH: /static-toolkit/
+        run: npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
