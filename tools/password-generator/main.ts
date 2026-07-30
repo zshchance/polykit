@@ -14,7 +14,7 @@ import {
 initTheme();
 
 function renderPasswordGenerator() {
-  const { content } = renderToolLayout(document.body, '密码生成器');
+  const { content } = renderToolLayout(document.getElementById('app')!, '密码生成器');
 
   // —— 状态 ——
   const state: PasswordOptions = { ...DEFAULT_OPTIONS };

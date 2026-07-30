@@ -61,7 +61,7 @@ const html = `<!doctype html>
     </script>
   </head>
   <body>
-    <div class="mx-auto max-w-5xl px-4 py-10 min-h-screen"></div>
+    <div id="app" class="mx-auto max-w-5xl px-4 py-10 min-h-screen"></div>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>
@@ -76,7 +76,7 @@ import { h } from '@/core/components/element';
 initTheme();
 
 function render() {
-  const { content } = renderToolLayout(document.body, ${JSON.stringify(displayName)});
+  const { content } = renderToolLayout(document.getElementById('app')!, ${JSON.stringify(displayName)});
   // TODO: 在这里实现 ${displayName} 的功能
   content.append(
     h('p', { class: 'text-[var(--fg-muted)]', textContent: '${displayName} —— 待实现' }),

@@ -42,6 +42,9 @@ function resolveBase(): string {
 
 export default defineConfig({
   base: resolveBase(),
+  // 多页面应用：禁用 SPA history fallback，
+  // 避免未知路径（如 /password-generator/）误返回根 index.html。dev/build 路径对齐。
+  appType: 'mpa',
   plugins: [tailwindcss()],
   resolve: {
     alias: {

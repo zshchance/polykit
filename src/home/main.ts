@@ -8,9 +8,10 @@ initTheme();
 
 const base = import.meta.env.BASE_URL;
 
-/** 拼接工具页地址：base + slug + '/'，兼容子路径部署 */
+/** 拼接工具页地址：base + 'tools/' + slug + '/'
+ *  路径与 tools/<slug>/ 目录对齐，dev/build 一致，避免 SPA fallback 误命中 */
 function toolUrl(slug: string): string {
-  return `${base}${slug}/`;
+  return `${base}tools/${slug}/`;
 }
 
 /** 按 category 分组 */
