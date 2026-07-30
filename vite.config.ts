@@ -10,7 +10,7 @@ const r = (p: string) => resolve(__dirname, p);
 /**
  * 扫描 tools/<name>/index.html，生成 MPA 入口表。
  * 每个工具自动成为一个独立页面，新增工具无需改任何配置。
- * 入口键用工具目录名，产物路径保持目录结构（如 /static-toolkit/password-generator/）。
+ * 入口键用工具目录名，产物路径保持目录结构（如 /tools/password-generator/）。
  */
 function scanToolInputs(): Record<string, string> {
   const inputs: Record<string, string> = {};
@@ -23,17 +23,13 @@ function scanToolInputs(): Record<string, string> {
 }
 
 /**
- * GitHub Pages 部署到子路径 /static-toolkit/。
- * - 生产构建用 /static-toolkit/，否则资源 404。
- * - 本地 dev 用 /，否则 Vite 会去 /static-toolkit/ 找资源。
- * 通过 BASE_URL 环境变量可覆盖（如临时换仓库名）。
+ * 部署到 Cloudflare Pages（根路径，<project>.pages.dev 或自定义域名）。
+ * base 固定为 '/'。各页面内用 import.meta.env.BASE_URL 拼接链接，
+ * 可自动跟随 base 变化——若将来改部署到子路径，只改这一处即可。
  */
-const repoName = process.env.BASE_URL?.replace(/^\/|\/$/g, '') ?? 'static-toolkit';
-const isProd = process.env.NODE_ENV === 'production';
-const base = isProd ? `/${repoName}/` : '/';
 
 export default defineConfig({
-  base,
+  base: '/',
   plugins: [tailwindcss()],
   resolve: {
     alias: {

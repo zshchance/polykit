@@ -33,8 +33,8 @@ export function renderToolLayout(parent: HTMLElement, title: string): ToolLayout
 }
 
 /**
- * 计算返回首页的链接，兼容部署到子路径 /static-toolkit/ 的情况。
- * Vite 在 HTML 中会用 import.meta.env.BASE_URL，但这里是 TS 运行时拼接，所以直接读全局。
+ * 计算返回首页的链接，自动跟随 Vite 的 base 配置。
+ * Cloudflare Pages 根路径部署时返回 '/'；若改子路径会自动跟随。
  */
 function getHomeUrl(): string {
   // vite 注入：import.meta.env.BASE_URL，TS 里直接用

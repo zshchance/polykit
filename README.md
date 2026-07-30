@@ -1,6 +1,6 @@
 # 静态工具箱（static-toolkit）
 
-一个可部署到 GitHub Pages 的静态工具站。每个工具是一个独立页面，纯浏览器运行，数据不上传。基于 **Vite + TypeScript + Tailwind CSS**，多页面（MPA）架构。
+一个可部署到 Cloudflare Pages 的静态工具站。每个工具是一个独立页面，纯浏览器运行，数据不上传。基于 **Vite + TypeScript + Tailwind CSS**，多页面（MPA）架构。
 
 ## 技术栈
 
@@ -9,7 +9,7 @@
 | 构建 | Vite + TypeScript |
 | 架构 | 多页面 MPA（每个工具一个独立 HTML 页） |
 | 样式 | Tailwind CSS v4 |
-| 部署 | GitHub Pages（项目页子路径 `/static-toolkit/`） |
+| 部署 | Cloudflare Pages（根路径，连 Git 自动构建） |
 
 ## 目录结构
 
@@ -69,15 +69,28 @@ npm run dev
 
 slug 规则：全小写、kebab-case，字母开头（如 `quote-card`、`fancy-text`）。
 
-## 部署
+## 部署（Cloudflare Pages）
 
-**自动**：推送到 `main` 分支即触发 GitHub Actions，自动构建并部署到 GitHub Pages。
-首次使用需在仓库 **Settings → Pages → Source** 选择 "GitHub Actions"。
+通过 Cloudflare 连接 GitHub 仓库实现自动部署：推送到默认分支即触发构建并发布。
 
-部署 URL：`https://<用户名>.github.io/static-toolkit/`
+### 首次配置
 
-> base 路径（`/static-toolkit/`）在 `vite.config.ts` 中由仓库名 `static-toolkit` 决定。
-> 若改仓库名，同步修改 `vite.config.ts` 顶部的 `repoName` 默认值。
+1. 在 Cloudflare Dashboard 进入 **Workers & Pages → Create → Pages → Connect to Git**
+2. 授权并选择本仓库，设置：
+   - **Production branch**：`main`（推送到此分支发布到生产环境；其他分支生成 Preview）
+   - **Framework preset**：`Vite`
+   - **Build command**：`npm run build`
+   - **Build output directory**：`dist`
+   - **Environment variables**：`NODE_VERSION = 22`（项目根 `.nvmrc` 也已指定，二者任一即可）
+3. 保存并部署。之后每次 `git push main` 自动构建发布。
+
+部署 URL：`https://<project-name>.pages.dev/`（也可绑定自定义域名，仍在根路径）。
+
+### 路径说明
+
+部署在**根路径**，`vite.config.ts` 中 `base` 固定为 `'/'`。
+各页面用 `import.meta.env.BASE_URL` 拼接链接，会自动跟随 base——
+若将来改部署到子路径（如 `example.com/tools/`），只需把 `base` 改为 `'/tools/'`。
 
 ## 核心设计
 
