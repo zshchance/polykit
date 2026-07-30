@@ -1,0 +1,51 @@
+@import 'tailwindcss';
+
+/*
+ * 设计 token：通过 CSS 变量统一管理主题色、圆角、间距。
+ * 亮/暗主题切换由 <html> 上的 class 控制（ThemeToggle 组件负责）。
+ * Tailwind v4 通过 @theme 把变量暴露为工具类（如 bg-bg-base）。
+ */
+@theme {
+  --color-bg-base: var(--bg);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-fg-base: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-border-base: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+}
+
+:root {
+  --bg: #f8fafc;
+  --bg-elevated: #ffffff;
+  --fg: #0f172a;
+  --fg-muted: #64748b;
+  --border: #e2e8f0;
+  --accent: #4f46e5;
+  --accent-fg: #ffffff;
+}
+
+html.dark {
+  --bg: #0f172a;
+  --bg-elevated: #1e293b;
+  --fg: #f1f5f9;
+  --fg-muted: #94a3b8;
+  --border: #334155;
+  --accent: #6366f1;
+  --accent-fg: #ffffff;
+}
+
+html,
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'PingFang SC', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  border-color: var(--border);
+}
