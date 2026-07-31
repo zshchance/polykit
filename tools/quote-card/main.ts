@@ -276,8 +276,8 @@ function renderQuoteCard() {
   const saveBtn = h('button', {
     type: 'button',
     class:
-      'flex-1 rounded-md bg-[var(--accent)] px-3 py-2 text-sm text-[var(--accent-fg)] font-medium hover:opacity-90 transition-opacity',
-    textContent: '💾 保存到我的名言',
+      'flex-[1.4] rounded-md bg-[var(--accent)] px-3 py-2 text-sm text-[var(--accent-fg)] font-medium hover:opacity-90 transition-opacity whitespace-nowrap',
+    textContent: '💾 保存',
     onclick: () => {
       const text = textInput.value.trim();
       const author = authorInput.value.trim() || '佚名';
@@ -439,10 +439,8 @@ function renderQuoteCard() {
       authorInput,
       sourceInput,
     ]),
-    // 操作：随机 / 清空
-    h('div', { class: 'flex gap-2' }, [randomBtn, clearBtn]),
-    // 保存到我的名言
-    saveBtn,
+    // 操作：保存 / 随机 / 清空（同排，保存置首为主操作）
+    h('div', { class: 'flex gap-2' }, [saveBtn, randomBtn, clearBtn]),
     saveHint,
     libInfo,
     // 我的名言历史（折叠）
