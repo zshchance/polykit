@@ -6,7 +6,7 @@ import { on } from '@/core/utils/dom';
 import { searchQuotes, getRandomQuote, getQuoteCount, type QuoteRecord } from './data/quotes';
 import { templates, defaultTemplate, getTemplate } from './templates';
 import type { QuoteData } from './templates/types';
-import { renderCard, CARD_SIZE } from './card';
+import { renderCard } from './card';
 import { downloadCard, safeFilename } from './export';
 import {
   loadHistory,
@@ -17,6 +17,9 @@ import {
   type StoredQuote,
 } from './history';
 import { loadDraft, saveDraft, clearDraft } from './settings';
+import { ASPECTS, getAspect, type AspectId } from './aspect';
+import { ANIMATIONS, getAnimation, type AnimId } from './animations';
+import { exportVideo } from './video-export';
 
 initTheme();
 
@@ -31,49 +34,74 @@ function renderQuoteCard() {
   const { content } = renderToolLayout(document.getElementById('app')!, '名言卡片');
 
   // —— 状态 ——
-  // 启动时恢复上次编辑的草稿（内容/落款/出处/模板），无草稿则用默认值
+  // 启动时恢复上次编辑的草稿（内容/落款/出处/模板/宽高比/动画），无草稿则用默认值
   const restored = loadDraft();
-  const state: { quote: QuoteData; templateId: string } = {
+  const state: {
+    quote: QuoteData;
+    templateId: string;
+    aspectId: AspectId;
+    animId: AnimId;
+  } = {
     quote: restored
       ? { text: restored.text || DEFAULT_QUOTE.text, author: restored.author || DEFAULT_QUOTE.author, source: restored.source }
       : { ...DEFAULT_QUOTE },
     templateId: restored?.templateId ?? defaultTemplate.id,
+    aspectId: restored?.aspectId ?? '1:1',
+    animId: restored?.animId ?? 'fade',
   };
 
-  /** 把当前编辑态落库为草稿（输入/模板变化时调用） */
+  /** 当前宽高比对象 */
+  const currentAspect = () => getAspect(state.aspectId);
+  /** 当前动画效果 */
+  const currentAnim = () => getAnimation(state.animId);
+
+  /** 把当前编辑态落库为草稿（输入/模板/宽高/动画变化时调用） */
   function persistDraft(): void {
     saveDraft({
       text: textInput.value,
       author: authorInput.value,
       source: sourceInput.value.trim() || undefined,
       templateId: state.templateId,
+      aspectId: state.aspectId,
+      animId: state.animId,
     });
   }
 
   // ─────────────────────────── 卡片画板（右栏预览） ───────────────────────────
-  // 画板逻辑尺寸 1080×1080，用 transform scale 缩放以适配容器宽度。
+  // 画板逻辑尺寸由当前宽高比决定（短边 1080），用 transform scale 缩放以适配容器宽度。
   // 导出时临时移除缩放（.exporting），保证高清原图。
   //
   // 缩放 bug 修复：模板用 cssText 设置样式会清掉 surface 的 width/height/transform，
   // 所以每次 rerenderCard 后必须重新 fit（重写 transform）。card.ts 负责 width/height。
   const cardEl = h('div', {
     class: 'quote-card-surface',
-    style: `width:${CARD_SIZE}px;height:${CARD_SIZE}px;transform-origin:top left;box-sizing:border-box;`,
+    style: `width:${currentAspect().w}px;height:${currentAspect().h}px;transform-origin:top left;box-sizing:border-box;`,
   });
 
-  /** 根据 stage 宽度计算缩放比例并应用到 surface */
+  /** 当前播放中的动画（供视频导出复用；切换时取消旧的） */
+  let currentAnimObj: Animation | null = null;
+
+  /** 根据 stage 宽度（及竖版可用高度）计算缩放比例并应用到 surface */
   function fitCardToContainer(): void {
+    const a = currentAspect();
     const w = cardStage.clientWidth;
-    const scale = w / CARD_SIZE;
+    const scale = w / a.w;
     cardEl.style.transform = `scale(${scale})`;
     // stage 高度跟随缩放后的画板
-    cardStage.style.height = `${CARD_SIZE * scale}px`;
+    cardStage.style.height = `${a.h * scale}px`;
   }
 
-  /** 重绘卡片内容（用当前 state），并重新应用缩放（模板 cssText 会清掉 transform） */
+  /** 重绘卡片内容（用当前 state），重新应用缩放，并播放入场动画 */
   function rerenderCard(): void {
-    renderCard(cardEl, state.quote, getTemplate(state.templateId));
+    // 取消上一段动画
+    currentAnimObj?.cancel();
+    renderCard(cardEl, state.quote, getTemplate(state.templateId), currentAspect());
     fitCardToContainer();
+    // 构建并播放入场动画（WAAPI）
+    const contentEl = cardEl.querySelector('.quote-card-content') as HTMLElement | null;
+    if (contentEl) {
+      currentAnimObj = currentAnim().build(contentEl, state.quote);
+    }
   }
 
   // 画板外层容器（决定显示宽度，承载缩放后的画板）
@@ -123,36 +151,160 @@ function renderQuoteCard() {
     }
   }
 
-  // 下载按钮 + 状态提示
+  // —— 宽高比选择器 ——
+  const aspectButtons = ASPECTS.map((a) =>
+    h('button', {
+      type: 'button',
+      'data-aspect': a.id,
+      class: [
+        'rounded-md border px-2.5 py-1.5 text-xs transition-all',
+        a.id === state.aspectId
+          ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+          : 'border-[var(--border)] text-[var(--fg-muted)] hover:border-[var(--accent)]',
+      ].join(' '),
+      textContent: a.label,
+      onclick: () => {
+        state.aspectId = a.id;
+        updateAspectSelection();
+        rerenderCard();
+        persistDraft();
+      },
+    }),
+  );
+  const aspectSelector = h('div', { class: 'flex flex-wrap gap-2' }, aspectButtons);
+  function updateAspectSelection(): void {
+    for (const btn of aspectButtons) {
+      const isActive = btn.getAttribute('data-aspect') === state.aspectId;
+      btn.className = [
+        'rounded-md border px-2.5 py-1.5 text-xs transition-all',
+        isActive
+          ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+          : 'border-[var(--border)] text-[var(--fg-muted)] hover:border-[var(--accent)]',
+      ].join(' ');
+    }
+  }
+
+  // —— 动画效果选择器 ——
+  const animButtons = ANIMATIONS.map((an) =>
+    h('button', {
+      type: 'button',
+      'data-anim': an.id,
+      class: [
+        'rounded-md border px-2.5 py-1.5 text-xs transition-all',
+        an.id === state.animId
+          ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+          : 'border-[var(--border)] text-[var(--fg-muted)] hover:border-[var(--accent)]',
+      ].join(' '),
+      textContent: an.name,
+      onclick: () => {
+        state.animId = an.id;
+        updateAnimSelection();
+        rerenderCard(); // 重新播放新动画
+        persistDraft();
+      },
+    }),
+  );
+  const animSelector = h('div', { class: 'flex flex-wrap gap-2' }, animButtons);
+  function updateAnimSelection(): void {
+    for (const btn of animButtons) {
+      const isActive = btn.getAttribute('data-anim') === state.animId;
+      btn.className = [
+        'rounded-md border px-2.5 py-1.5 text-xs transition-all',
+        isActive
+          ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+          : 'border-[var(--border)] text-[var(--fg-muted)] hover:border-[var(--accent)]',
+      ].join(' ');
+    }
+  }
+
+  // 小节标题工具
+  const sectionLabel = (text: string) =>
+    h('span', { class: 'text-xs font-medium text-[var(--fg-muted)]', textContent: text });
+
+  // 导出按钮（图片 + 视频）+ 状态提示
   const exportHint = h('div', { class: 'text-sm text-[var(--fg-muted)] min-h-[1.25rem]' });
-  const downloadBtn = h('button', {
+
+  const downloadImgBtn = h('button', {
     type: 'button',
     class:
-      'w-full rounded-md bg-[var(--accent)] px-4 py-2.5 text-[var(--accent-fg)] font-medium hover:opacity-90 transition-opacity',
-    textContent: '⬇ 下载图片',
+      'flex-1 rounded-md bg-[var(--accent)] px-4 py-2.5 text-[var(--accent-fg)] font-medium hover:opacity-90 transition-opacity',
+    textContent: '📷 导出图片',
     onclick: async () => {
-      downloadBtn.textContent = '生成中…';
-      downloadBtn.disabled = true;
-      // 导出时移除缩放，截图原始 1080×1080
+      downloadImgBtn.textContent = '生成中…';
+      downloadImgBtn.disabled = true;
+      // 图片导出需截「动画完成后的成品」：把动画跳到终态（finish），
+      // 否则逐字/淡入等动画停在中间帧会截到半透明/缺字画面。
+      try {
+        currentAnimObj?.finish();
+      } catch {
+        // 忽略
+      }
       cardEl.classList.add('exporting');
       cardEl.style.transform = 'none';
       await new Promise((r) => setTimeout(r, 50)); // 等重排
-      const result = await downloadCard(cardEl, safeFilename(state.quote));
-      // 恢复缩放
+      const result = await downloadCard(cardEl, safeFilename(state.quote, '.png'));
+      // 恢复
       cardEl.classList.remove('exporting');
       fitCardToContainer();
-      downloadBtn.textContent = '⬇ 下载图片';
-      downloadBtn.disabled = false;
-      exportHint.textContent = result.ok ? '✓ 已下载到本地' : `× 导出失败：${result.reason}`;
+      // 重新播放动画（finish 后动画在终态，重播给预览一个完整入场）
+      rerenderCard();
+      downloadImgBtn.textContent = '📷 导出图片';
+      downloadImgBtn.disabled = false;
+      exportHint.textContent = result.ok ? '✓ 图片已下载' : `× 导出失败：${result.reason}`;
       exportHint.style.color = result.ok ? '#22c55e' : '#ef4444';
     },
   });
 
+  const downloadVideoBtn = h('button', {
+    type: 'button',
+    class:
+      'flex-1 rounded-md border border-[var(--accent)] bg-[var(--bg-elevated)] px-4 py-2.5 text-[var(--accent)] font-medium hover:opacity-90 transition-opacity',
+    textContent: '🎬 导出视频',
+    onclick: async () => {
+      downloadVideoBtn.textContent = '录制中…';
+      downloadVideoBtn.disabled = true;
+      downloadImgBtn.disabled = true;
+      exportHint.textContent = '正在录制动画过程，请稍候…';
+      exportHint.style.color = 'var(--fg-muted)';
+      // 导出态：surface 复位 transform、原始尺寸；重渲染确保最新内容
+      currentAnimObj?.cancel();
+      cardEl.classList.add('exporting');
+      cardEl.style.transform = 'none';
+      renderCard(cardEl, state.quote, getTemplate(state.templateId), currentAspect());
+      await new Promise((r) => setTimeout(r, 80)); // 等重排 + 字体
+      try {
+        const result = await exportVideo({
+          surface: cardEl,
+          aspect: currentAspect(),
+          effect: currentAnim(),
+          quote: state.quote,
+        });
+        exportHint.textContent = result.ok ? '✓ 视频已下载（WebM）' : `× 视频导出失败：${result.reason}`;
+        exportHint.style.color = result.ok ? '#22c55e' : '#ef4444';
+      } finally {
+        // 恢复预览态
+        cardEl.classList.remove('exporting');
+        rerenderCard();
+        downloadVideoBtn.textContent = '🎬 导出视频';
+        downloadVideoBtn.disabled = false;
+        downloadImgBtn.disabled = false;
+      }
+    },
+  });
+
+  const exportRow = h('div', { class: 'flex gap-2' }, [downloadImgBtn, downloadVideoBtn]);
+
   // 预览列：移动端置顶（order-first），桌面端在右（order 重置为 0）
   const previewCol = h('div', { class: 'space-y-4 min-w-0 order-first lg:order-none lg:sticky lg:top-6' }, [
     cardStage,
-    templateSelector,
-    downloadBtn,
+    // 模板
+    h('div', { class: 'space-y-2' }, [sectionLabel('模板'), templateSelector]),
+    // 宽高比
+    h('div', { class: 'space-y-2' }, [sectionLabel('宽高比'), aspectSelector]),
+    // 动画效果
+    h('div', { class: 'space-y-2' }, [sectionLabel('动画效果'), animSelector]),
+    // 导出
+    exportRow,
     exportHint,
   ]);
 

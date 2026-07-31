@@ -43,10 +43,14 @@ function dataURLtoBlob(dataUrl: string): Blob {
   return new Blob([arr], { type: mime });
 }
 
-/** 生成安全文件名：替换非法字符，限制长度 */
-export function safeFilename(quote: { text: string; author: string }, suffix = ''): string {
+/**
+ * 生成安全文件名：替换非法字符，限制长度。
+ * @param quote 名言（取作者+正文片段）
+ * @param ext 文件扩展名（含点，如 '.png' / '.webm'），默认 '.png'
+ */
+export function safeFilename(quote: { text: string; author: string }, ext = '.png'): string {
   const sanitize = (s: string) =>
     s.replace(/[\\/:*?"<>|\n\r]/g, '').replace(/\s+/g, '_').slice(0, 20);
   const name = `${sanitize(quote.author)}-${sanitize(quote.text)}`.slice(0, 40);
-  return `名言_${name}${suffix}.png`;
+  return `名言_${name}${ext}`;
 }

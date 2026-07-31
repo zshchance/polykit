@@ -1,17 +1,22 @@
 /**
  * 名言卡片草稿 —— 本地持久化（localStorage）。
  *
- * 记住用户最后输入的名言内容/落款/出处与所选模板，下次打开页面时自动还原，
- * 免去重复输入。仅存「当前编辑中的草稿」，不与 history.ts（用户主动保存的名言）混用。
+ * 记住用户最后输入的名言内容/落款/出处、所选模板、宽高比与动画效果，
+ * 下次打开页面时自动还原，免去重复输入与点选。
+ * 仅存「当前编辑中的草稿」，不与 history.ts（用户主动保存的名言）混用。
  *
  * 设计与 history.ts 一致：带 version 的 JSON blob，损坏/隐私模式时安全回退默认值。
  *
  * 存储形态（JSON）：
- *   { "version": 1, "draft": { "text": string, "author": string, "source"?: string, "templateId": string } }
+ *   { "version": 2, "draft": { text, author, source?, templateId, aspectId?, animId? } }
+ *   （v2 新增 aspectId / animId；旧 v1 草稿缺这两个字段时用默认值，向前兼容）
  */
 
+import { isValidAspectId, type AspectId } from './aspect';
+import { isValidAnimId, type AnimId } from './animations';
+
 const STORAGE_KEY = 'quote-card:draft';
-const CURRENT_VERSION = 1;
+const CURRENT_VERSION = 2;
 
 /** 草稿（可被还原的编辑态） */
 export interface QuoteDraft {
@@ -19,6 +24,10 @@ export interface QuoteDraft {
   author: string;
   source?: string;
   templateId: string;
+  /** 宽高比（v2，可选，缺省默认 1:1） */
+  aspectId?: AspectId;
+  /** 动画效果（v2，可选，缺省默认淡入） */
+  animId?: AnimId;
 }
 
 interface DraftBlob {
@@ -39,7 +48,10 @@ export function loadDraft(): QuoteDraft | null {
     if (typeof d.text !== 'string' || typeof d.author !== 'string' || typeof d.templateId !== 'string') return null;
     if (d.text.length === 0 && d.author.length === 0) return null; // 全空视为无草稿
     const source = typeof d.source === 'string' ? d.source : undefined;
-    return { text: d.text, author: d.author, source, templateId: d.templateId };
+    // aspectId / animId 仅在合法时保留，否则留空（调用方用默认）
+    const aspectId = isValidAspectId(d.aspectId) ? d.aspectId : undefined;
+    const animId = isValidAnimId(d.animId) ? d.animId : undefined;
+    return { text: d.text, author: d.author, source, templateId: d.templateId, aspectId, animId };
   } catch {
     return null;
   }
