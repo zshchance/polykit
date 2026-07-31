@@ -8,6 +8,14 @@ import { templates, defaultTemplate, getTemplate } from './templates';
 import type { QuoteData } from './templates/types';
 import { renderCard, CARD_SIZE } from './card';
 import { downloadCard, safeFilename } from './export';
+import {
+  loadHistory,
+  addQuote,
+  removeQuote,
+  clearHistory,
+  HISTORY_MAX,
+  type StoredQuote,
+} from './history';
 
 initTheme();
 
@@ -263,6 +271,157 @@ function renderQuoteCard() {
     },
   });
 
+  // —— 保存到我的名言（只存用户手动保存的内容）——
+  const saveHint = h('div', { class: 'text-sm text-[var(--fg-muted)] min-h-[1.25rem]' });
+  const saveBtn = h('button', {
+    type: 'button',
+    class:
+      'flex-1 rounded-md bg-[var(--accent)] px-3 py-2 text-sm text-[var(--accent-fg)] font-medium hover:opacity-90 transition-opacity',
+    textContent: '💾 保存到我的名言',
+    onclick: () => {
+      const text = textInput.value.trim();
+      const author = authorInput.value.trim() || '佚名';
+      if (!text) {
+        saveHint.textContent = '× 名言内容不能为空';
+        saveHint.style.color = '#ef4444';
+        return;
+      }
+      const items = addQuote({ text, author, source: sourceInput.value.trim() || undefined });
+      renderQuoteHistory(items);
+      saveHint.textContent = '✓ 已保存到我的名言';
+      saveHint.style.color = '#22c55e';
+      setTimeout(() => {
+        saveHint.textContent = '';
+      }, 2000);
+    },
+  });
+
+  // ────────── 我的名言历史面板（折叠）──────────
+  // 点击某条 → 加载到卡片 + 填入输入框；每条可单独删除；顶部可一键全清
+  const historyCount = h('span', { class: 'font-mono text-[var(--fg-muted)]', textContent: '0' });
+  const historyIndicator = h('span', { class: 'text-xs', textContent: '▶' });
+  let historyOpen = false;
+  const historyPanel = h('div', { class: 'space-y-2' }, []);
+  historyPanel.classList.add('hidden'); // 默认折叠
+
+  const historyToggle = h(
+    'button',
+    {
+      type: 'button',
+      class:
+        'flex w-full items-center justify-between rounded-md px-2 py-2 text-sm text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--bg)] transition-colors',
+      'aria-expanded': 'false',
+      onclick: () => {
+        historyOpen = !historyOpen;
+        historyPanel.classList.toggle('hidden', !historyOpen);
+        historyToggle.setAttribute('aria-expanded', String(historyOpen));
+        historyIndicator.textContent = historyOpen ? '▼' : '▶';
+      },
+    },
+    [h('span', {}, ['我的名言（', historyCount, '）']), historyIndicator],
+  );
+
+  /** 把某条历史加载到卡片 + 输入框 */
+  function loadHistoryItem(q: StoredQuote): void {
+    applyQuote({ text: q.text, author: q.author, source: q.source });
+    textInput.value = q.text;
+    authorInput.value = q.author;
+    sourceInput.value = q.source ?? '';
+  }
+
+  /** 渲染历史列表 */
+  function renderQuoteHistory(items?: StoredQuote[]): void {
+    const list = items ?? loadHistory();
+    historyCount.textContent = String(list.length);
+    historyPanel.replaceChildren();
+
+    if (list.length === 0) {
+      historyPanel.append(
+        h('p', {
+          class: 'py-4 text-center text-sm text-[var(--fg-muted)]',
+          textContent: '还没有保存的名言。编辑后点"保存到我的名言"。',
+        }),
+      );
+      return;
+    }
+
+    // 顶部：全部清除
+    historyPanel.append(
+      h('div', { class: 'flex justify-end' }, [
+        h(
+          'button',
+          {
+            type: 'button',
+            class:
+              'text-xs text-[var(--fg-muted)] hover:text-red-500 transition-colors underline-offset-2 hover:underline',
+            textContent: '全部清除',
+            onclick: () => {
+              if (confirm('确定清除全部我的名言吗？此操作不可撤销。')) {
+                clearHistory();
+                renderQuoteHistory([]);
+              }
+            },
+          },
+          [],
+        ),
+      ]),
+    );
+
+    for (const q of list) {
+      historyPanel.append(
+        h('div', {
+          class:
+            'flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2',
+        }, [
+          // 点击正文区 → 加载这条到卡片
+          h(
+            'button',
+            {
+              type: 'button',
+              class:
+                'flex-1 min-w-0 text-left transition-colors',
+              title: '点击加载到卡片',
+              onclick: () => loadHistoryItem(q),
+            },
+            [
+              h('p', {
+                class: 'line-clamp-2 text-sm text-[var(--fg)]',
+                textContent: q.text,
+              }),
+              h('p', {
+                class: 'mt-0.5 truncate text-xs text-[var(--fg-muted)]',
+                textContent: `— ${q.author}${q.source ? ` · ${q.source}` : ''}`,
+              }),
+            ],
+          ),
+          // 单条删除
+          h(
+            'button',
+            {
+              type: 'button',
+              'aria-label': '删除此条',
+              class:
+                'shrink-0 rounded-md border border-[var(--border)] px-2 py-1.5 text-sm text-[var(--fg-muted)] hover:text-red-500 hover:border-red-400 transition-colors',
+              textContent: '✕',
+              onclick: () => renderQuoteHistory(removeQuote(q.id)),
+            },
+            [],
+          ),
+        ]),
+      );
+    }
+
+    // 底部隐私提示
+    historyPanel.append(
+      h('p', {
+        class: 'pt-1 text-center text-xs text-[var(--fg-muted)]',
+        textContent: `仅存于本浏览器，清除浏览器数据即消失（上限 ${HISTORY_MAX} 条）`,
+      }),
+    );
+  }
+
+  renderQuoteHistory();
+
   // 库信息提示
   const libInfo = h('p', { class: 'text-xs text-[var(--fg-muted)]', textContent: `本地名言库：${getQuoteCount()} 条 · 数据不出本地` });
 
@@ -280,9 +439,15 @@ function renderQuoteCard() {
       authorInput,
       sourceInput,
     ]),
-    // 操作
+    // 操作：随机 / 清空
     h('div', { class: 'flex gap-2' }, [randomBtn, clearBtn]),
+    // 保存到我的名言
+    saveBtn,
+    saveHint,
     libInfo,
+    // 我的名言历史（折叠）
+    historyToggle,
+    historyPanel,
   ]);
 
   // ─────────────────────────── 两栏布局 ───────────────────────────
