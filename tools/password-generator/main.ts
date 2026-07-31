@@ -9,7 +9,6 @@ import {
   generatePassword,
   estimateStrengthBits,
   CHARSETS,
-  DEFAULT_OPTIONS,
   type PasswordOptions,
 } from './generator';
 import {
@@ -20,6 +19,7 @@ import {
   HISTORY_MAX,
   type StoredPassword,
 } from './history';
+import { loadOptions, saveOptions } from './settings';
 
 initTheme();
 
@@ -37,7 +37,8 @@ function renderPasswordGenerator() {
   const { content } = renderToolLayout(document.getElementById('app')!, '密码生成器');
 
   // —— 状态 ——
-  const state: PasswordOptions = { ...DEFAULT_OPTIONS };
+  // 启动时恢复上次记忆的选项（长度/字符类型等），无记忆则用默认值
+  const state: PasswordOptions = loadOptions();
   let currentPassword = '';
   // 动画相关定时器（统一管理，便于取消重入）
   let scrambleTimers: number[] = [];
@@ -385,10 +386,20 @@ function renderPasswordGenerator() {
   // 外层：垂直 + 水平居中
   content.append(h('div', { class: 'flex-1 flex items-center justify-center w-full' }, [card]));
 
-  // 任意选项变化时自动重新生成，保持结果与选项一致
-  on(checkboxWrap, ['change'], generate);
-  lengthInput.addEventListener('change', generate);
-  requireEachInput.addEventListener('change', generate);
+  // 任意选项变化时：自动重新生成 + 记忆当前选项（长度/字符类型等）。
+  // 控件的直接 onchange 已先改写 state，这里的 change 事件随后触发，落库的是最新值。
+  on(checkboxWrap, ['change'], () => {
+    saveOptions(state);
+    generate();
+  });
+  lengthInput.addEventListener('change', () => {
+    saveOptions(state);
+    generate();
+  });
+  requireEachInput.addEventListener('change', () => {
+    saveOptions(state);
+    generate();
+  });
 
   // 初始生成一个
   generate();
