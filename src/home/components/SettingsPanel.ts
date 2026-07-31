@@ -4,15 +4,18 @@ import { exportPrefsJSON, importPrefsJSON, prefsExportFilename, emptyPrefs } fro
 import { showToast } from './toast';
 
 /**
- * 个人设置面板：备份 / 恢复 / 重置 工具偏好（置顶 / 星标 / 排序）。
+ * 个人设置浮层：备份 / 恢复 / 重置 工具偏好（置顶 / 星标 / 排序）。
  *
- * 默认折叠（一个 ⚙ 按钮），展开后三行操作。所有反馈走 toast，不弹原生 alert。
- * 数据仅本批偏好，不含主题等其它本地状态（聚焦、可迁移）。
+ * 极简化设计：浮层本身只含统计 + 三个操作 + 一句说明，
+ * 由首页顶栏「⚙」按钮触发显示/隐藏（fixed 定位，点外部收起）。
+ * 主栏不再有大块设置卡片，保持首页极简。
+ * 所有反馈走 toast，不弹原生 alert。数据仅本批偏好，可跨设备迁移。
  */
 
 export interface SettingsPanel {
+  /** 浮层根元素（由调用方决定显隐） */
   el: HTMLElement;
-  /** 刷新显示（恢复/重置后调用，刷新统计文案） */
+  /** 刷新统计文案（恢复/重置后调用） */
   refresh: (prefs: HomePrefs) => void;
 }
 
@@ -54,7 +57,7 @@ export function createSettingsPanel(
         showToast('已导出我的设置');
       },
     },
-    ['⬇ 导出我的设置'],
+    ['⬇ 导出'],
   );
 
   // —— 操作：从文件恢复 ——
@@ -92,7 +95,7 @@ export function createSettingsPanel(
         'flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
       onclick: () => fileInput.click(),
     },
-    ['⬆ 从文件恢复'],
+    ['⬆ 恢复'],
   );
 
   // —— 操作：重置 ——
@@ -109,49 +112,31 @@ export function createSettingsPanel(
         showToast('已重置全部设置');
       },
     },
-    ['🗑 重置全部'],
+    ['🗑 重置'],
   );
 
-  // —— 可折叠展开区 ——
-  const body = h(
+  const el = h(
     'div',
-    { class: 'mt-3 hidden space-y-3' },
+    {
+      class:
+        'w-60 space-y-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 shadow-xl',
+      role: 'dialog',
+      'aria-label': '个人设置',
+    },
     [
-      stats,
-      h('div', { class: 'flex flex-wrap gap-2' }, [exportBtn, restoreBtn, resetBtn]),
+      h('div', { class: 'flex items-center justify-between' }, [
+        h('span', { class: 'text-sm font-medium text-[var(--fg)]', textContent: '我的设置' }),
+        stats,
+      ]),
+      h('div', { class: 'flex gap-2' }, [exportBtn, restoreBtn, resetBtn]),
       h('p', {
         class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
         textContent:
-          '导出把置顶 / 星标 / 排序存为 JSON，可在其它设备或浏览器恢复。数据仅保存在本地。',
+          '导出置顶 / 星标 / 排序为 JSON，可在其它设备或浏览器恢复。数据仅保存在本地。',
       }),
+      fileInput,
     ],
   );
-
-  const toggleBtn = h(
-    'button',
-    {
-      type: 'button',
-      class:
-        'flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-2.5 text-sm text-[var(--fg)] transition-colors hover:border-[var(--accent)]',
-      'aria-expanded': 'false',
-      onclick: () => {
-        const hidden = body.classList.toggle('hidden');
-        toggleBtn.setAttribute('aria-expanded', String(!hidden));
-        caret.textContent = hidden ? '▸' : '▾';
-      },
-    },
-    [
-      h('span', { class: 'flex items-center gap-2' }, [
-        h('span', { textContent: '⚙' }),
-        h('span', { textContent: '备份 / 还原我的设置' }),
-        stats,
-      ]),
-      ((): HTMLElement => h('span', { class: 'text-[var(--fg-muted)]', textContent: '▸' }))(),
-    ],
-  );
-  const caret = toggleBtn.querySelector('span:last-child') as HTMLElement;
-
-  const el = h('div', {}, [toggleBtn, body, fileInput]);
 
   return { el, refresh };
 }

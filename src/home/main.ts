@@ -81,6 +81,50 @@ function renderHome(): void {
     return sortTools(list, prefs);
   }
 
+  // ────────── 设置浮层（fixed，由顶栏 ⚙ 按钮触发） ──────────
+  const settingsPanel = createSettingsPanel(prefs, (next) => mutatePrefs(next));
+  const popover = h(
+    'div',
+    {
+      class: 'fixed right-4 top-16 z-50 hidden',
+      'data-settings-popover': '1',
+    },
+    [settingsPanel.el],
+  );
+  // 点击浮层外部收起
+  document.addEventListener('click', (e) => {
+    if (popover.classList.contains('hidden')) return;
+    const target = e.target as Node;
+    if (popover.contains(target) || settingsBtn.contains(target)) return;
+    hidePopover();
+  });
+
+  function showPopover(): void {
+    popover.classList.remove('hidden');
+    settingsBtn.setAttribute('aria-expanded', 'true');
+  }
+  function hidePopover(): void {
+    popover.classList.add('hidden');
+    settingsBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  // 顶栏「⚙」按钮：与主题切换同款极简图标按钮
+  const settingsBtn = h('button', {
+    type: 'button',
+    class:
+      'inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--border)] text-[var(--fg)] hover:bg-[var(--bg-elevated)] transition-colors text-lg',
+    title: '我的设置（备份 / 还原）',
+    'aria-label': '我的设置',
+    'aria-expanded': 'false',
+    'aria-haspopup': 'dialog',
+    onclick: (e: Event) => {
+      e.stopPropagation();
+      if (popover.classList.contains('hidden')) showPopover();
+      else hidePopover();
+    },
+  });
+  settingsBtn.textContent = '⚙';
+
   // ────────── 顶部 Hero ──────────
   const hero = h('header', { class: 'mb-8' }, [
     h('div', { class: 'flex items-start justify-between gap-4' }, [
@@ -94,7 +138,7 @@ function renderHome(): void {
           textContent: '纯浏览器运行，数据不出本地 · 安全实用的在线小工具',
         }),
       ]),
-      createThemeToggle(),
+      h('div', { class: 'flex items-center gap-2' }, [settingsBtn, createThemeToggle()]),
     ]),
   ]);
 
@@ -138,9 +182,6 @@ function renderHome(): void {
     { class: 'flex flex-wrap items-center gap-2' },
     [chips.el, h('span', { class: 'mx-1 h-5 w-px bg-[var(--border)]' }), starToggle],
   );
-
-  // ────────── 设置面板（备份 / 还原 / 重置） ──────────
-  const settingsPanel = createSettingsPanel(prefs, (next) => mutatePrefs(next));
 
   // ────────── 工具网格容器（可替换内容） ──────────
   const gridContainer = h('div', {});
@@ -200,7 +241,6 @@ function renderHome(): void {
   const mainCol = h('div', { class: 'space-y-5' }, [
     searchWrapper,
     filterRow,
-    settingsPanel.el,
     gridContainer,
   ]);
 
@@ -242,6 +282,8 @@ function renderHome(): void {
   }
 
   app.append(hero, layout, createSiteFooter());
+  // 设置浮层挂到 body 顶层（fixed 定位，脱离布局流）
+  document.body.append(popover);
   rerenderGrid();
 }
 
