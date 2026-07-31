@@ -25,11 +25,14 @@ export const registryConfig: RegistryConfig = {
       '文案工具',
       '名言卡片',
       '密码生成器',
+      'AI配色提示词',
+      '配色工具',
       '万年历',
     ],
   },
   modules: {
     // password-generator 排到最前（示例工具）
     'password-generator': { order: 1 },
+    'color-prompt': { order: 2 },
   },
 };
