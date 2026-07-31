@@ -6,6 +6,7 @@ import { createCopyButton } from '@/core/components/CopyButton';
 import { PALETTES, MOODS, getPaletteById, type Palette } from './data/palettes';
 import { renderWebsitePreview, renderSlidePreview, previewHeader } from './preview';
 import { buildPromptZh, buildPromptEn } from './templates';
+import { loadSelection, saveSelection } from './settings';
 
 initTheme();
 
@@ -24,8 +25,15 @@ function renderColorPrompt(): void {
   const { content } = renderToolLayout(document.getElementById('app')!, 'AI 配色提示词');
 
   // —— 状态 ——
-  let selectedId: string = PALETTES[0].id;
-  let activeMood = '';
+  // 启动时恢复上次选中的色系与情绪筛选，无记忆则用默认值
+  const restored = loadSelection();
+  let selectedId: string = restored.selectedId;
+  let activeMood = restored.activeMood;
+
+  /** 落库当前选择态（色系/情绪变化时调用） */
+  function persistSelection(): void {
+    saveSelection({ selectedId, activeMood });
+  }
 
   /** 选中的色系对象 */
   const selected = (): Palette => getPaletteById(selectedId) ?? PALETTES[0];
@@ -65,6 +73,7 @@ function renderColorPrompt(): void {
           const first = filteredPalettes()[0];
           if (first) select(first.id);
         }
+        persistSelection();
       },
     });
   }
@@ -182,11 +191,12 @@ function renderColorPrompt(): void {
     ]);
   }
 
-  /** 选中某色系：更新状态 + 刷新网格选中态 + 刷新结果区 */
+  /** 选中某色系：更新状态 + 刷新网格选中态 + 刷新结果区 + 落库 */
   function select(id: string): void {
     selectedId = id;
     renderPaletteGrid(); // 更新选中态高亮
     renderResult();
+    persistSelection();
     // 结果区滚入视野（避免长网格下选了看不到）
     resultArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }

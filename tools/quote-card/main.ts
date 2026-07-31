@@ -16,6 +16,7 @@ import {
   HISTORY_MAX,
   type StoredQuote,
 } from './history';
+import { loadDraft, saveDraft, clearDraft } from './settings';
 
 initTheme();
 
@@ -30,10 +31,24 @@ function renderQuoteCard() {
   const { content } = renderToolLayout(document.getElementById('app')!, '名言卡片');
 
   // —— 状态 ——
+  // 启动时恢复上次编辑的草稿（内容/落款/出处/模板），无草稿则用默认值
+  const restored = loadDraft();
   const state: { quote: QuoteData; templateId: string } = {
-    quote: { ...DEFAULT_QUOTE },
-    templateId: defaultTemplate.id,
+    quote: restored
+      ? { text: restored.text || DEFAULT_QUOTE.text, author: restored.author || DEFAULT_QUOTE.author, source: restored.source }
+      : { ...DEFAULT_QUOTE },
+    templateId: restored?.templateId ?? defaultTemplate.id,
   };
+
+  /** 把当前编辑态落库为草稿（输入/模板变化时调用） */
+  function persistDraft(): void {
+    saveDraft({
+      text: textInput.value,
+      author: authorInput.value,
+      source: sourceInput.value.trim() || undefined,
+      templateId: state.templateId,
+    });
+  }
 
   // ─────────────────────────── 卡片画板（右栏预览） ───────────────────────────
   // 画板逻辑尺寸 1080×1080，用 transform scale 缩放以适配容器宽度。
@@ -79,6 +94,7 @@ function renderQuoteCard() {
         state.templateId = t.id;
         updateTemplateSelection();
         rerenderCard();
+        persistDraft();
       },
     }, [
       // 缩略图：用模板真实背景 + 小引号图标，准确预览实际风格
@@ -221,7 +237,7 @@ function renderQuoteCard() {
   }) as HTMLInputElement;
   sourceInput.value = state.quote.source ?? '';
 
-  /** 从输入框同步到 state 并重绘 */
+  /** 从输入框同步到 state 并重绘 + 落库草稿 */
   function syncFromInputs(): void {
     state.quote = {
       text: textInput.value.trim() || '（请输入名言）',
@@ -229,12 +245,14 @@ function renderQuoteCard() {
       source: sourceInput.value.trim() || undefined,
     };
     rerenderCard();
+    persistDraft();
   }
 
-  /** 直接应用一条名言（来自搜索/随机），并重绘 */
+  /** 直接应用一条名言（来自搜索/随机），并重绘 + 落库草稿 */
   function applyQuote(q: QuoteData): void {
     state.quote = q;
     rerenderCard();
+    persistDraft();
   }
 
   // 输入即更新预览
@@ -267,6 +285,7 @@ function renderQuoteCard() {
       sourceInput.value = '';
       searchInput.value = '';
       searchResults.replaceChildren();
+      clearDraft(); // 清空编辑态时一并清除草稿记忆
       syncFromInputs();
     },
   });
