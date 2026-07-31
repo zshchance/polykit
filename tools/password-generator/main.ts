@@ -33,11 +33,6 @@ function candidateChars(opts: PasswordOptions): string {
   return pools.join('') || CHARSETS.lower;
 }
 
-/** 判断某字符是否为数字/符号（用于最终态着色，提升科技感） */
-function isAccentChar(ch: string): boolean {
-  return /[0-9!@#$%^&*()\-_=+\[\]{};:,.?/]/.test(ch);
-}
-
 function renderPasswordGenerator() {
   const { content } = renderToolLayout(document.getElementById('app')!, '密码生成器');
 
@@ -87,13 +82,9 @@ function renderPasswordGenerator() {
   let generateBtn: HTMLButtonElement;
   const historyListWrap = h('div', { class: 'space-y-2' }, []);
 
-  /** 把最终密码渲染为着色的每字符 span（数字/符号强调色） */
+  /** 把最终密码渲染为纯文本：所有字符同一颜色（统一 --fg，不做字符级强调色） */
   function renderFinal(value: string): void {
-    output.replaceChildren(
-      ...[...value].map((ch) =>
-        h('span', { class: isAccentChar(ch) ? 'pw-accent-char' : '', textContent: ch }, []),
-      ),
-    );
+    output.textContent = value;
   }
 
   /** 动画期间禁用/恢复主要操作按钮 */

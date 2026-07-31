@@ -140,14 +140,10 @@ body {
   color: var(--accent);
   opacity: 0.45;
 }
-/* 已锁定的字符：恢复正常颜色 */
+/* 已锁定的字符：恢复正常颜色（最终态统一 --fg，所有字符同色） */
 .pw-locked-char {
   color: var(--fg);
   opacity: 1;
-}
-/* 最终态着色：数字/符号用强调色，提升辨识与科技感 */
-.pw-accent-char {
-  color: var(--accent);
 }
 /* 动画进行中：整块结果轻微降透明度，区分"生成中"与"完成" */
 .scrambling {
