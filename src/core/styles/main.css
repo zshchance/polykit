@@ -132,3 +132,32 @@ body {
     animation: none;
   }
 }
+
+/* ───────────── 密码生成器：逐字变幻动画 ───────────── */
+/* 生成时先滚乱码（滚动阶段），再从左到右逐位锁定为最终字符，营造科技感。 */
+/* 滚动中（未锁定）字符：略低不透明度，弱化强调色，制造"尚未确定"观感 */
+.pw-rolling-char {
+  color: var(--accent);
+  opacity: 0.45;
+}
+/* 已锁定的字符：恢复正常颜色 */
+.pw-locked-char {
+  color: var(--fg);
+  opacity: 1;
+}
+/* 最终态着色：数字/符号用强调色，提升辨识与科技感 */
+.pw-accent-char {
+  color: var(--accent);
+}
+/* 动画进行中：整块结果轻微降透明度，区分"生成中"与"完成" */
+.scrambling {
+  opacity: 0.92;
+}
+/* 尊重"减少动画"偏好：直接显示最终结果，跳过滚动乱码（由 JS 处理，
+   这里只保证视觉上不出现强调色闪烁造成的强刺激） */
+@media (prefers-reduced-motion: reduce) {
+  .pw-rolling-char {
+    color: var(--fg-muted);
+    opacity: 0.7;
+  }
+}

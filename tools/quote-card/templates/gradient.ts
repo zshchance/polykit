@@ -1,5 +1,6 @@
 import { h } from '@/core/components/element';
 import type { CardTemplate } from './types';
+import { pickQuoteFontSize, isLongQuote, LONG_PADDING } from './types';
 
 /**
  * 模板 2：渐变
@@ -12,8 +13,10 @@ export const gradient: CardTemplate = {
   preview: { background: 'linear-gradient(135deg,#6366f1,#8b5cf6,#ec4899)', iconColor: '#ffffff' },
 
   render(el, quote) {
-    el.style.cssText =
-      'background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 50%,#ec4899 100%);color:#ffffff;font-family:"PingFang SC","Helvetica Neue",Arial,sans-serif;display:flex;flex-direction:column;justify-content:center;padding:96px;box-sizing:border-box;position:relative;overflow:hidden;';
+    const long = isLongQuote(quote.text);
+    const padding = long ? LONG_PADDING : 96;
+    const fontSize = pickQuoteFontSize(quote.text);
+    el.style.cssText = `background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 50%,#ec4899 100%);color:#ffffff;font-family:"PingFang SC","Helvetica Neue",Arial,sans-serif;display:flex;flex-direction:column;justify-content:center;padding:${padding}px;box-sizing:border-box;position:relative;overflow:hidden;`;
 
     el.replaceChildren(
       // 装饰光斑
@@ -25,16 +28,14 @@ export const gradient: CardTemplate = {
         style:
           'position:absolute;left:-60px;bottom:-60px;width:240px;height:240px;border-radius:50%;background:rgba(255,255,255,0.08);',
       }),
-      // 名言
+      // 名言（字号随长度自适应 + 断词安全网）
       h('div', {
-        style:
-          'font-size:62px;line-height:1.4;font-weight:700;letter-spacing:1px;position:relative;text-shadow:0 2px 12px rgba(0,0,0,0.15);',
+        style: `font-size:${fontSize}px;line-height:1.4;font-weight:700;letter-spacing:1px;position:relative;text-shadow:0 2px 12px rgba(0,0,0,0.15);word-break:break-word;overflow-wrap:anywhere;`,
         textContent: quote.text,
       }),
       // 作者胶囊（用半透明背景模拟毛玻璃，避免 backdrop-filter 导致导出极慢/失败）
       h('div', {
-        style:
-          'margin-top:48px;display:inline-block;align-self:flex-start;background:rgba(255,255,255,0.28);padding:14px 28px;border-radius:999px;font-size:28px;font-weight:500;position:relative;border:1px solid rgba(255,255,255,0.35);',
+        style: `margin-top:${long ? 28 : 48}px;display:inline-block;align-self:flex-start;background:rgba(255,255,255,0.28);padding:14px 28px;border-radius:999px;font-size:28px;font-weight:500;position:relative;border:1px solid rgba(255,255,255,0.35);`,
         textContent: quote.author,
       }),
     );

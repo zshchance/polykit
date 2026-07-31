@@ -8,6 +8,7 @@ import { createSearchBar, searchBarContainer } from './components/SearchBar';
 import { createCategoryChips } from './components/CategoryChips';
 import { createToolCard } from './components/ToolCard';
 import { observeStagger } from './components/stagger';
+import { createClock } from './components/Clock';
 import { renderCalendar } from './calendar/calendar';
 
 initTheme();
@@ -110,22 +111,28 @@ function renderHome(): void {
     gridContainer,
   ]);
 
-  // ────────── 侧栏：万年历 ──────────
+  // ────────── 侧栏：时钟 + 万年历 ──────────
   const calendarCard = h(
     'aside',
     {
-      class:
-        'rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 lg:sticky lg:top-6',
+      class: 'rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4',
       'aria-label': '万年历',
     },
     [],
   );
   renderCalendar(calendarCard);
 
+  // 侧栏整体：时钟在上、日历在下；sticky 移到外层包裹，避免两元素各自粘连
+  const sideCol = h(
+    'div',
+    { class: 'space-y-4 lg:sticky lg:top-6' },
+    [createClock(), calendarCard],
+  );
+
   // ────────── 两栏布局 ──────────
   const layout = h('div', { class: 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]' }, [
     mainCol,
-    calendarCard,
+    sideCol,
   ]);
 
   // 空工具提示
