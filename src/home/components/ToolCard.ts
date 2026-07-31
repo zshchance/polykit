@@ -121,7 +121,7 @@ export function createToolCard(
       textContent: tool.name,
     }),
   ]);
-  const body = h('div', { class: 'p-4' }, [
+  const body = h('div', { class: 'flex flex-1 flex-col p-4' }, [
     titleRow,
     h('p', {
       class: 'mt-1.5 text-sm text-[var(--fg-muted)] line-clamp-2',
@@ -151,8 +151,10 @@ export function createToolCard(
     'a',
     {
       href,
-      // tool-card--pinned：置顶绿边框修饰类；relative 让头部按钮浮层定位锚定到卡片
-      class: `tool-card group stagger-item block overflow-hidden rounded-2xl border bg-[var(--bg-elevated)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-[var(--accent)]${opts.pinned ? ' relative tool-card--pinned' : ' border-[var(--border)]'}`,
+      // tool-card--pinned：置顶绿边框修饰类；relative 让头部按钮浮层定位锚定到卡片。
+      // h-full + flex flex-col：撑满网格行高，body flex-1 占据剩余空间，
+      // 使同一行卡片（描述行数不同）高度对齐。
+      class: `tool-card group stagger-item flex h-full flex-col overflow-hidden rounded-2xl border bg-[var(--bg-elevated)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-[var(--accent)]${opts.pinned ? ' relative tool-card--pinned' : ' border-[var(--border)]'}`,
       // stagger 入场延迟（索引越大越晚），最多 600ms 封顶
       style: `--stagger-index:${opts.index}`,
       draggable: false, // 卡片整体不作为拖拽源；拖拽由外层 wrapper 手柄驱动

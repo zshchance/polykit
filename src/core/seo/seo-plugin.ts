@@ -18,6 +18,9 @@ import { globSync } from 'glob';
 import { resolve, dirname, sep } from 'node:path';
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import type { ToolConfig } from '@/core/types';
+// 注意：本插件在 vite 配置加载期（Node ESM）执行，此时 Vite 的 @ 别名尚未生效，
+// 因此必须用相对路径导入运行期值，不能用 @/home/...（仅类型 import 可用 @ 别名，因其在编译期被剥离）。
+import { registryConfig } from '../../home/registry-config';
 
 const SITE_NAME = '静态工具箱';
 const SITE_DESC = '纯浏览器运行的在线工具箱：密码生成器、名言卡片等实用工具，数据不出本地。';
@@ -129,7 +132,16 @@ export function seoPlugin(options: SeoOptions = {}): Plugin {
       const slug = rel.split('/')[1];
       list.push({ ...cfg, slug: cfg.slug || slug, dir: dirname(rel) });
     }
-    list.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'));
+    // 排序与首页卡片一致：先按 registry 策展 order（默认 100）升序，再按名称兜底。
+    // 这样 ItemList / sitemap 顺序与用户实际看到的卡片顺序吻合。
+    const orderOf = (slug: string): number =>
+      registryConfig.modules[slug]?.order ?? 100;
+    list.sort((a, b) => {
+      const oa = orderOf(a.slug);
+      const ob = orderOf(b.slug);
+      if (oa !== ob) return oa - ob;
+      return a.name.localeCompare(b.name, 'zh-Hans-CN');
+    });
     return list;
   }
 
@@ -178,8 +190,10 @@ function injectHome(
   tools: ToolConfig[],
   options: SeoOptions,
 ): string {
-  const keywords = (options.siteKeywords ?? []).concat(
-    tools.flatMap((t) => t.keywords ?? []),
+  // 首页关键词 = 站点级关键词 + 各工具关键词；去重（保留首次出现顺序），
+  // 避免 siteKeywords 与工具 keywords 同时含「名言卡片」等造成 meta 重复。
+  const keywords = dedupStrings(
+    (options.siteKeywords ?? []).concat(tools.flatMap((t) => t.keywords ?? [])),
   );
   const siteUrl = (options.siteUrl || DEFAULT_URL).replace(/\/$/, '');
   const homeUrl = `${siteUrl}/`;
@@ -264,7 +278,8 @@ function injectTool(
   const siteUrl = (options.siteUrl || DEFAULT_URL).replace(/\/$/, '');
   const pageUrl = `${siteUrl}/tools/${tool.slug}/`;
 
-  const desc = tool.description;
+  // 描述兜底：若工具未写 description，回退站点描述，避免输出 content="undefined"
+  const desc = tool.description?.trim() || `${tool.name} · ${SITE_DESC}`;
   const kws = tool.keywords ?? [];
   const tags = [
     `<meta name="description" content="${escape(desc)}" />`,
@@ -277,12 +292,12 @@ function injectTool(
     `<meta property="og:site_name" content="${escape(SITE_NAME)}" />`,
   ].filter(Boolean);
 
-  // SoftwareApplication 结构化数据
+  // SoftwareApplication 结构化数据（描述同样用兜底后的 desc）
   const schema = {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
     name: tool.name,
-    description: tool.description,
+    description: desc,
     applicationCategory: 'UtilitiesApplication',
     operatingSystem: 'Any (Web Browser)',
     url: pageUrl,
@@ -337,6 +352,19 @@ function escape(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/** 字符串数组去重，保留首次出现顺序（用于 keywords 合并） */
+function dedupStrings(arr: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const s of arr) {
+    if (!seen.has(s)) {
+      seen.add(s);
+      out.push(s);
+    }
+  }
+  return out;
 }
 
 /** 把标签注入到 </head> 前（无 head 则插到开头） */

@@ -15,6 +15,6 @@ export default {
   description: '搜索或输入名言，一键生成精美卡片，多种模板可切换，直接下载图片做文案。',
   category: '自媒体',
   icon: '💬',
-  keywords: ['名言', '金句', '卡片', '语录', '文案', '截图', '社交媒体', 'quote', '名言卡片'],
+  keywords: ['名言', '金句', '卡片', '语录', '文案', '截图', '社交媒体', 'quote', '语录卡片', '金句卡片'],
   card: { accent: '#0ea5e9' },
 } satisfies ToolConfig;
