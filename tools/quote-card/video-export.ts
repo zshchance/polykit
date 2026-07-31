@@ -31,7 +31,7 @@ export interface VideoExportOptions {
   effect: AnimEffect;
   /** 名言（动画构建需要） */
   quote: QuoteData;
-  /** 录制帧率 */
+  /** 录制帧率（默认 60，更流畅） */
   fps?: number;
   /** 尾帧定格时长（ms） */
   tailMs?: number;
@@ -58,7 +58,7 @@ function pickMime(): string | null {
  */
 export async function exportVideo(opts: VideoExportOptions): Promise<VideoExportResult> {
   const { surface, aspect, effect, quote } = opts;
-  const fps = opts.fps ?? 30;
+  const fps = opts.fps ?? 60;
   const tailMs = opts.tailMs ?? 800;
 
   // 1. 能力检测
@@ -83,7 +83,10 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const stream = canvas.captureStream(fps);
-  const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8_000_000 });
+  // 高清码率：按画布像素总量估算（约 12Mbps for 1080²，保证文字清晰不糊）
+  const pixels = aspect.w * aspect.h;
+  const bitrate = Math.max(10_000_000, Math.round((pixels / (1920 * 1080)) * 14_000_000));
+  const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate });
   const chunks: Blob[] = [];
   recorder.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) chunks.push(e.data);
@@ -132,10 +135,11 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
       resolve({ ok: false, reason: '录制过程出错' });
     };
 
-    // 4. 每帧把 surface 栅格化到 canvas（captureStream 自动捕获）
+    // 4. 每帧把 surface 栅格化到 canvas（captureStream 自动捕获）。
+    //    pixelRatio:2 超采样让文字边缘更锐利（drawImage 时降采样到录制 canvas）。
     const paintFrame = async () => {
       try {
-        const frame = await toCanvas(surface, { pixelRatio: 1, cacheBust: false, backgroundColor: undefined });
+        const frame = await toCanvas(surface, { pixelRatio: 2, cacheBust: false });
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
       } catch {

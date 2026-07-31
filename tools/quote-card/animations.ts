@@ -102,7 +102,9 @@ function perCharEffect(content: HTMLElement, withCursor: boolean): Animation {
     return content.animate([{ opacity: 1 }, { opacity: 1 }], { duration: 1, fill: 'both' });
   }
 
-  // 4. 每字错峰：用单个 animation-delay 实现（每个 span 一个动画，delay 按序递增）。
+  // 4. 每字错峰：每个 span 一个动画，delay 按序递增，fill:forwards 保持终态。
+  //    重要：动画只执行一次（iterations 默认 1），结束后字符停在 opacity:1，
+  //    不取消子动画（取消会把 fill 效果清掉、字符消失回 opacity:0）。
   //    为防超长文本卡顿，封顶参与动画的字符数（多余的与最后一位同时显现）。
   const MAX_CHARS = 80;
   const participating = all.slice(0, MAX_CHARS);
@@ -110,34 +112,35 @@ function perCharEffect(content: HTMLElement, withCursor: boolean): Animation {
   const step = participating.length > 1 ? perCharDuration / (participating.length - 1) : 0;
   const eachDur = Math.max(120, step * 2); // 单字显现持续时长
 
-  const subAnims: Animation[] = participating.map((s, i) =>
+  participating.forEach((s, i) =>
     s.animate([{ opacity: 0 }, { opacity: 1 }], {
       duration: eachDur,
       delay: i * step,
       easing: 'ease-out',
       fill: 'forwards',
+      iterations: 1,
     }),
   );
   // 超出封顶的字符：在参与段结束时统一显现（避免超长文本卡顿）
   if (all.length > MAX_CHARS) {
     const overflowDelay = perCharDuration;
     for (const s of all.slice(MAX_CHARS)) {
-      subAnims.push(
-        s.animate([{ opacity: 0 }, { opacity: 1 }], {
-          duration: 200,
-          delay: overflowDelay,
-          fill: 'forwards',
-        }),
-      );
+      s.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: 200,
+        delay: overflowDelay,
+        fill: 'forwards',
+        iterations: 1,
+      });
     }
   }
 
-  // 5. 占位 controller：对外暴露统一的 currentTime / finish 控制（视频录制按它判定结束）
+  // 5. 占位 controller：对外暴露统一的 currentTime / finish 控制（视频录制按它判定结束）。
+  //    不在 finish 时取消子动画（否则字符消失）；controller 自身也只播一次。
   const controller = content.animate([{ opacity: 1 }, { opacity: 1 }], {
     duration: ANIM_DURATION,
-    fill: 'both',
+    fill: 'forwards',
+    iterations: 1,
   });
-  controller.addEventListener('finish', () => subAnims.forEach((a) => a.cancel()));
   return controller;
 }
 

@@ -151,75 +151,101 @@ function renderQuoteCard() {
     }
   }
 
-  // —— 宽高比选择器 ——
-  const aspectButtons = ASPECTS.map((a) =>
-    h('button', {
-      type: 'button',
-      'data-aspect': a.id,
-      class: [
-        'rounded-md border px-2.5 py-1.5 text-xs transition-all',
-        a.id === state.aspectId
-          ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
-          : 'border-[var(--border)] text-[var(--fg-muted)] hover:border-[var(--accent)]',
-      ].join(' '),
-      textContent: a.label,
-      onclick: () => {
-        state.aspectId = a.id;
-        updateAspectSelection();
-        rerenderCard();
-        persistDraft();
+  // —— 可折叠选择器构造器（宽高比 / 动画效果共用，默认折叠让界面更干净）——
+  // 头部按钮显示「标签：当前选中名」，点击展开/收起选项区。
+  interface CollapsibleSelect {
+    el: HTMLElement;
+    /** 刷新当前选中态（切换后调用） */
+    refresh: (selectedId: string) => void;
+  }
+  function collapsibleSelect(
+    label: string,
+    items: { id: string; name: string }[],
+    selectedId: string,
+    onSelect: (item: { id: string; name: string }) => void,
+  ): CollapsibleSelect {
+    const currentLabel = h('span', { class: 'text-[var(--fg)]' });
+    const caret = h('span', { class: 'text-[var(--fg-muted)]', textContent: '▸' });
+    const header = h(
+      'button',
+      {
+        type: 'button',
+        class:
+          'flex w-full items-center justify-between rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm hover:border-[var(--accent)] transition-colors',
+        'aria-expanded': 'false',
+        onclick: () => {
+          const hidden = panel.classList.toggle('hidden');
+          header.setAttribute('aria-expanded', String(!hidden));
+          caret.textContent = hidden ? '▸' : '▾';
+        },
       },
-    }),
-  );
-  const aspectSelector = h('div', { class: 'flex flex-wrap gap-2' }, aspectButtons);
-  function updateAspectSelection(): void {
-    for (const btn of aspectButtons) {
-      const isActive = btn.getAttribute('data-aspect') === state.aspectId;
-      btn.className = [
-        'rounded-md border px-2.5 py-1.5 text-xs transition-all',
-        isActive
-          ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
-          : 'border-[var(--border)] text-[var(--fg-muted)] hover:border-[var(--accent)]',
-      ].join(' ');
+      [
+        h('span', { class: 'flex items-center gap-1.5' }, [
+          h('span', { class: 'text-[var(--fg-muted)]', textContent: label }),
+          currentLabel,
+        ]),
+        caret,
+      ],
+    );
+
+    const buttons = items.map((it) =>
+      h('button', {
+        type: 'button',
+        'data-id': it.id,
+        class:
+          'rounded-md border px-2.5 py-1.5 text-xs transition-all border-[var(--border)] text-[var(--fg-muted)] hover:border-[var(--accent)]',
+        textContent: it.name,
+        onclick: () => {
+          onSelect(it);
+          refresh(it.id);
+          // 选择后自动收起
+          panel.classList.add('hidden');
+          header.setAttribute('aria-expanded', 'false');
+          caret.textContent = '▸';
+        },
+      }),
+    );
+    const panel = h('div', { class: 'hidden flex flex-wrap gap-2 pt-1' }, buttons);
+
+    function refresh(id: string): void {
+      const item = items.find((x) => x.id === id);
+      currentLabel.textContent = item ? `：${item.name}` : '';
+      for (const btn of buttons) {
+        const isActive = btn.getAttribute('data-id') === id;
+        btn.className = isActive
+          ? 'rounded-md border px-2.5 py-1.5 text-xs transition-all border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+          : 'rounded-md border px-2.5 py-1.5 text-xs transition-all border-[var(--border)] text-[var(--fg-muted)] hover:border-[var(--accent)]';
+      }
     }
+    refresh(selectedId);
+
+    const el = h('div', { class: 'space-y-1' }, [header, panel]);
+    return { el, refresh };
   }
 
-  // —— 动画效果选择器 ——
-  const animButtons = ANIMATIONS.map((an) =>
-    h('button', {
-      type: 'button',
-      'data-anim': an.id,
-      class: [
-        'rounded-md border px-2.5 py-1.5 text-xs transition-all',
-        an.id === state.animId
-          ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
-          : 'border-[var(--border)] text-[var(--fg-muted)] hover:border-[var(--accent)]',
-      ].join(' '),
-      textContent: an.name,
-      onclick: () => {
-        state.animId = an.id;
-        updateAnimSelection();
-        rerenderCard(); // 重新播放新动画
-        persistDraft();
-      },
-    }),
+  // —— 宽高比选择器（折叠）——
+  const aspectSelect = collapsibleSelect(
+    '宽高比',
+    ASPECTS.map((a) => ({ id: a.id, name: a.label })),
+    state.aspectId,
+    (a) => {
+      state.aspectId = a.id as AspectId;
+      rerenderCard();
+      persistDraft();
+    },
   );
-  const animSelector = h('div', { class: 'flex flex-wrap gap-2' }, animButtons);
-  function updateAnimSelection(): void {
-    for (const btn of animButtons) {
-      const isActive = btn.getAttribute('data-anim') === state.animId;
-      btn.className = [
-        'rounded-md border px-2.5 py-1.5 text-xs transition-all',
-        isActive
-          ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
-          : 'border-[var(--border)] text-[var(--fg-muted)] hover:border-[var(--accent)]',
-      ].join(' ');
-    }
-  }
 
-  // 小节标题工具
-  const sectionLabel = (text: string) =>
-    h('span', { class: 'text-xs font-medium text-[var(--fg-muted)]', textContent: text });
+  // —— 动画效果选择器（折叠）——
+  const animSelect = collapsibleSelect(
+    '动画效果',
+    ANIMATIONS.map((an) => ({ id: an.id, name: an.name })),
+    state.animId,
+    (an) => {
+      state.animId = an.id as AnimId;
+      rerenderCard(); // 重新播放新动画
+      persistDraft();
+    },
+  );
 
   // 导出按钮（图片 + 视频）+ 状态提示
   const exportHint = h('div', { class: 'text-sm text-[var(--fg-muted)] min-h-[1.25rem]' });
@@ -294,15 +320,19 @@ function renderQuoteCard() {
 
   const exportRow = h('div', { class: 'flex gap-2' }, [downloadImgBtn, downloadVideoBtn]);
 
-  // 预览列：移动端置顶（order-first），桌面端在右（order 重置为 0）
+  // 预览列：移动端置顶（order-first），桌面端在右（order 重置为 0）。
+  // 模板仍是网格（视觉重要、常用）；宽高比/动画用折叠选择器，界面更干净。
   const previewCol = h('div', { class: 'space-y-4 min-w-0 order-first lg:order-none lg:sticky lg:top-6' }, [
     cardStage,
-    // 模板
-    h('div', { class: 'space-y-2' }, [sectionLabel('模板'), templateSelector]),
-    // 宽高比
-    h('div', { class: 'space-y-2' }, [sectionLabel('宽高比'), aspectSelector]),
-    // 动画效果
-    h('div', { class: 'space-y-2' }, [sectionLabel('动画效果'), animSelector]),
+    // 模板（常用，保持展开网格）
+    h('div', { class: 'space-y-2' }, [
+      h('span', { class: 'text-xs font-medium text-[var(--fg-muted)]', textContent: '模板' }),
+      templateSelector,
+    ]),
+    // 宽高比（折叠）
+    aspectSelect.el,
+    // 动画效果（折叠）
+    animSelect.el,
     // 导出
     exportRow,
     exportHint,
