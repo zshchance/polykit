@@ -101,49 +101,54 @@ slug 规则：全小写、kebab-case，字母开头（如 `quote-card`、`fancy-
 
 未提供时，卡片用 `icon` emoji + `card.accent` 渐变兜底。
 
-## 部署（双平台自适应）
+## 部署（双平台自适应 + canonical 统一）
 
-同一份代码可部署到 **Cloudflare Pages** 或 **GitHub Pages**，由构建时的 `BASE_PATH` 环境变量决定路径前缀，应用代码无需任何改动。
+同一份代码可部署到 **Cloudflare Pages**（主站）或 **GitHub Pages**（镜像），由构建时的 `BASE_PATH` 环境变量决定资源路径前缀，应用代码无需任何改动。两平台都用同一 **canonical URL**（默认 GitHub Pages 域名），便于搜索引擎聚合、避免重复内容判定。
+
+> 当前 canonical 前缀：`https://zshchance.github.io/polykit`（仓库 `zshchance/polykit`）。
 
 ### 工作原理
 
-| 平台 | 路径 | BASE_PATH | 来源 |
-|------|------|-----------|------|
-| Cloudflare Pages | 根路径 `xxx.pages.dev/` | 不设（默认 `/`） | Dashboard 连 Git 自动构建 |
-| GitHub Pages | 子路径 `user.github.io/static-toolkit/` | `/static-toolkit/` | `.github/workflows/deploy.yml` 注入 |
+| 平台 | 路径 | BASE_PATH | SITE_URL（canonical） | 来源 |
+|------|------|-----------|------|------|
+| Cloudflare Pages（主） | 根路径 `xxx.pages.dev/` | 不设（默认 `/`） | `https://zshchance.github.io/polykit` | Dashboard 连 Git 自动构建 |
+| GitHub Pages（镜像） | 子路径 `user.github.io/polykit/` | `/polykit/` | `https://zshchance.github.io/polykit` | `.github/workflows/deploy.yml` 注入 |
 
-`vite.config.ts` 的 `resolveBase()` 读取 `BASE_PATH` 并规范化为 `/.../` 形式。
-应用代码统一用 `import.meta.env.BASE_URL` 拼接链接，自动等于该 base，
-所以一份代码同时兼容两种路径模型。
+- `BASE_PATH`：决定**部署后的资源/链接前缀**（Cloudflare 根路径 vs GitHub 子路径）。`vite.config.ts` 的 `resolveBase()` 读取它，应用代码用 `import.meta.env.BASE_URL` 自动跟随。
+- `SITE_URL`：决定 **canonical / sitemap / og:url**（与部署路径解耦）。两平台都指向同一 canonical，使 `dist/sitemap.xml`、各页 `<link rel="canonical">` 与 `og:url` 一致。
 
-### 方式一：Cloudflare Pages（根路径）
+### 方式一：Cloudflare Pages（主站，根路径）
 
 1. Cloudflare Dashboard → **Workers & Pages → Create → Pages → Connect to Git**
-2. 选择本仓库，设置：
+2. 选择 `zshchance/polykit` 仓库，设置：
    - **Production branch**：`main`
    - **Framework preset**：`Vite`
    - **Build command**：`npm run build`
    - **Build output directory**：`dist`
-   - **Environment variables**：`NODE_VERSION = 22`（`.nvmrc` 已含，可不重复设）
+   - **Environment variables**：
+     - `NODE_VERSION = 22`
+     - `SITE_URL = https://zshchance.github.io/polykit`（与镜像保持同一 canonical）
 3. **不要**设置 `BASE_PATH`——根路径部署即默认 `/`。
 
 访问 `https://<project>.pages.dev/`。
 
-### 方式二：GitHub Pages（子路径）
+> 日后给 Cloudflare 绑定自定义域名时，把此处 `SITE_URL` 改成自定义域名即可，canonical 跟随主站切换。
 
-1. 推送仓库到 GitHub，仓库名建议 `static-toolkit`（决定子路径）
-2. 仓库 **Settings → Pages → Source** 选择 **"GitHub Actions"**
-3. 推送到 `main` 自动触发 `.github/workflows/deploy.yml`，构建时注入 `BASE_PATH=/static-toolkit/`
+### 方式二：GitHub Pages（镜像，子路径）
 
-访问 `https://<用户名>.github.io/static-toolkit/`。
+1. 推送仓库到 GitHub（仓库名 `polykit`，决定子路径）。
+2. 仓库 **Settings → Pages → Source** 选择 **"GitHub Actions"**。
+3. 推送到 `main` 自动触发 `.github/workflows/deploy.yml`，构建时注入 `BASE_PATH=/polykit/` 与 `SITE_URL=https://zshchance.github.io/polykit`。
 
-> 改仓库名时，同步修改 `.github/workflows/deploy.yml` 里的 `BASE_PATH` 值即可。
+访问 `https://zshchance.github.io/polykit/`。
+
+> 改仓库名/用户名时，同步修改 `.github/workflows/deploy.yml` 里的 `BASE_PATH` 与 `SITE_URL` 值。
 
 ### 本地模拟子路径构建
 
 ```bash
-BASE_PATH=/static-toolkit/ npm run build   # 产物资源路径带前缀，可用 npm run preview 验证
-npm run build                              # 不设则按根路径构建
+BASE_PATH=/polykit/ npm run build   # 产物资源路径带前缀，可用 npm run preview 验证
+npm run build                       # 不设则按根路径构建
 ```
 
 ## SEO 与关键词可见性
@@ -159,7 +164,9 @@ npm run build                              # 不设则按根路径构建
   关键词不渲染到卡片 UI，用户不可见。
 - 设为 `true` 时，卡片会额外渲染关键词胶囊为可见标签。
 
-> 部署时如需自定义站点 URL（用于 sitemap/canonical），在 CI 设置环境变量 `SITE_URL=https://你的域名`。
+> 部署时通过环境变量 `SITE_URL` 设置 canonical 前缀（含子路径，用于 sitemap/canonical/og:url），双平台保持一致即可。详见上方"部署"章节。
+
+首页还会注入 `WebSite` + `Organization`（含开发者邮箱 `email` 与开源仓库 `sameAs`）JSON-LD，提升"软件服务 / 技术支持 / 自媒体工具"等检索的可发现性。每个页面底部均有统一页脚，含**邮件联系**与**GitHub 开源**链接。
 
 ## 万年历与节假日数据
 
@@ -186,3 +193,12 @@ npm run build                              # 不设则按根路径构建
 - **共享层复用**：`src/core/` 提供布局、复制按钮、主题切换、安全随机、剪贴板等通用能力。
 - **主题切换**：亮/暗双主题，跟随系统偏好，localStorage 持久化，无首屏闪烁。
 - **微交互动效**：卡片入场逐项 fade-up（尊重 `prefers-reduced-motion`）、hover 抬升、搜索/分类筛选实时反馈。
+
+## 联系 / 关于
+
+由个人开发者维护的开源项目，纯浏览器运行、数据不出本地。
+
+- **邮件**：[978107204@qq.com](mailto:978107204@qq.com)（联系 / 合作 / 技术支持）
+- **GitHub**：[zshchance/polykit](https://github.com/zshchance/polykit)（欢迎 Issue / PR）
+
+每个页面底部的统一页脚均提供以上入口；首页 `Organization` JSON-LD 也包含同样的联系方式，便于搜索引擎/AI 识别。

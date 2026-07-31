@@ -14,7 +14,19 @@ export const registryConfig: RegistryConfig = {
   seo: {
     // 关键词默认不显示在卡片 UI 上，但始终写入 <meta> 与 JSON-LD（爬虫/AI 可读）。
     showKeywordsInline: false,
-    siteKeywords: ['静态工具箱', '在线工具', '浏览器工具', '密码生成器', '万年历'],
+    siteKeywords: [
+      '静态工具箱',
+      '在线工具',
+      '浏览器工具',
+      '软件服务',
+      '技术支持',
+      '自媒体工具',
+      '开发者工具',
+      '文案工具',
+      '名言卡片',
+      '密码生成器',
+      '万年历',
+    ],
   },
   modules: {
     // password-generator 排到最前（示例工具）

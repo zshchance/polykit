@@ -1,5 +1,6 @@
 import { h } from './element';
 import { createThemeToggle } from './ThemeToggle';
+import { createSiteFooter } from './SiteFooter';
 
 /**
  * 工具页统一外壳：顶部栏（返回首页 + 工具名 + 主题切换）。
@@ -28,7 +29,10 @@ export function renderToolLayout(parent: HTMLElement, title: string): ToolLayout
 
   const content = h('main', { class: 'flex-1' }, []);
 
-  parent.append(header, content);
+  // 全站统一页脚：联系方式 + 开源链接（所有工具页自动带上）
+  const footer = createSiteFooter();
+
+  parent.append(header, content, footer);
   return { content };
 }
 

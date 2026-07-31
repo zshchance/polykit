@@ -20,11 +20,23 @@ import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import type { ToolConfig } from '@/core/types';
 
 const SITE_NAME = '静态工具箱';
-const SITE_DESC = '纯浏览器运行的在线工具箱：密码生成器等实用工具，数据不出本地。';
-const DEFAULT_URL = 'https://example.com';
+const SITE_DESC = '纯浏览器运行的在线工具箱：密码生成器、名言卡片等实用工具，数据不出本地。';
+// canonical 前缀：含子路径（GitHub Pages 镜像的默认域名）。
+// 用作 SITE_URL 未配置时的兜底，避免泄露 example.com。
+// 双平台部署时（Cloudflare 主站 + GitHub 镜像）都用此 canonical，便于 SEO 聚合。
+const DEFAULT_URL = 'https://zshchance.github.io/polykit';
+// 开发者联系方式（注入到首页 Organization JSON-LD 的 email / sameAs）
+const CONTACT_EMAIL = '978107204@qq.com';
+const GITHUB_URL = 'https://github.com/zshchance/polykit';
 
 interface SeoOptions {
-  /** 生产环境站点完整根 URL（无尾斜杠），用于 sitemap / canonical / OG。例：https://foo.pages.dev */
+  /**
+   * 生产环境站点完整 canonical 前缀（含子路径，无尾斜杠）。
+   * 用于 sitemap / canonical / og:url。例：https://zshchance.github.io/polykit
+   *
+   * 重要：此值与"部署路径"解耦——它表示站点的权威 canonical URL，
+   * 不再与 build base 拼接。双平台部署时统一指向同一 canonical 以利 SEO。
+   */
   siteUrl?: string;
   /** 站点默认关键词（首页 meta） */
   siteKeywords?: string[];
@@ -149,10 +161,11 @@ export function seoPlugin(options: SeoOptions = {}): Plugin {
     closeBundle() {
       if (config.command !== 'build') return;
       const outDir = resolve(config.root, config.build.outDir);
+      // canonical 前缀：siteUrl（含子路径）兜底 DEFAULT_URL，去尾斜杠。
+      // sitemap/robots 只依赖 canonical 前缀，与部署 base 解耦。
       const siteUrl = (options.siteUrl || DEFAULT_URL).replace(/\/$/, '');
-      const base = config.base || '/';
 
-      writeSitemap(outDir, siteUrl, base, tools);
+      writeSitemap(outDir, siteUrl, tools);
       writeRobots(outDir, siteUrl);
     },
   };
@@ -168,14 +181,51 @@ function injectHome(
   const keywords = (options.siteKeywords ?? []).concat(
     tools.flatMap((t) => t.keywords ?? []),
   );
+  const siteUrl = (options.siteUrl || DEFAULT_URL).replace(/\/$/, '');
+  const homeUrl = `${siteUrl}/`;
+
   const tags = [
     `<meta name="description" content="${escape(SITE_DESC)}" />`,
     `<meta name="keywords" content="${escape(keywords.join(', '))}" />`,
+    `<meta name="author" content="${escape(CONTACT_EMAIL)}" />`,
+    `<meta name="contact" content="${escape(CONTACT_EMAIL)}" />`,
+    // canonical：与 sitemap 同源，双平台统一指向，避免内容重复判定
+    `<link rel="canonical" href="${escape(homeUrl)}" />`,
     `<meta property="og:title" content="${escape(SITE_NAME)}" />`,
     `<meta property="og:description" content="${escape(SITE_DESC)}" />`,
     `<meta property="og:type" content="website" />`,
+    `<meta property="og:url" content="${escape(homeUrl)}" />`,
+    `<meta property="og:site_name" content="${escape(SITE_NAME)}" />`,
     `<meta name="twitter:card" content="summary" />`,
   ];
+
+  // WebSite：标识站点本身，利于 sitelinks 搜索框等
+  const website = {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: SITE_NAME,
+    url: homeUrl,
+    description: SITE_DESC,
+    keywords: keywords.join(', '),
+  };
+  tags.push(
+    `<script type="application/ld+json">${JSON.stringify(website)}</script>`,
+  );
+
+  // Organization：暴露开发者联系方式（email）与开源项目（sameAs），
+  // 提升"软件服务 / 技术支持"类检索的实体可发现性。
+  const org = {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: SITE_NAME,
+    url: homeUrl,
+    email: `mailto:${CONTACT_EMAIL}`,
+    sameAs: [GITHUB_URL],
+    description: SITE_DESC,
+  };
+  tags.push(
+    `<script type="application/ld+json">${JSON.stringify(org)}</script>`,
+  );
 
   // ItemList：把所有工具作为结构化数据，利于搜索引擎/AI 理解站点
   const itemList = {
@@ -186,6 +236,7 @@ function injectHome(
     itemListElement: tools.map((t, i) => ({
       '@type': 'ListItem',
       position: i + 1,
+      url: `${siteUrl}/tools/${t.slug}/`,
       name: t.name,
       description: t.description,
     })),
@@ -203,18 +254,27 @@ function injectTool(
   html: string,
   pagePath: string,
   tools: (ToolConfig & { dir: string })[],
-  _options: SeoOptions,
+  options: SeoOptions,
 ): string {
   // pagePath 形如 /tools/password-generator/index.html
   const slug = pagePath.split('/')[2];
   const tool = tools.find((t) => t.slug === slug);
   if (!tool) return html;
 
+  const siteUrl = (options.siteUrl || DEFAULT_URL).replace(/\/$/, '');
+  const pageUrl = `${siteUrl}/tools/${tool.slug}/`;
+
   const desc = tool.description;
   const kws = tool.keywords ?? [];
   const tags = [
     `<meta name="description" content="${escape(desc)}" />`,
     kws.length ? `<meta name="keywords" content="${escape(kws.join(', '))}" />` : '',
+    `<link rel="canonical" href="${escape(pageUrl)}" />`,
+    `<meta property="og:title" content="${escape(tool.name)}" />`,
+    `<meta property="og:description" content="${escape(desc)}" />`,
+    `<meta property="og:type" content="website" />`,
+    `<meta property="og:url" content="${escape(pageUrl)}" />`,
+    `<meta property="og:site_name" content="${escape(SITE_NAME)}" />`,
   ].filter(Boolean);
 
   // SoftwareApplication 结构化数据
@@ -225,6 +285,7 @@ function injectTool(
     description: tool.description,
     applicationCategory: 'UtilitiesApplication',
     operatingSystem: 'Any (Web Browser)',
+    url: pageUrl,
     keywords: kws.join(', '),
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'CNY' },
   };
@@ -238,19 +299,17 @@ function injectTool(
 function writeSitemap(
   outDir: string,
   siteUrl: string,
-  base: string,
   tools: ToolConfig[],
 ): void {
   const urls: string[] = [];
-  const norm = (p: string) => p.replace(/\/+/g, '/');
 
   // 首页
   urls.push(
-    `  <url>\n    <loc>${siteUrl}${norm(base)}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>`,
+    `  <url>\n    <loc>${siteUrl}/</loc>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>`,
   );
-  // 各工具页
+  // 各工具页：loc = canonical 前缀 + /tools/<slug>/（与部署 base 解耦）
   for (const t of tools) {
-    const loc = `${siteUrl}${norm(base + 'tools/' + t.slug + '/')}`;
+    const loc = `${siteUrl}/tools/${t.slug}/`;
     urls.push(
       `  <url>\n    <loc>${loc}</loc>\n    <changefreq>monthly</changefreq>\n    <priority>0.7</priority>\n  </url>`,
     );

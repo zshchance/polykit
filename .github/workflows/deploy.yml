@@ -1,9 +1,12 @@
-# 部署到 GitHub Pages（项目页子路径）。
+# 部署到 GitHub Pages（项目页子路径，作为 Cloudflare 主站的镜像）。
 # 触发：推送到 main 分支，或手动在 Actions 页运行。
 #
 # 关键：注入 BASE_PATH=/<repo>/，使 Vite 把资源/链接路径都加上子路径前缀，
 # 否则部署到 username.github.io/<repo>/ 后资源会 404。
-# （Cloudflare Pages 不用本 workflow，它在后台连 Git 自行构建，且默认根路径不设 BASE_PATH。）
+# 同时注入 SITE_URL（含子路径）作为 canonical 前缀，
+# 保证镜像与 Cloudflare 主站产出同一 canonical（利 SEO，避免重复内容）。
+# （Cloudflare Pages 不用本 workflow，它在后台连 Git 自行构建，
+#   根路径部署不设 BASE_PATH，但同样应设 SITE_URL 保持 canonical 一致。）
 name: Deploy to GitHub Pages
 
 on:
@@ -37,8 +40,10 @@ jobs:
 
       - name: Build
         env:
-          # ← 部署到子路径 /<repo>/，仓库名改动时同步修改此处
-          BASE_PATH: /static-toolkit/
+          # ← 部署到子路径 /<repo>/。仓库名改动时同步修改此处。
+          BASE_PATH: /polykit/
+          # canonical 前缀（含子路径）。改仓库名/用户名时同步修改。
+          SITE_URL: https://zshchance.github.io/polykit
         run: npm run build
 
       - name: Setup Pages

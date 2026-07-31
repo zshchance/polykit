@@ -1,6 +1,7 @@
 import '@/core/styles/main.css';
 import { h } from '@/core/components/element';
 import { createThemeToggle, initTheme } from '@/core/components/ThemeToggle';
+import { createSiteFooter } from '@/core/components/SiteFooter';
 import { getRegisteredTools, getCategories } from './registry';
 import type { RegisteredTool } from '@/core/types';
 import { createSearchBar, searchBarContainer } from './components/SearchBar';
@@ -135,11 +136,12 @@ function renderHome(): void {
         class: 'text-[var(--fg-muted)]',
         textContent: '还没有工具。运行 npm run new -- <名称> 创建第一个。',
       }),
+      createSiteFooter(),
     );
     return;
   }
 
-  app.append(hero, layout);
+  app.append(hero, layout, createSiteFooter());
   rerenderGrid();
 }
 
