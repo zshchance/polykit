@@ -206,6 +206,11 @@ function renderPasswordGenerator() {
     max: '64',
     value: String(state.length),
     class: 'w-full accent-[var(--accent)]',
+    // 拖拽过程中（input 事件连续触发）实时刷新数字，体验更跟手
+    oninput: (e) => {
+      lengthValue.textContent = String((e.target as HTMLInputElement).value);
+    },
+    // 拖拽结束（change）才落库 state + 重新生成，避免拖拽中途频繁生成/写存储
     onchange: (e) => {
       state.length = Number((e.target as HTMLInputElement).value);
       lengthValue.textContent = String(state.length);
