@@ -9,7 +9,7 @@ import type { CardTemplate } from './types';
 export const dark: CardTemplate = {
   id: 'dark',
   name: '暗夜',
-  previewColor: '#1e293b',
+  preview: { background: 'radial-gradient(circle at 50% 30%,#1e293b,#0f172a)', iconColor: '#d4af37' },
 
   render(el, quote) {
     el.style.cssText =

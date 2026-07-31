@@ -9,7 +9,7 @@ import type { CardTemplate } from './types';
 export const gradient: CardTemplate = {
   id: 'gradient',
   name: '渐变',
-  previewColor: '#6366f1',
+  preview: { background: 'linear-gradient(135deg,#6366f1,#8b5cf6,#ec4899)', iconColor: '#ffffff' },
 
   render(el, quote) {
     el.style.cssText =

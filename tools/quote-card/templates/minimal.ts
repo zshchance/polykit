@@ -9,7 +9,7 @@ import type { CardTemplate } from './types';
 export const minimal: CardTemplate = {
   id: 'minimal',
   name: '极简',
-  previewColor: '#0f172a',
+  preview: { background: '#ffffff', iconColor: '#0f172a' },
 
   render(el, quote) {
     el.style.cssText =

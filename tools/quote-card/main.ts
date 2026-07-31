@@ -73,10 +73,17 @@ function renderQuoteCard() {
         rerenderCard();
       },
     }, [
+      // 缩略图：用模板真实背景 + 小引号图标，准确预览实际风格
       h('div', {
-        class: 'h-10 w-full rounded',
-        style: `background:${t.previewColor};`,
-      }),
+        class: 'relative h-10 w-full overflow-hidden rounded',
+        style: `background:${t.preview.background};`,
+      }, [
+        h('span', {
+          class: 'absolute inset-0 flex items-center justify-center font-serif text-lg',
+          style: `color:${t.preview.iconColor};opacity:0.85;`,
+          textContent: '\u201C',
+        }),
+      ]),
       h('span', { class: 'text-xs text-[var(--fg-muted)]', textContent: t.name }),
     ]),
   );

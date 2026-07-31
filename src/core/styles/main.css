@@ -105,3 +105,30 @@ body {
 .search-bar::-webkit-search-cancel-button {
   -webkit-appearance: none;
 }
+
+/* ───────────── 名言卡片内容入场动画 ───────────── */
+/* 切换名言/模板/加载时，卡片内容轻柔淡入 + 微上移，优雅而不突兀。
+   导出截图时通过 .exporting 类禁用动画，避免捕获到动画中间帧。 */
+@keyframes quote-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.quote-card-surface > .quote-card-content {
+  animation: quote-card-enter 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* 导出时禁用动画（html-to-image 截图需静止帧） */
+.quote-card-surface.exporting > .quote-card-content {
+  animation: none;
+}
+/* 尊重"减少动画"偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .quote-card-surface > .quote-card-content {
+    animation: none;
+  }
+}

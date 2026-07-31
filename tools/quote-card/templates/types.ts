@@ -16,13 +16,25 @@ export interface QuoteData {
   source?: string;
 }
 
+/**
+ * 选择器缩略图预览信息。
+ * background 直接用作缩略色块的背景（CSS 值，可为纯色或渐变），
+ * 让用户在选择模板时就能准确预览实际卡片风格，避免色块与成品不符的误解。
+ */
+export interface TemplatePreview {
+  /** 缩略图背景（纯色 hex 或 CSS 渐变字符串），须与模板实际背景一致 */
+  background: string;
+  /** 缩略图上小引号图标的颜色（用于在背景上可见） */
+  iconColor: string;
+}
+
 export interface CardTemplate {
   /** 模板唯一 id（如 'minimal'） */
   id: string;
   /** 展示名（如 '极简'） */
   name: string;
-  /** 选择器缩略图主色（hex），用于未渲染时的预览块 */
-  previewColor: string;
+  /** 选择器缩略图预览（背景 + 图标色，须反映模板真实风格） */
+  preview: TemplatePreview;
   /** 把名言画进容器（容器已固定尺寸，模板填内部） */
   render(el: HTMLElement, quote: QuoteData): void;
 }

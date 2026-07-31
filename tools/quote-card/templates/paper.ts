@@ -9,7 +9,7 @@ import type { CardTemplate } from './types';
 export const paper: CardTemplate = {
   id: 'paper',
   name: '纸质',
-  previewColor: '#d4a574',
+  preview: { background: '#f5ecd9', iconColor: '#c9a96a' },
 
   render(el, quote) {
     el.style.cssText =
