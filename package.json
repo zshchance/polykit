@@ -9,6 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "new": "node scripts/new-tool.mjs",
+    "holidays:add": "node scripts/holidays-add.mjs",
+    "quotes:add": "node scripts/quotes-add.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

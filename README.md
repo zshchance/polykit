@@ -178,11 +178,44 @@ npm run build                       # 不设则按根路径构建
 - **可选在线更新**：用户主动点击"检查更新"才联网拉取同结构 JSON，缓存到 localStorage；
   失败时静默回退本地数据。
 
-### 更新节假日数据
+### 更新策展数据（CLI 脚本）
 
-每年初（通常 11 月国务院发布次年安排后），编辑 `holidays.json`：
-1. 更新 `version`（如 `"2027"`）、`updatedAt`、`source`
-2. 在 `years` 下新增/修订对应年份的日期条目（`legal`=休 / `workday`=班 / `festival`=节）
+内置两个本地脚本，用于定期增补节假日与名言库。两种录入入口：**终端逐条交互**（默认）或 **批量导入**（`--file <临时JSON>`）。校验、去重、合并、写回都由脚本统一处理，无需手编源 JSON。
+
+```bash
+# 节假日：逐条交互录入（日期/类型/名称，空行结束）
+npm run holidays:add
+# 节假日：从临时 JSON 批量导入（建议先 --dry-run 预览）
+npm run holidays:add -- --file _tmp-holidays-add.json --dry-run
+npm run holidays:add -- --file _tmp-holidays-add.json
+
+# 名言库：逐条交互录入
+npm run quotes:add
+# 名言库：批量导入（id 自动自增、text+author 去重）
+npm run quotes:add -- --file _tmp-quotes-add.json
+```
+
+**临时 JSON 格式**（用完即删，已加入 `.gitignore`）：
+
+```jsonc
+// _tmp-holidays-add.json —— 节假日（对象，key=日期）
+{
+  "2027-01-01": { "type": "legal", "name": "元旦" },
+  "2027-02-08": { "type": "workday", "name": "春节调休上班" },
+  "2027-10-08": { "type": "festival", "name": "寒露" }
+}
+// type: legal=法定假日(休) / workday=调休上班(班) / festival=传统节日·节气
+
+// _tmp-quotes-add.json —— 名言（数组，id 由脚本自增，无需填写）
+[
+  { "text": "正文", "author": "作者", "source": "出处(选填)", "category": "哲理", "lang": "zh" },
+  { "text": "Quote.", "author": "Author", "category": "科技", "lang": "en" }
+]
+```
+
+脚本会校验日期合法性、type/lang 枚举、必填字段，非法条目逐条报错并退出（不写文件）；合法条目合并写回时自动更新 `updatedAt`/`version` 并按年份/日期排序。节假日每年只需更新一次（11 月国务院发布次年安排后）；名言库可随时增量补充。
+
+> **AI 辅助**：本仓库另配有一个 ZCode 技能（`.zcode/skills/data-update`，本地不入 `.zcode/` 不入库），可在对话中帮你从国务院公告/名言来源网页提取结构化数据、生成上述临时 JSON、再调脚本校验合并。技能**绝不直接改源 JSON**，始终经脚本入口，保证校验单一来源。
 
 ## 核心设计
 

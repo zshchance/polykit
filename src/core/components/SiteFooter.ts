@@ -41,7 +41,7 @@ export function createSiteFooter(): HTMLElement {
       h(
         'p',
         { class: 'text-sm text-[var(--fg-muted)]' },
-        ['由 静态工具箱 开发维护 · 纯浏览器运行，数据不出本地'],
+        ['由 欧亚成电子科技 开发维护 · 纯浏览器运行，数据不出本地'],
       ),
       h('nav', { class: 'flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm' }, [
         h('span', {}, ['联系与合作：', mailLink]),

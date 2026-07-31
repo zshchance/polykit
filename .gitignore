@@ -35,3 +35,6 @@ gui-test-screenshots/
 
 # ZCode 工作区元数据（计划文件等，不入库）
 .zcode/
+
+# 数据更新临时导入文件（批量录入入口，用完即删）
+_tmp-*-add.json
