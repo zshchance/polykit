@@ -124,7 +124,8 @@ function renderQuoteCard() {
     },
   });
 
-  const previewCol = h('div', { class: 'space-y-4 lg:sticky lg:top-6' }, [
+  // 预览列：移动端置顶（order-first），桌面端在右（order 重置为 0）
+  const previewCol = h('div', { class: 'space-y-4 min-w-0 order-first lg:order-none lg:sticky lg:top-6' }, [
     cardStage,
     templateSelector,
     downloadBtn,
@@ -265,7 +266,7 @@ function renderQuoteCard() {
   // 库信息提示
   const libInfo = h('p', { class: 'text-xs text-[var(--fg-muted)]', textContent: `本地名言库：${getQuoteCount()} 条 · 数据不出本地` });
 
-  const inputCol = h('div', { class: 'space-y-5' }, [
+  const inputCol = h('div', { class: 'space-y-5 min-w-0' }, [
     // 搜索
     h('div', { class: 'space-y-1' }, [
       h('label', { class: 'text-sm font-medium', textContent: '搜索名言' }),
@@ -285,7 +286,13 @@ function renderQuoteCard() {
   ]);
 
   // ─────────────────────────── 两栏布局 ───────────────────────────
-  const layout = h('div', { class: 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]' }, [
+  // 响应式：移动端单列堆叠，桌面端两栏（输入在左、预览在右）。
+  // 顺序策略：移动端把预览放最上方（卡片是主展示，用户先看到成品再编辑），
+  // 桌面端恢复"输入左、预览右"。用 order 实现，无需改 DOM 顺序。
+  //
+  // 关键：网格列必须用 minmax(0,...) 收缩到 0，否则画板 1080px 的固定宽度
+  // 会把网格轨道撑到 1080px、撑破窄屏出现横向滚动条（grid 项默认 min-width:auto 不收缩）。
+  const layout = h('div', { class: 'grid gap-6 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]' }, [
     inputCol,
     previewCol,
   ]);
