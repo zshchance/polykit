@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 200" fill="none">
+  <defs>
+    <linearGradient id="qc" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0ea5e9"/>
+      <stop offset="1" stop-color="#6366f1"/>
+    </linearGradient>
+  </defs>
+  <rect width="480" height="200" fill="url(#qc)"/>
+  <circle cx="430" cy="30" r="80" fill="#fff" fill-opacity="0.08"/>
+  <circle cx="50" cy="180" r="50" fill="#fff" fill-opacity="0.06"/>
+  <!-- 大引号 -->
+  <text x="32" y="78" font-family="Georgia,serif" font-size="72" fill="#fff" fill-opacity="0.9">"</text>
+  <!-- 名言文本 -->
+  <text x="36" y="118" font-family="Georgia,serif" font-size="22" fill="#fff" fill-opacity="0.95" font-style="italic">Stay hungry,</text>
+  <text x="36" y="146" font-family="Georgia,serif" font-size="22" fill="#fff" fill-opacity="0.95" font-style="italic">stay foolish.</text>
+  <!-- 落款 -->
+  <rect x="36" y="160" width="40" height="3" fill="#fff" fill-opacity="0.7"/>
+  <text x="36" y="180" font-family="ui-sans-serif,sans-serif" font-size="14" fill="#fff" fill-opacity="0.8">— Steve Jobs</text>
+</svg>
