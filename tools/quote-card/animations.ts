@@ -12,7 +12,17 @@
 
 import type { QuoteData } from './templates/types';
 
-export type AnimId = 'fade' | 'zoom' | 'slide-up' | 'typewriter' | 'typing' | 'blur';
+export type AnimId =
+  | 'fade'
+  | 'zoom'
+  | 'slide-up'
+  | 'typewriter'
+  | 'typing'
+  | 'blur'
+  | 'glint-char'
+  | 'glitch'
+  | 'rotate-in'
+  | 'bounce';
 
 export interface AnimEffect {
   id: AnimId;
@@ -46,14 +56,13 @@ function blockEffect(
 }
 
 /**
- * 逐字显现：把 content 内所有文本节点拆成单字 span，按顺序错峰 opacity。
- * 打字机（typing）在此基础上追加闪烁光标。
+ * 把 content 内所有文本节点拆成单字 span（保持文档顺序），返回所有字符 span。
+ * 供逐字类动画（typewriter / 炫光逐字）共用。
  *
- * 实现注意：先快照所有文本节点（避免遍历中修改 DOM 破坏迭代），
- * 再统一替换；并对每个字符 span 用 animation-delay 错峰（单个 WAAPI 动画
- * 作用于 content 整体的 opacity 不适用，故逐 span 动画，但限制总字符数防卡顿）。
+ * 实现注意：先快照所有文本节点（避免遍历中修改 DOM 破坏迭代），再统一替换。
+ * 每个 span 初始 opacity:0，由调用方按各自效果错峰显现。
  */
-function perCharEffect(content: HTMLElement, withCursor: boolean): Animation {
+function splitIntoCharSpans(content: HTMLElement): HTMLElement[] {
   // 1. 先快照所有非空文本节点（不在此过程中改 DOM，避免 TreeWalker 失稳）
   const textNodes: { parent: Node; node: Text }[] = [];
   const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, {
@@ -78,8 +87,87 @@ function perCharEffect(content: HTMLElement, withCursor: boolean): Animation {
     }
     parent.removeChild(node);
   }
+  return charSpans;
+}
 
-  // 3. 打字机：在 content 末尾追加闪烁光标
+/**
+ * 逐字错峰动画通用构建器（炫光逐字 / 故障 / 旋转 / 弹跳共用）。
+ *
+ * 把 content 内文本拆成单字 span，对每个 span 按序播放给定 keyframes，
+ * delay 递增错峰，fill:forwards 保持终态。单字 span 设为 inline-block 让
+ * transform 生效（换行行为同 inline，不影响排版）。超长文本封顶 80 字防卡顿，
+ * 溢出字符在参与段结束时统一淡入。
+ *
+ * 返回占位 controller：对外暴露统一的 currentTime / finish 控制，视频录制按它
+ * 判定结束；不在 finish 时取消子动画（否则字符消失回初态）。
+ *
+ * @param perCharKeyframes 每字动画关键帧（终态 opacity 需为 1，否则字符消失）
+ * @param eachDurMin 单字动画持续时长下限（ms）；实际取 max(下限, step×2)
+ * @param easing 单字动画缓动
+ */
+function staggerPerChar(
+  content: HTMLElement,
+  perCharKeyframes: Keyframe[],
+  eachDurMin: number,
+  easing: string = 'ease-out',
+): Animation {
+  const charSpans = splitIntoCharSpans(content);
+  charSpans.forEach((s) => (s.style.display = 'inline-block'));
+
+  if (charSpans.length === 0) {
+    return blockEffect(content, [{ opacity: 0 }, { opacity: 1 }]);
+  }
+  if (reduced()) {
+    charSpans.forEach((s) => (s.style.opacity = '1'));
+    return content.animate([{ opacity: 1 }, { opacity: 1 }], { duration: 1, fill: 'both' });
+  }
+
+  const MAX_CHARS = 80;
+  const participating = charSpans.slice(0, MAX_CHARS);
+  const perCharDuration = ANIM_DURATION * 0.82;
+  const step = participating.length > 1 ? perCharDuration / (participating.length - 1) : 0;
+  const eachDur = Math.max(eachDurMin, step * 2);
+
+  participating.forEach((s, i) =>
+    s.animate(perCharKeyframes, {
+      duration: eachDur,
+      delay: i * step,
+      easing,
+      fill: 'forwards',
+      iterations: 1,
+    }),
+  );
+  // 超出封顶的字符：在参与段结束时统一淡入（避免超长文本卡顿）
+  if (charSpans.length > MAX_CHARS) {
+    const overflowDelay = perCharDuration;
+    for (const s of charSpans.slice(MAX_CHARS)) {
+      s.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: 200,
+        delay: overflowDelay,
+        fill: 'forwards',
+        iterations: 1,
+      });
+    }
+  }
+
+  return content.animate([{ opacity: 1 }, { opacity: 1 }], {
+    duration: ANIM_DURATION,
+    fill: 'forwards',
+    iterations: 1,
+  });
+}
+
+/**
+ * 逐字显现：把 content 内所有文本节点拆成单字 span，按顺序错峰 opacity。
+ * 打字机（typing）在此基础上追加闪烁光标。
+ *
+ * 对每个字符 span 用 animation-delay 错峰（单个 WAAPI 动画作用于 content 整体的
+ * opacity 不适用，故逐 span 动画，但限制总字符数防卡顿）。
+ */
+function perCharEffect(content: HTMLElement, withCursor: boolean): Animation {
+  const charSpans = splitIntoCharSpans(content);
+
+  // 打字机：在 content 末尾追加闪烁光标
   let cursor: HTMLElement | null = null;
   if (withCursor) {
     cursor = document.createElement('span');
@@ -102,7 +190,7 @@ function perCharEffect(content: HTMLElement, withCursor: boolean): Animation {
     return content.animate([{ opacity: 1 }, { opacity: 1 }], { duration: 1, fill: 'both' });
   }
 
-  // 4. 每字错峰：每个 span 一个动画，delay 按序递增，fill:forwards 保持终态。
+  // 每字错峰：每个 span 一个动画，delay 按序递增，fill:forwards 保持终态。
   //    重要：动画只执行一次（iterations 默认 1），结束后字符停在 opacity:1，
   //    不取消子动画（取消会把 fill 效果清掉、字符消失回 opacity:0）。
   //    为防超长文本卡顿，封顶参与动画的字符数（多余的与最后一位同时显现）。
@@ -134,7 +222,7 @@ function perCharEffect(content: HTMLElement, withCursor: boolean): Animation {
     }
   }
 
-  // 5. 占位 controller：对外暴露统一的 currentTime / finish 控制（视频录制按它判定结束）。
+  // 占位 controller：对外暴露统一的 currentTime / finish 控制（视频录制按它判定结束）。
   //    不在 finish 时取消子动画（否则字符消失）；controller 自身也只播一次。
   const controller = content.animate([{ opacity: 1 }, { opacity: 1 }], {
     duration: ANIM_DURATION,
@@ -144,39 +232,141 @@ function perCharEffect(content: HTMLElement, withCursor: boolean): Animation {
   return controller;
 }
 
+/**
+ * 炫光逐字：每个字符带着高光闪亮、自下而上逐个进入画布。
+ *
+ * 每字三段：极亮高光（brightness 4 + drop-shadow 大光晕，opacity 0）→ 半亮小光晕
+ * （opacity 1，已显现）→ 正常无光晕（稳定）。光晕颜色用 currentColor 自适应模板配色，
+ * 暗色模板上金/白光醒目、亮色模板上同色光自然。
+ */
+function glintCharEffect(content: HTMLElement): Animation {
+  return staggerPerChar(
+    content,
+    [
+      {
+        opacity: 0,
+        transform: 'translateY(14px) scale(0.7)',
+        filter: 'brightness(4) drop-shadow(0 0 18px currentColor)',
+      },
+      {
+        opacity: 1,
+        transform: 'translateY(0) scale(1)',
+        filter: 'brightness(1.8) drop-shadow(0 0 8px currentColor)',
+        offset: 0.55,
+      },
+      {
+        opacity: 1,
+        transform: 'translateY(0) scale(1)',
+        filter: 'brightness(1) drop-shadow(0 0 0 transparent)',
+      },
+    ],
+    420, // 单字炫光持续时长（略长于普通逐字，光晕需要时间收敛）
+    'cubic-bezier(0.22, 1, 0.36, 1)',
+  );
+}
+
+/**
+ * 故障艺术（逐字 Glitch Art）：每字 RGB 色散（红 #ff0040 / 青 #00ffff）+ 位置抖动
+ * + 轻微倾斜，错峰出现后收敛稳定。
+ *
+ * 用 textShadow 模拟 chromatic aberration，transform translate + skewX 制造抖动与撕裂感。
+ * 每字故障集中在动画前段，末帧回到无色散、零偏移的稳定态，视频导出尾帧干净。
+ */
+function glitchEffect(content: HTMLElement): Animation {
+  return staggerPerChar(
+    content,
+    [
+      { opacity: 0, transform: 'translate(0,0) skewX(0deg)', textShadow: '0 0 0 transparent' },
+      { opacity: 0.6, transform: 'translate(-6px,1px) skewX(-3deg)', textShadow: '4px 0 #ff0040, -4px 0 #00ffff', offset: 0.2 },
+      { opacity: 0.9, transform: 'translate(5px,-1px) skewX(2deg)', textShadow: '-4px 0 #ff0040, 4px 0 #00ffff', offset: 0.45 },
+      { opacity: 0.7, transform: 'translate(-3px,0) skewX(-1deg)', textShadow: '3px 0 #ff0040, -3px 0 #00ffff', offset: 0.65 },
+      { opacity: 1, transform: 'translate(0,0) skewX(0deg)', textShadow: '0 0 0 transparent', offset: 0.85 },
+      { opacity: 1, transform: 'translate(0,0) skewX(0deg)', textShadow: '0 0 0 transparent' },
+    ],
+    360,
+    'linear',
+  );
+}
+
+/**
+ * 旋转入场（逐字）：每字从 -12° 缩放 0.8 旋转归位，错峰出现。
+ */
+function rotateInEffect(content: HTMLElement): Animation {
+  return staggerPerChar(
+    content,
+    [
+      { opacity: 0, transform: 'rotate(-12deg) scale(0.8)' },
+      { opacity: 1, transform: 'rotate(0deg) scale(1)' },
+    ],
+    300,
+    'cubic-bezier(0.22, 1, 0.36, 1)',
+  );
+}
+
+/**
+ * 弹跳（逐字）：每字自上方下落 + 两次回弹，错峰出现。
+ */
+function bounceEffect(content: HTMLElement): Animation {
+  return staggerPerChar(
+    content,
+    [
+      { opacity: 0, transform: 'translateY(-50px) scale(0.8)' },
+      { opacity: 1, transform: 'translateY(0) scale(1)', offset: 0.4 },
+      { opacity: 1, transform: 'translateY(-18px) scale(1)', offset: 0.55 },
+      { opacity: 1, transform: 'translateY(0) scale(1)', offset: 0.7 },
+      { opacity: 1, transform: 'translateY(-6px) scale(1)', offset: 0.82 },
+      { opacity: 1, transform: 'translateY(0) scale(1)' },
+    ],
+    500,
+    'ease-out',
+  );
+}
+
 /** 动画效果注册表（顺序即选择器展示顺序） */
 export const ANIMATIONS: AnimEffect[] = [
   {
     id: 'fade',
     name: '淡入',
-    build: (c) => blockEffect(c, [{ opacity: 0 }, { opacity: 1 }]),
+    build: (c) => staggerPerChar(c, [{ opacity: 0 }, { opacity: 1 }], 300),
   },
   {
     id: 'zoom',
     name: '缩放',
     build: (c) =>
-      blockEffect(c, [
-        { opacity: 0, transform: 'scale(0.92)' },
-        { opacity: 1, transform: 'scale(1)' },
-      ]),
+      staggerPerChar(
+        c,
+        [
+          { opacity: 0, transform: 'scale(0.92)' },
+          { opacity: 1, transform: 'scale(1)' },
+        ],
+        300,
+      ),
   },
   {
     id: 'slide-up',
     name: '上滑',
     build: (c) =>
-      blockEffect(c, [
-        { opacity: 0, transform: 'translateY(24px)' },
-        { opacity: 1, transform: 'translateY(0)' },
-      ]),
+      staggerPerChar(
+        c,
+        [
+          { opacity: 0, transform: 'translateY(24px)' },
+          { opacity: 1, transform: 'translateY(0)' },
+        ],
+        300,
+      ),
   },
   {
     id: 'blur',
     name: '模糊聚焦',
     build: (c) =>
-      blockEffect(c, [
-        { opacity: 0, filter: 'blur(14px)' },
-        { opacity: 1, filter: 'blur(0)' },
-      ]),
+      staggerPerChar(
+        c,
+        [
+          { opacity: 0, filter: 'blur(14px)' },
+          { opacity: 1, filter: 'blur(0)' },
+        ],
+        360,
+      ),
   },
   {
     id: 'typewriter',
@@ -187,6 +377,26 @@ export const ANIMATIONS: AnimEffect[] = [
     id: 'typing',
     name: '打字机',
     build: (c) => perCharEffect(c, true),
+  },
+  {
+    id: 'glint-char',
+    name: '炫光逐字',
+    build: (c) => glintCharEffect(c),
+  },
+  {
+    id: 'glitch',
+    name: '故障艺术',
+    build: (c) => glitchEffect(c),
+  },
+  {
+    id: 'rotate-in',
+    name: '旋转入场',
+    build: (c) => rotateInEffect(c),
+  },
+  {
+    id: 'bounce',
+    name: '弹跳',
+    build: (c) => bounceEffect(c),
   },
 ];
 

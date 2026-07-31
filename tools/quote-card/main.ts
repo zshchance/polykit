@@ -19,7 +19,7 @@ import {
 import { loadDraft, saveDraft, clearDraft } from './settings';
 import { ASPECTS, getAspect, type AspectId } from './aspect';
 import { ANIMATIONS, getAnimation, type AnimId } from './animations';
-import { exportVideo } from './video-export';
+import { exportVideo, VIDEO_RESOLUTIONS, getVideoResolution, type VideoResId } from './video-export';
 
 initTheme();
 
@@ -41,6 +41,7 @@ function renderQuoteCard() {
     templateId: string;
     aspectId: AspectId;
     animId: AnimId;
+    videoRes: VideoResId;
   } = {
     quote: restored
       ? { text: restored.text || DEFAULT_QUOTE.text, author: restored.author || DEFAULT_QUOTE.author, source: restored.source }
@@ -48,14 +49,17 @@ function renderQuoteCard() {
     templateId: restored?.templateId ?? defaultTemplate.id,
     aspectId: restored?.aspectId ?? '1:1',
     animId: restored?.animId ?? 'fade',
+    videoRes: restored?.videoRes ?? '1080',
   };
 
   /** 当前宽高比对象 */
   const currentAspect = () => getAspect(state.aspectId);
   /** 当前动画效果 */
   const currentAnim = () => getAnimation(state.animId);
+  /** 当前视频分辨率 */
+  const currentVideoRes = () => getVideoResolution(state.videoRes);
 
-  /** 把当前编辑态落库为草稿（输入/模板/宽高/动画变化时调用） */
+  /** 把当前编辑态落库为草稿（输入/模板/宽高/动画/分辨率变化时调用） */
   function persistDraft(): void {
     saveDraft({
       text: textInput.value,
@@ -64,6 +68,7 @@ function renderQuoteCard() {
       templateId: state.templateId,
       aspectId: state.aspectId,
       animId: state.animId,
+      videoRes: state.videoRes,
     });
   }
 
@@ -247,6 +252,17 @@ function renderQuoteCard() {
     },
   );
 
+  // —— 视频分辨率选择器（折叠，仅影响视频导出）——
+  const videoResSelect = collapsibleSelect(
+    '视频清晰度',
+    VIDEO_RESOLUTIONS.map((r) => ({ id: r.id, name: r.name })),
+    state.videoRes,
+    (r) => {
+      state.videoRes = r.id as VideoResId;
+      persistDraft();
+    },
+  );
+
   // 导出按钮（图片 + 视频）+ 状态提示
   const exportHint = h('div', { class: 'text-sm text-[var(--fg-muted)] min-h-[1.25rem]' });
 
@@ -304,8 +320,11 @@ function renderQuoteCard() {
           aspect: currentAspect(),
           effect: currentAnim(),
           quote: state.quote,
+          resolution: currentVideoRes(),
         });
-        exportHint.textContent = result.ok ? '✓ 视频已下载（WebM）' : `× 视频导出失败：${result.reason}`;
+        exportHint.textContent = result.ok
+          ? `✓ 视频已下载（${result.format.toUpperCase()} · ${currentVideoRes().name}）`
+          : `× 视频导出失败：${result.reason}`;
         exportHint.style.color = result.ok ? '#22c55e' : '#ef4444';
       } finally {
         // 恢复预览态
@@ -333,6 +352,8 @@ function renderQuoteCard() {
     aspectSelect.el,
     // 动画效果（折叠）
     animSelect.el,
+    // 视频清晰度（折叠，仅影响视频导出）
+    videoResSelect.el,
     // 导出
     exportRow,
     exportHint,
