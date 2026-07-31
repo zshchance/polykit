@@ -232,6 +232,10 @@ body {
   z-index: 1000;
   pointer-events: none;
   width: var(--ghost-w, 320px);
+  /* 克隆自 .tool-card（含 h-full / flex flex-col），脱离网格后 h-full 会失控撑高。
+     这里强制按内容高度，恢复成单张卡片的自然尺寸。 */
+  height: auto !important;
+  max-height: none;
   transform: rotate(-2deg);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
   opacity: 0.96;
