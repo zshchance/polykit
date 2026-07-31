@@ -49,7 +49,7 @@ const ROLES: ColorRole[] = ['bg', 'surface', 'text', 'muted', 'primary', 'accent
  * 适用场景：幻灯片美化、网站前端美化。
  */
 export function buildPromptZh(p: Palette, scene: 'slide' | 'web' | 'both' = 'both'): string {
-  const sceneText = scene === 'slide' ? '幻灯片' : scene === 'web' ? '网站前端页面' : '幻灯片与网站前端页面';
+  const sceneText = scene === 'slide' ? '幻灯片' : scene === 'web' ? '网站前端页面' : '页面';
   const moodText = p.moods.join('、');
   const colorLines = ROLES.map((r) => {
     const hex = colorOf(p, r);
