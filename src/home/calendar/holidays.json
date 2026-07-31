@@ -1,43 +1,44 @@
 {
   "version": "2026",
   "source": "国务院办公厅关于2026年部分节假日安排的通知（2025-11 发布）",
-  "updatedAt": "2026-07-30",
+  "updatedAt": "2026-07-31",
   "years": {
     "2026": {
       "2026-01-01": { "type": "legal", "name": "元旦" },
       "2026-01-02": { "type": "legal", "name": "元旦" },
       "2026-01-03": { "type": "legal", "name": "元旦" },
       "2026-01-04": { "type": "workday", "name": "元旦调休上班" },
-
+      "2026-02-11": { "type": "festival", "name": "小年" },
       "2026-02-14": { "type": "workday", "name": "春节调休上班" },
       "2026-02-15": { "type": "legal", "name": "春节" },
       "2026-02-16": { "type": "legal", "name": "春节" },
-      "2026-02-17": { "type": "legal", "name": "春节（正月初一）" },
+      "2026-02-17": { "type": "festival", "name": "春节" },
       "2026-02-18": { "type": "legal", "name": "春节" },
       "2026-02-19": { "type": "legal", "name": "春节" },
       "2026-02-20": { "type": "legal", "name": "春节" },
       "2026-02-21": { "type": "legal", "name": "春节" },
       "2026-02-22": { "type": "legal", "name": "春节" },
       "2026-02-23": { "type": "legal", "name": "春节" },
-
+      "2026-02-28": { "type": "workday", "name": "春节调休上班" },
+      "2026-03-05": { "type": "festival", "name": "惊蛰" },
       "2026-04-04": { "type": "legal", "name": "清明节" },
-      "2026-04-05": { "type": "legal", "name": "清明节" },
+      "2026-04-05": { "type": "festival", "name": "清明" },
       "2026-04-06": { "type": "legal", "name": "清明节" },
-
       "2026-05-01": { "type": "legal", "name": "劳动节" },
       "2026-05-02": { "type": "legal", "name": "劳动节" },
       "2026-05-03": { "type": "legal", "name": "劳动节" },
       "2026-05-04": { "type": "legal", "name": "劳动节" },
       "2026-05-05": { "type": "legal", "name": "劳动节" },
-
-      "2026-06-19": { "type": "legal", "name": "端午节" },
+      "2026-05-20": { "type": "festival", "name": "小满" },
+      "2026-06-19": { "type": "festival", "name": "端午" },
       "2026-06-20": { "type": "legal", "name": "端午节" },
       "2026-06-21": { "type": "legal", "name": "端午节" },
-
+      "2026-08-07": { "type": "festival", "name": "立秋" },
+      "2026-09-20": { "type": "workday", "name": "国庆调休上班" },
+      "2026-09-23": { "type": "festival", "name": "秋分" },
       "2026-09-25": { "type": "legal", "name": "中秋节" },
       "2026-09-26": { "type": "legal", "name": "中秋节" },
       "2026-09-27": { "type": "legal", "name": "中秋节" },
-
       "2026-10-01": { "type": "legal", "name": "国庆节" },
       "2026-10-02": { "type": "legal", "name": "国庆节" },
       "2026-10-03": { "type": "legal", "name": "国庆节" },
@@ -46,15 +47,7 @@
       "2026-10-06": { "type": "legal", "name": "国庆节" },
       "2026-10-07": { "type": "legal", "name": "国庆节" },
       "2026-10-08": { "type": "legal", "name": "国庆节" },
-
-      "2026-02-11": { "type": "festival", "name": "小年" },
-      "2026-02-17": { "type": "festival", "name": "春节" },
-      "2026-03-05": { "type": "festival", "name": "惊蛰" },
-      "2026-04-05": { "type": "festival", "name": "清明" },
-      "2026-05-20": { "type": "festival", "name": "小满" },
-      "2026-06-19": { "type": "festival", "name": "端午" },
-      "2026-08-07": { "type": "festival", "name": "立秋" },
-      "2026-09-23": { "type": "festival", "name": "秋分" },
+      "2026-10-10": { "type": "workday", "name": "国庆调休上班" },
       "2026-10-21": { "type": "festival", "name": "重阳节" },
       "2026-12-22": { "type": "festival", "name": "冬至" }
     }
