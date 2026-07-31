@@ -23,6 +23,14 @@
   --border: #e2e8f0;
   --accent: #4f46e5;
   --accent-fg: #ffffff;
+
+  /* 节假日配色（万年历） */
+  --holiday-legal: #dc2626; /* 法定假日：红 */
+  --holiday-legal-bg: #fee2e2;
+  --holiday-work: #ea580c; /* 调休上班：橙 */
+  --holiday-work-bg: #ffedd5;
+  --holiday-festival: #16a34a; /* 传统节日：绿 */
+  --holiday-festival-bg: #dcfce7;
 }
 
 html.dark {
@@ -33,6 +41,13 @@ html.dark {
   --border: #334155;
   --accent: #6366f1;
   --accent-fg: #ffffff;
+
+  --holiday-legal: #f87171;
+  --holiday-legal-bg: #450a0a;
+  --holiday-work: #fb923c;
+  --holiday-work-bg: #431407;
+  --holiday-festival: #4ade80;
+  --holiday-festival-bg: #052e16;
 }
 
 html,
@@ -48,4 +63,45 @@ body {
 
 * {
   border-color: var(--border);
+}
+
+/* ───────────── 卡片入场动画（stagger）───────────── */
+/* 初始隐藏+下移；容器加 .stagger-ready 后子项逐个浮现 */
+.stagger-item {
+  opacity: 0;
+  transform: translateY(12px);
+}
+.stagger-ready .stagger-item {
+  animation: stagger-fade-up 0.5s ease-out forwards;
+  /* 每项延迟随 --stagger-index 递增，最多 600ms */
+  animation-delay: calc(min(var(--stagger-index, 0), 8) * 60ms);
+}
+@keyframes stagger-fade-up {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 尊重"减少动画"偏好：直接就位 */
+@media (prefers-reduced-motion: reduce) {
+  .stagger-item {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+}
+
+/* ───────────── 文本截断（line-clamp）───────────── */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ───────────── 搜索框原生样式清理 ───────────── */
+.search-bar::-webkit-search-cancel-button {
+  -webkit-appearance: none;
 }

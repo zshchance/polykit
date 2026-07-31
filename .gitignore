@@ -29,3 +29,9 @@ yarn-error.log*
 pnpm-debug.log*
 logs/
 *.log
+
+# 测试截图（浏览器 GUI 测试产出，不入库）
+gui-test-screenshots/
+
+# ZCode 工作区元数据（计划文件等，不入库）
+.zcode/

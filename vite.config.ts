@@ -3,6 +3,8 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { globSync } from 'glob';
 import tailwindcss from '@tailwindcss/vite';
+import { seoPlugin } from './src/core/seo/seo-plugin';
+import { registryConfig } from './src/home/registry-config';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const r = (p: string) => resolve(__dirname, p);
@@ -45,7 +47,19 @@ export default defineConfig({
   // 多页面应用：禁用 SPA history fallback，
   // 避免未知路径（如 /password-generator/）误返回根 index.html。dev/build 路径对齐。
   appType: 'mpa',
-  plugins: [tailwindcss()],
+  plugins: [
+    tailwindcss(),
+    seoPlugin({
+      // 生产站点根 URL（用于 sitemap/canonical/OG）。
+      // 部署后可在 CI 通过 SITE_URL 环境变量覆盖，或在此处直接写死。
+      siteUrl: process.env.SITE_URL,
+      siteKeywords: registryConfig.seo.siteKeywords,
+    }),
+  ],
+  define: {
+    // 关键词可见性编译期开关：默认 false（用户不可见），但始终写入 meta/JSON-LD
+    __SEO_SHOW_KEYWORDS__: JSON.stringify(registryConfig.seo.showKeywordsInline),
+  },
   resolve: {
     alias: {
       '@': r('./src'),
