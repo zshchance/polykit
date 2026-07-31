@@ -4,6 +4,20 @@ import type { RegisteredTool } from '@/core/types';
 /** 关键词是否在卡片 UI 上可见（编译期注入；不影响 meta/JSON-LD 始终可读） */
 declare const __SEO_SHOW_KEYWORDS__: boolean;
 
+/** 卡片渲染所需的用户偏好与回调 */
+export interface ToolCardOptions {
+  /** stagger 入场索引 */
+  index: number;
+  /** 是否已置顶 */
+  pinned: boolean;
+  /** 是否已星标 */
+  starred: boolean;
+  /** 切换置顶（回调由 main 注入，负责落库 + 重渲染） */
+  onTogglePin: () => void;
+  /** 切换星标 */
+  onToggleStar: () => void;
+}
+
 /**
  * 工具卡片。
  *
@@ -12,10 +26,19 @@ declare const __SEO_SHOW_KEYWORDS__: boolean;
  *   - 主体：图标（无首图时）/ 名称 / 描述
  *   - 可选：关键词胶囊（仅 __SEO_SHOW_KEYWORDS__ 为 true 时渲染，默认隐藏）
  *
+ * 用户偏好交互（头部右上角绝对定位按钮）：
+ *   - 📌 置顶：激活态填充，置顶卡片额外加 .tool-card--pinned 绿色细边框
+ *   - ⭐ 星标：激活态金色
+ *   按钮位于 <a> 之外不可行（卡片根是 <a>，不能嵌套交互按钮），
+ *   故以绝对定位浮层覆盖，事件内 stopPropagation + preventDefault 避免触发卡片跳转。
+ *
  * 交互：hover 时抬升 + 阴影 + 强调描边 + 头部图标微缩放。
  * 入场动画由 stagger.ts 统一加 .stagger-item 控制，本组件不重复实现。
  */
-export function createToolCard(tool: RegisteredTool, index: number): HTMLAnchorElement {
+export function createToolCard(
+  tool: RegisteredTool,
+  opts: ToolCardOptions,
+): HTMLAnchorElement {
   const base = import.meta.env.BASE_URL;
   const href = `${base}tools/${tool.slug}/`;
   const accent = tool.card?.accent ?? 'var(--accent)';
@@ -46,19 +69,60 @@ export function createToolCard(tool: RegisteredTool, index: number): HTMLAnchorE
     );
   }
 
+  // —— 置顶 / 星标 按钮（头部右上角浮层）——
+  // 不能放进 <a> 内（交互按钮不可嵌套于锚点），故绝对定位、事件拦截跳转。
+  const pinBtn = h('button', {
+    type: 'button',
+    class: `tool-card-act tool-card-pin-btn${opts.pinned ? ' is-active' : ''}`,
+    title: opts.pinned ? '取消置顶' : '置顶',
+    'aria-label': opts.pinned ? '取消置顶' : '置顶',
+    'aria-pressed': String(opts.pinned),
+    textContent: '📌',
+    onclick: (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      opts.onTogglePin();
+    },
+  });
+  const starBtn = h('button', {
+    type: 'button',
+    class: `tool-card-act tool-card-star-btn${opts.starred ? ' is-active' : ''}`,
+    title: opts.starred ? '取消星标' : '加星标',
+    'aria-label': opts.starred ? '取消星标' : '加星标',
+    'aria-pressed': String(opts.starred),
+    textContent: '⭐',
+    onclick: (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      opts.onToggleStar();
+    },
+  });
+  header.append(pinBtn, starBtn);
+
   // —— 主体 ——
+  const titleRow = h('div', { class: 'flex items-center gap-2' }, [
+    // 星标激活时标题左侧加金色星（视觉冗余提示，与头部按钮呼应）
+    ...(opts.starred
+      ? [
+          h('span', {
+            class: 'tool-card-star-title text-base leading-none',
+            'aria-hidden': 'true',
+            textContent: '⭐',
+          }),
+        ]
+      : []),
+    // 有首图时主体左侧再放一个小图标；无首图时头部已展示，主体不重复
+    ...(tool.coverUrl && tool.icon
+      ? [h('span', { class: 'text-lg', textContent: tool.icon })]
+      : []),
+    h('h3', {
+      class:
+        'font-semibold text-[var(--fg)] group-hover:text-[var(--accent)] transition-colors',
+      textContent: tool.name,
+    }),
+  ]);
   const body = h('div', { class: 'p-4' }, [
-    h('div', { class: 'flex items-center gap-2' }, [
-      // 有首图时主体左侧再放一个小图标；无首图时头部已展示，主体不重复
-      ...(tool.coverUrl && tool.icon
-        ? [h('span', { class: 'text-lg', textContent: tool.icon })]
-        : []),
-      h('h3', {
-        class:
-          'font-semibold text-[var(--fg)] group-hover:text-[var(--accent)] transition-colors',
-        textContent: tool.name,
-      }),
-    ]),
+    titleRow,
     h('p', {
       class: 'mt-1.5 text-sm text-[var(--fg-muted)] line-clamp-2',
       textContent: tool.description,
@@ -87,9 +151,11 @@ export function createToolCard(tool: RegisteredTool, index: number): HTMLAnchorE
     'a',
     {
       href,
-      class: 'tool-card group stagger-item block overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-[var(--accent)]',
+      // tool-card--pinned：置顶绿边框修饰类；relative 让头部按钮浮层定位锚定到卡片
+      class: `tool-card group stagger-item block overflow-hidden rounded-2xl border bg-[var(--bg-elevated)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-[var(--accent)]${opts.pinned ? ' relative tool-card--pinned' : ' border-[var(--border)]'}`,
       // stagger 入场延迟（索引越大越晚），最多 600ms 封顶
-      style: `--stagger-index:${index}`,
+      style: `--stagger-index:${opts.index}`,
+      draggable: false, // 卡片整体不作为拖拽源；拖拽由外层 wrapper 手柄驱动
     },
     [header, body],
   );

@@ -31,6 +31,9 @@
   --holiday-work-bg: #ffedd5;
   --holiday-festival: #16a34a; /* 传统节日：绿 */
   --holiday-festival-bg: #dcfce7;
+
+  /* 置顶强调色（绿，与节日绿区隔语义） */
+  --pin: #16a34a;
 }
 
 html.dark {
@@ -48,6 +51,8 @@ html.dark {
   --holiday-work-bg: #431407;
   --holiday-festival: #4ade80;
   --holiday-festival-bg: #052e16;
+
+  --pin: #22c55e;
 }
 
 html,
@@ -157,3 +162,111 @@ body {
     opacity: 0.7;
   }
 }
+
+/* ───────────── 工具卡片：置顶 / 星标 / 拖拽 ───────────── */
+/* 置顶卡片：细绿色描边，与普通卡片区分；不加粗以保持卡片尺寸/布局不变 */
+.tool-card--pinned {
+  border-color: var(--pin) !important;
+}
+/* 置顶卡片 hover 仍用强调色，保持与普通卡片一致的交互反馈 */
+
+/* 头部右上角动作按钮（置顶 / 星标）：毛玻璃圆角，hover 增强 */
+.tool-card-act {
+  position: absolute;
+  top: 0.5rem;
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  line-height: 1;
+  border: 0;
+  border-radius: 0.6rem;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.32);
+  color: #fff;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0.85;
+  transition:
+    opacity 0.18s ease,
+    background-color 0.18s ease,
+    transform 0.18s ease;
+}
+/* 星标按钮始终在置顶按钮左侧 */
+.tool-card-star-btn {
+  right: 2.6rem;
+}
+.tool-card-pin-btn {
+  right: 0.5rem;
+}
+/* 卡片无 cover 首图时头部是渐变带，按钮底色已够清晰；
+   有首图时按钮浮在图片上，毛玻璃保证可读 */
+.tool-card-act:hover {
+  opacity: 1;
+  transform: scale(1.08);
+}
+/* 激活态：置顶填充绿、星标填充金 */
+.tool-card-pin-btn.is-active {
+  background: var(--pin);
+  opacity: 1;
+}
+.tool-card-star-btn.is-active {
+  background: #f59e0b;
+  opacity: 1;
+}
+/* 标题左侧的星标冗余图标：金色，与头部按钮呼应 */
+.tool-card-star-title {
+  filter: saturate(1.2);
+}
+
+/* —— 拖拽 —— */
+/* 拖拽中的卡片：半透明、轻微缩小 */
+.tool-card-dragging {
+  opacity: 0.4;
+}
+/* 跟随指针的拖拽克隆体 */
+.tool-card-drag-ghost {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  width: var(--ghost-w, 320px);
+  transform: rotate(-2deg);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  opacity: 0.96;
+}
+/* 落点占位：虚线高亮 */
+.tool-card-drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  border-radius: 1rem;
+}
+/* 拖拽手柄：默认低调，hover 提示可抓取 */
+.tool-card-handle {
+  position: absolute;
+  left: 0.5rem;
+  top: 0.5rem;
+  width: 1.6rem;
+  height: 1.6rem;
+  display: none; /* 默认隐藏，仅拖拽可用时显示 */
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  background: rgba(0, 0, 0, 0.28);
+  color: #fff;
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: grab;
+  z-index: 2;
+  touch-action: none; /* 触屏拖拽时阻止滚动 */
+  user-select: none;
+}
+.tool-card-handle:active {
+  cursor: grabbing;
+}
+/* 拖拽可用时（无搜索/全分类）外层 wrapper 暴露手柄 */
+.tool-grid-can-drag .tool-card-handle {
+  display: inline-flex;
+}
+/* 拖拽不可用时（有筛选）手柄隐藏、无 cursor 提示，避免误导 */

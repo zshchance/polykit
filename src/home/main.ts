@@ -10,6 +10,19 @@ import { createToolCard } from './components/ToolCard';
 import { observeStagger } from './components/stagger';
 import { createClock } from './components/Clock';
 import { renderCalendar } from './calendar/calendar';
+import {
+  loadPrefs,
+  savePrefs,
+  isPinned,
+  isStarred,
+  togglePin,
+  toggleStar,
+  applyOrder,
+  type HomePrefs,
+} from './prefs';
+import { sortTools } from './sort';
+import { enableDragReorder } from './components/dragReorder';
+import { createSettingsPanel } from './components/SettingsPanel';
 
 initTheme();
 
@@ -18,21 +31,44 @@ initTheme();
  *   - 主栏：Hero + 搜索 + 分类筛选 + 工具卡片网格
  *   - 侧栏（留白区）：万年历（桌面 sticky，移动端堆叠到底部）
  *
- * 状态：searchQuery + activeCategory → 过滤 tools → 渲染网格。
+ * 状态：
+ *   - searchQuery + activeCategory + onlyStarred → 过滤 tools
+ *   - prefs（置顶 / 星标 / 排序）→ 过滤后排序 + 渲染
+ *
+ * 排序：置顶组在前 → 组内按自定义顺序 → registry 兜底（见 sort.ts）。
+ * 拖拽排序仅在「无搜索 + 全分类」时启用（过滤下拖拽无意义）。
  */
 function renderHome(): void {
   const app = document.getElementById('app')!;
   const tools = getRegisteredTools();
   const categories = getCategories(tools);
 
+  // —— 用户偏好 ——
+  let prefs: HomePrefs = loadPrefs();
+
+  /** 修改偏好：落库 + 刷新设置面板统计 + 重渲染 */
+  function mutatePrefs(next: HomePrefs): void {
+    prefs = next;
+    savePrefs(prefs);
+    settingsPanel.refresh(prefs);
+    rerenderGrid();
+  }
+
   // —— 过滤状态 ——
   let query = '';
   let category = '';
+  let onlyStarred = false;
 
-  /** 当前过滤后的工具列表 */
+  /** 拖拽是否可用：仅无搜索 + 全分类时 */
+  function dragEnabled(): boolean {
+    return !query && !category;
+  }
+
+  /** 当前过滤后（再按偏好排序）的工具列表 */
   function filtered(): RegisteredTool[] {
-    return tools.filter((t) => {
+    const list = tools.filter((t) => {
       if (category && t.category !== category) return false;
+      if (onlyStarred && !isStarred(prefs, t.slug)) return false;
       if (query) {
         const q = query.toLowerCase();
         const hay = [t.name, t.description, ...(t.keywords ?? [])]
@@ -42,6 +78,7 @@ function renderHome(): void {
       }
       return true;
     });
+    return sortTools(list, prefs);
   }
 
   // ────────── 顶部 Hero ──────────
@@ -76,12 +113,49 @@ function renderHome(): void {
     rerenderGrid();
   });
 
+  // ────────── 「只看星标」开关（独立于分类，语义为收藏筛选） ──────────
+  const starToggle = h('button', {
+    type: 'button',
+    class:
+      'shrink-0 rounded-full border px-3 py-1 text-sm transition-colors border-[var(--border)] text-[var(--fg-muted)] hover:border-[var(--accent)]',
+    'aria-pressed': 'false',
+    title: '只看星标工具',
+    onclick: () => {
+      onlyStarred = !onlyStarred;
+      starToggle.setAttribute('aria-pressed', String(onlyStarred));
+      starToggle.textContent = onlyStarred ? '⭐ 只看星标' : '⭐ 星标';
+      starToggle.className = onlyStarred
+        ? 'shrink-0 rounded-full border px-3 py-1 text-sm transition-colors border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+        : 'shrink-0 rounded-full border px-3 py-1 text-sm transition-colors border-[var(--border)] text-[var(--fg-muted)] hover:border-[var(--accent)]';
+      rerenderGrid();
+    },
+  });
+  starToggle.textContent = '⭐ 星标';
+  // chips 是 role=tablist（语义独立），星标开关是普通 toggle；
+  // 用 flex 容器并排，但 tablist 与 toggle 互不嵌套，避免 ARIA 语义混淆。
+  const filterRow = h(
+    'div',
+    { class: 'flex flex-wrap items-center gap-2' },
+    [chips.el, h('span', { class: 'mx-1 h-5 w-px bg-[var(--border)]' }), starToggle],
+  );
+
+  // ────────── 设置面板（备份 / 还原 / 重置） ──────────
+  const settingsPanel = createSettingsPanel(prefs, (next) => mutatePrefs(next));
+
   // ────────── 工具网格容器（可替换内容） ──────────
   const gridContainer = h('div', {});
   const emptyHint = h('p', {
     class: 'py-16 text-center text-[var(--fg-muted)]',
     textContent: '没有匹配的工具。',
   });
+
+  /** 把卡片包进 relative wrapper（承载拖拽手柄），返回 wrapper */
+  function wrapCard(card: HTMLAnchorElement, slug: string, index: number): HTMLElement {
+    const wrapper = h('div', { class: 'tool-card-wrap relative h-full' }, [card]) as HTMLElement;
+    (wrapper as unknown as { _slug: string; _index: number })._slug = slug;
+    (wrapper as unknown as { _slug: string; _index: number })._index = index;
+    return wrapper;
+  }
 
   function rerenderGrid(): void {
     const list = filtered();
@@ -95,19 +169,38 @@ function renderHome(): void {
     const grid = h(
       'div',
       {
-        class:
-          'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3',
+        class: 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3',
       },
-      list.map((t, i) => createToolCard(t, i)),
+      list.map((t, i) =>
+        wrapCard(
+          createToolCard(t, {
+            index: i,
+            pinned: isPinned(prefs, t.slug),
+            starred: isStarred(prefs, t.slug),
+            onTogglePin: () => mutatePrefs(togglePin(prefs, t.slug)),
+            onToggleStar: () => mutatePrefs(toggleStar(prefs, t.slug)),
+          }),
+          t.slug,
+          i,
+        ),
+      ),
     );
     gridContainer.replaceChildren(grid);
     observeStagger(grid);
+
+    // 拖拽排序：仅无筛选时启用
+    if (dragEnabled() && list.length > 1) {
+      enableDragReorder(grid, list.map((t) => t.slug), (newSlugs) => {
+        mutatePrefs(applyOrder(prefs, newSlugs));
+      });
+    }
   }
 
   // ────────── 主栏（搜索+分类+网格） ──────────
   const mainCol = h('div', { class: 'space-y-5' }, [
     searchWrapper,
-    chips.el,
+    filterRow,
+    settingsPanel.el,
     gridContainer,
   ]);
 
