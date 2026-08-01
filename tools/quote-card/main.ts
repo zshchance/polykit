@@ -30,7 +30,7 @@ import {
   buildAIPrompt,
 } from './custom-animations';
 import { createCopyButton } from '@/core/components/CopyButton';
-import { exportVideo, finishAllAnimations, VIDEO_RESOLUTIONS, getVideoResolution, type VideoResId } from './video-export';
+import { exportVideo, finishAllAnimations, VIDEO_RESOLUTIONS, getVideoResolution, type VideoResId, VIDEO_FPS, getVideoFps, type VideoFpsId } from './video-export';
 
 initTheme();
 
@@ -61,6 +61,7 @@ function renderQuoteCard() {
     /** 动画 id：内置（如 'fade'）或自定义（'custom:xxx'）——用 string 容纳运行时 id */
     animId: string;
     videoRes: VideoResId;
+    videoFps: VideoFpsId;
   } = {
     quote: restored
       ? { text: restored.text || DEFAULT_QUOTE.text, author: restored.author || DEFAULT_QUOTE.author, source: restored.source }
@@ -69,6 +70,7 @@ function renderQuoteCard() {
     aspectId: restored?.aspectId ?? '1:1',
     animId: restored?.animId ?? 'fade',
     videoRes: restored?.videoRes ?? '1080',
+    videoFps: restored?.videoFps ?? '60',
   };
 
   /** 当前宽高比对象 */
@@ -77,8 +79,10 @@ function renderQuoteCard() {
   const currentAnim = () => getAnimation(state.animId);
   /** 当前视频分辨率 */
   const currentVideoRes = () => getVideoResolution(state.videoRes);
+  /** 当前视频帧率 */
+  const currentVideoFps = () => getVideoFps(state.videoFps);
 
-  /** 把当前编辑态落库为草稿（输入/模板/宽高/动画/分辨率变化时调用） */
+  /** 把当前编辑态落库为草稿（输入/模板/宽高/动画/分辨率/帧率变化时调用） */
   function persistDraft(): void {
     saveDraft({
       text: textInput.value,
@@ -88,6 +92,7 @@ function renderQuoteCard() {
       aspectId: state.aspectId,
       animId: state.animId,
       videoRes: state.videoRes,
+      videoFps: state.videoFps,
     });
   }
 
@@ -573,6 +578,17 @@ function renderQuoteCard() {
     },
   );
 
+  // —— 视频帧率选择器（折叠，仅影响视频导出；离线逐帧渲染，帧率精确不掉帧）——
+  const videoFpsSelect = collapsibleSelect(
+    '视频帧率',
+    VIDEO_FPS.map((f) => ({ id: f.id, name: f.name })),
+    state.videoFps,
+    (f) => {
+      state.videoFps = f.id as VideoFpsId;
+      persistDraft();
+    },
+  );
+
   // 导出按钮（图片 + 视频）+ 状态提示
   const exportHint = h('div', { class: 'text-sm text-[var(--fg-muted)] min-h-[1.25rem]' });
 
@@ -635,9 +651,10 @@ function renderQuoteCard() {
           effect: currentAnim(),
           quote: state.quote,
           resolution: currentVideoRes(),
+          videoFps: currentVideoFps(),
         });
         exportHint.textContent = result.ok
-          ? `✓ 视频已下载（${result.format.toUpperCase()} · ${currentVideoRes().name}）`
+          ? `✓ 视频已下载（${result.format.toUpperCase()} · ${currentVideoRes().name} · ${currentVideoFps().fps}fps）`
           : `× 视频导出失败：${result.reason}`;
         exportHint.style.color = result.ok ? '#22c55e' : '#ef4444';
       } finally {
@@ -668,6 +685,8 @@ function renderQuoteCard() {
     animSelect.el,
     // 视频清晰度（折叠，仅影响视频导出）
     videoResSelect.el,
+    // 视频帧率（折叠，仅影响视频导出）
+    videoFpsSelect.el,
     // 导出
     exportRow,
     exportHint,

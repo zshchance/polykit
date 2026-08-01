@@ -62,6 +62,44 @@ export function isValidVideoResId(id: unknown): id is VideoResId {
   return typeof id === 'string' && VIDEO_RESOLUTIONS.some((r) => r.id === id);
 }
 
+/**
+ * 视频帧率档位。
+ *   - '30' 流畅（文件小，逐字动画已够顺）
+ *   - '60' 丝滑（默认，文字动画最顺，文件较大）
+ *   - '120' 超流畅（高刷展示用，文件最大、录制最慢）
+ *
+ * 注：本工具用【离线逐帧渲染】（见 exportVideo），帧率是精确的——每一帧都按
+ * 1/fps 秒的时间步长渲染一次，不依赖实时栅格化速度。所以即便 html-to-image
+ * 单帧栅格化耗时 >16ms，成品仍是精确 60fps，不会掉帧（只是录制比实时慢）。
+ */
+export type VideoFpsId = '30' | '60' | '120';
+
+export interface VideoFps {
+  id: VideoFpsId;
+  /** 展示名 */
+  name: string;
+  /** 实际帧率 */
+  fps: number;
+}
+
+export const VIDEO_FPS: VideoFps[] = [
+  { id: '30', name: '30 流畅', fps: 30 },
+  { id: '60', name: '60 丝滑', fps: 60 },
+  { id: '120', name: '120 超流畅', fps: 120 },
+];
+
+const DEFAULT_FPS: VideoFps = VIDEO_FPS[1]!; // 60
+
+/** 按 id 取帧率，非法 id 回退 60 */
+export function getVideoFps(id: string | undefined): VideoFps {
+  return VIDEO_FPS.find((f) => f.id === id) ?? DEFAULT_FPS;
+}
+
+/** 判断 id 是否合法 */
+export function isValidVideoFpsId(id: unknown): id is VideoFpsId {
+  return typeof id === 'string' && VIDEO_FPS.some((f) => f.id === id);
+}
+
 export interface VideoExportOptions {
   /** 卡片 surface（已处于导出态：transform 复位、原始尺寸） */
   surface: HTMLElement;
@@ -73,8 +111,8 @@ export interface VideoExportOptions {
   quote: QuoteData;
   /** 视频分辨率（短边目标像素，默认 1080） */
   resolution?: VideoResolution;
-  /** 录制帧率（默认 60，更流畅） */
-  fps?: number;
+  /** 帧率档位（默认 60 丝滑） */
+  videoFps?: VideoFps;
   /** 尾帧定格时长（ms） */
   tailMs?: number;
 }
@@ -111,6 +149,33 @@ export function finishAllAnimations(content: HTMLElement): void {
 }
 
 /**
+ * 把 content 子树里所有 WAAPI 动画的 currentTime 设到 t（毫秒）——离线逐帧录制的核心。
+ *
+ * 为什么需要遍历所有动画而非只设 controller：逐字类动画把每个字符 span 各自 animate
+ * （独立的 Animation，各有 delay/duration）。controller（content 上的占位动画）只是
+ * 为了对外暴露统一的 currentTime/finish 控制，设它的 currentTime 不会同步子动画。
+ * 离线逐帧渲染必须让每个子动画都「定格在 t 时刻的画面」，故遍历 content 子树所有
+ * 元素的 getAnimations()，统一 seek。
+ *
+ * 实现：每个动画先暂停（避免 playState 干扰），再设 currentTime。
+ * 容错：个别动画 seek 抛错则忽略。
+ */
+export function seekAllAnimations(content: HTMLElement, t: number): void {
+  const targets: Element[] = [content, ...content.querySelectorAll('*')];
+  for (const el of targets) {
+    const anims = typeof el.getAnimations === 'function' ? el.getAnimations() : [];
+    for (const a of anims) {
+      try {
+        if (a.playState !== 'paused') a.pause();
+        a.currentTime = t;
+      } catch {
+        // 忽略
+      }
+    }
+  }
+}
+
+/**
  * 选择浏览器支持的录制 mime，优先 MP4（H.264），回退 WebM（VP9/VP8）。
  *
  * MP4/H.264 兼容性更广（可直接在微信、iOS、各类播放器打开），Chrome 126+、
@@ -141,7 +206,8 @@ function pickMime(): PickedMime | null {
  */
 export async function exportVideo(opts: VideoExportOptions): Promise<VideoExportResult> {
   const { surface, aspect, effect, quote } = opts;
-  const fps = opts.fps ?? 60;
+  const videoFps = opts.videoFps ?? DEFAULT_FPS;
+  const fps = videoFps.fps;
   const tailMs = opts.tailMs ?? 800;
   const resolution = opts.resolution ?? DEFAULT_RES;
 
@@ -171,37 +237,75 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const stream = canvas.captureStream(fps);
+  // —— 离线逐帧录制：captureStream(0) = 手动 requestFrame 模式 ——
+  // 与「实时录制」(captureStream(fps) + rAF) 的根本区别：
+  //   实时录制时，每帧栅格化(html-to-image)若 >1/fps 秒，captureStream 就捕不到那帧 → 掉帧。
+  //   手动模式下，我们主动控制「何时推进一帧」：设好 anim.currentTime → 栅格化到 canvas →
+  //   track.requestFrame() 告诉 MediaRecorder「这帧画好了，采一帧」。栅格化多慢都不掉帧，
+  //   成品帧率精确 = fps（代价是录制总耗时 = 总帧数 × 单帧栅格化耗时，比实时慢）。
+  const stream = canvas.captureStream(0);
+  const track = stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack | undefined;
+  if (!track || typeof track.requestFrame !== 'function') {
+    // 兜底：浏览器不支持手动帧模式时，退回实时录制
+    return realtimeFallback(opts, mime, ext, fps, tailMs, resolution);
+  }
   // 高清码率：按录制画布像素总量估算（1080² 约 14Mbps，4K 相应提升），保证文字清晰。
+  // 帧率越高、码率相应上调，避免高频细节压缩糊。
   const pixels = cw * ch;
-  const bitrate = Math.max(10_000_000, Math.round((pixels / (1920 * 1080)) * 14_000_000));
+  const fpsFactor = fps / 60;
+  const bitrate = Math.max(8_000_000, Math.round((pixels / (1920 * 1080)) * 14_000_000 * fpsFactor));
   const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate });
   const chunks: Blob[] = [];
   recorder.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) chunks.push(e.data);
   };
 
-  // 3. 重新渲染 surface 内容（确保是最新名言），并构建可控动画
-  //    注意：surface 的 content 由调用方渲染（renderCard 已在导出前重跑），
-  //    这里在现有 content 上构建动画。
+  // 3. 构建动画：buildForExport 会运行 effect.build，逐字类效果借此把每个字符 span 的
+  //    子动画都建好。离线逐帧渲染靠 seekAllAnimations 驱动这些子动画，不需要 controller
+  //    自动播放，故拿到后立刻 pause。
   const content = surface.querySelector('.quote-card-content') as HTMLElement | null;
   if (!content) {
     return { ok: false, reason: '卡片内容层缺失' };
   }
 
-  return new Promise<VideoExportResult>((resolve) => {
-    let rafId = 0;
-    let stopTimer = 0;
-    let anim: Animation | null = null;
+  // pixelRatio = scale × 2：先按分辨率档位放大，再 2× 超采样，drawImage 降采样到录制 canvas，文字锐利。
+  const pr = Math.max(2, scale * 2);
+  /** 把当前 surface 栅格化到录制 canvas（一帧） */
+  const rasterize = async (): Promise<void> => {
+    try {
+      const frame = await toCanvas(surface, { pixelRatio: pr, cacheBust: false });
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+    } catch {
+      // 单帧失败保留上一帧
+    }
+  };
 
-    const cleanup = () => {
-      cancelAnimationFrame(rafId);
-      clearTimeout(stopTimer);
-      try {
-        anim?.cancel();
-      } catch {
-        // 忽略
+  // 总帧数 = 动画时长 + 200ms 收尾余量 + 尾帧定格，全部按 fps 离散化。
+  const totalMs = ANIM_DURATION + 200 + tailMs;
+  const totalFrames = Math.max(1, Math.round((totalMs / 1000) * fps));
+  const anim = buildForExport(effect, content, quote);
+  try {
+    anim.pause();
+  } catch {
+    // 忽略
+  }
+
+  /** 取消 content 子树所有动画（含逐字子动画），录制结束/出错时清理用 */
+  const cancelAll = (): void => {
+    try { anim.cancel(); } catch { /* 忽略 */ }
+    const targets: Element[] = [content, ...content.querySelectorAll('*')];
+    for (const el of targets) {
+      const anims = typeof el.getAnimations === 'function' ? el.getAnimations() : [];
+      for (const a of anims) {
+        try { a.cancel(); } catch { /* 忽略 */ }
       }
+    }
+  };
+
+  return new Promise<VideoExportResult>((resolve) => {
+    const cleanup = () => {
+      cancelAll();
     };
 
     recorder.onstop = () => {
@@ -212,7 +316,6 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
         return;
       }
       resolve({ ok: true as const, format: ext });
-      // 延迟下载，确保 resolve 先返回
       setTimeout(() => {
         const fname = `名言_${quote.author.slice(0, 12)}-${quote.text.slice(0, 12)}`.replace(/[\\/:*?"<>|\n\r\s]/g, '_');
         downloadBlob(blob, `${fname}.${ext}`);
@@ -224,58 +327,140 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
       resolve({ ok: false, reason: '录制过程出错' });
     };
 
-    // 4. 每帧把 surface 栅格化到 canvas（captureStream 自动捕获）。
-    //    pixelRatio = scale × 2：先按分辨率档位放大，再 2× 超采样，drawImage 降采样到
-    //    录制 canvas，文字在高分辨率下依然锐利。
-    const pr = Math.max(2, scale * 2);
-    let settled = false; // 是否已做末态收尾（防重入）
+    // 4. 逐帧渲染循环：第 i 帧对应虚拟时间 t = i / fps * 1000 ms。
+    //    离线逐帧：每帧把 content 子树所有动画 seek 到 t（见 seekAllAnimations）→
+    //    栅格化 → track.requestFrame() 让 MediaRecorder 采这帧。栅格化多慢都不掉帧，
+    //    成品帧率精确 = fps。逐字类的「逐字显现」靠 seek 每个子动画到 t 实现。
+    let frameIdx = 0;
+    let finishedAll = false;
+
+    const renderFrame = async (): Promise<void> => {
+      const t = (frameIdx / fps) * 1000; // 这一帧对应的虚拟时间(ms)
+
+      if (t <= ANIM_DURATION) {
+        // 动画时长内：所有子动画 seek 到 t，定格该时刻画面
+        seekAllAnimations(content, t);
+      } else if (!finishedAll) {
+        // 超出动画时长的第一帧：末态收尾——finish 所有子动画（修逐字末字缺失），定格终态。
+        finishedAll = true;
+        finishAllAnimations(content);
+        await new Promise((r) => setTimeout(r, 20)); // 等重排
+      }
+
+      await rasterize();
+      // 通知 MediaRecorder 采这一帧
+      try {
+        track.requestFrame();
+      } catch {
+        // 忽略
+      }
+
+      frameIdx++;
+      if (frameIdx < totalFrames) {
+        // 让出主线程一拍，避免长时间阻塞 UI（导出按钮显示「录制中」、页面不卡死），
+        // 同时给 ondataavailable 触发机会。
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+        void renderFrame();
+      } else {
+        // 全部帧渲染完，停止录制（MediaRecorder 会 flush 最后的 chunk）
+        if (recorder.state !== 'inactive') {
+          try {
+            recorder.stop();
+          } catch {
+            cleanup();
+            resolve({ ok: false, reason: '停止录制失败' });
+          }
+        }
+      }
+    };
+
+    // 5. 启动：开始录制 → 逐帧渲染
+    try {
+      recorder.start();
+      void renderFrame();
+    } catch (e) {
+      cleanup();
+      resolve({ ok: false, reason: e instanceof Error ? e.message : '启动录制失败' });
+    }
+  });
+}
+
+/**
+ * 实时录制兜底：当浏览器不支持 canvas.captureStream(0) + track.requestFrame()
+ * （手动帧模式）时退回老路径。此时掉帧风险仍在，但至少能出片。
+ */
+async function realtimeFallback(
+  opts: VideoExportOptions,
+  mime: string,
+  ext: 'mp4' | 'webm',
+  fps: number,
+  tailMs: number,
+  resolution: VideoResolution,
+): Promise<VideoExportResult> {
+  const { surface, aspect, effect, quote } = opts;
+  const scale = resolution.shortSide / 1080;
+  const cw = Math.round(aspect.w * scale);
+  const ch = Math.round(aspect.h * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = cw;
+  canvas.height = ch;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return { ok: false, reason: '无法创建画布上下文' };
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const stream = canvas.captureStream(fps);
+  const pixels = cw * ch;
+  const bitrate = Math.max(10_000_000, Math.round((pixels / (1920 * 1080)) * 14_000_000));
+  const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate });
+  const chunks: Blob[] = [];
+  recorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) chunks.push(e.data);
+  };
+  const content = surface.querySelector('.quote-card-content') as HTMLElement | null;
+  if (!content) return { ok: false, reason: '卡片内容层缺失' };
+
+  const pr = Math.max(2, scale * 2);
+  return new Promise<VideoExportResult>((resolve) => {
+    let rafId = 0;
+    let stopTimer = 0;
+    let anim: Animation | null = null;
+    const cleanup = () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(stopTimer);
+      try { anim?.cancel(); } catch { /* 忽略 */ }
+    };
+    recorder.onstop = () => {
+      cleanup();
+      const blob = new Blob(chunks, { type: mime });
+      if (blob.size === 0) { resolve({ ok: false, reason: '录制内容为空' }); return; }
+      resolve({ ok: true as const, format: ext });
+      setTimeout(() => {
+        const fname = `名言_${quote.author.slice(0, 12)}-${quote.text.slice(0, 12)}`.replace(/[\\/:*?"<>|\n\r\s]/g, '_');
+        downloadBlob(blob, `${fname}.${ext}`);
+      }, 50);
+    };
+    recorder.onerror = () => { cleanup(); resolve({ ok: false, reason: '录制过程出错' }); };
     const paintFrame = async () => {
       try {
         const frame = await toCanvas(surface, { pixelRatio: pr, cacheBust: false });
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
-      } catch {
-        // 单帧失败不中断录制，保留上一帧
-      }
-      // 动画未结束则继续（currentTime 类型为 CSSNumberish，统一转 number 比较）
+      } catch { /* 保留上一帧 */ }
       const t = anim ? Number(anim.currentTime) : ANIM_DURATION;
       if (t < ANIM_DURATION) {
         rafId = requestAnimationFrame(paintFrame);
-      } else if (!settled) {
-        // —— 末态收尾（修长文本末字缺失）——
-        // 逐字类动画的末字可能略晚于 ANIM_DURATION 才到 opacity:1（如炫光/弹跳 eachDur 较长），
-        // 此时 controller 已到点、绘制循环本会停帧，末字还半透明。这里把 content 上所有子动画
-        // 强制 finish 到终态，再补一帧干净的「成品帧」，保证末字可见后再进入尾帧定格。
-        settled = true;
-        finishAllAnimations(content);
-        await new Promise((r) => setTimeout(r, 30)); // 等重排
-        try {
-          const finalFrame = await toCanvas(surface, { pixelRatio: pr, cacheBust: false });
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(finalFrame, 0, 0, canvas.width, canvas.height);
-        } catch {
-          // 末帧失败则保留上一帧
-        }
       }
     };
-
-    // 5. 启动：开始录制 → 构建并播放动画 → 开始绘制循环
     try {
       recorder.start();
-      // 构建动画（从头播放）
       anim = buildForExport(effect, content, quote);
       anim.currentTime = 0;
       anim.play();
-      // 启动绘制
       rafId = requestAnimationFrame(paintFrame);
-      // 动画结束 + 尾帧后停止。逐字末字有时略晚于 ANIM_DURATION，故多留 200ms 余量
-      // 让收尾帧/末字稳定后再定格（上方 paintFrame 也会在到点后补一帧终态）。
-      const totalMs = ANIM_DURATION + 200 + tailMs;
       stopTimer = window.setTimeout(() => {
-        if (recorder.state !== 'inactive') {
-          recorder.stop();
-        }
-      }, totalMs);
+        if (recorder.state !== 'inactive') recorder.stop();
+      }, ANIM_DURATION + 200 + tailMs);
     } catch (e) {
       cleanup();
       resolve({ ok: false, reason: e instanceof Error ? e.message : '启动录制失败' });

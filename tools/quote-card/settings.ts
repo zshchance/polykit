@@ -8,16 +8,16 @@
  * 设计与 history.ts 一致：带 version 的 JSON blob，损坏/隐私模式时安全回退默认值。
  *
  * 存储形态（JSON）：
- *   { "version": 3, "draft": { text, author, source?, templateId, aspectId?, animId?, videoRes? } }
- *   （v2 新增 aspectId/animId，v3 新增 videoRes；旧草稿缺字段时用默认值，向前兼容）
+ *   { "version": 4, "draft": { text, author, source?, templateId, aspectId?, animId?, videoRes?, videoFps? } }
+ *   （v2 新增 aspectId/animId，v3 新增 videoRes，v4 新增 videoFps；旧草稿缺字段时用默认值，向前兼容）
  */
 
 import { isValidAspectId, type AspectId } from './aspect';
 import { isValidAnimId } from './animations';
-import { isValidVideoResId, type VideoResId } from './video-export';
+import { isValidVideoResId, type VideoResId, isValidVideoFpsId, type VideoFpsId } from './video-export';
 
 const STORAGE_KEY = 'quote-card:draft';
-const CURRENT_VERSION = 3;
+const CURRENT_VERSION = 4;
 
 /** 草稿（可被还原的编辑态） */
 export interface QuoteDraft {
@@ -35,6 +35,8 @@ export interface QuoteDraft {
   animId?: string;
   /** 视频分辨率（v3，可选，缺省默认 1080p） */
   videoRes?: VideoResId;
+  /** 视频帧率（v4，可选，缺省默认 60 丝滑） */
+  videoFps?: VideoFpsId;
 }
 
 interface DraftBlob {
@@ -55,11 +57,12 @@ export function loadDraft(): QuoteDraft | null {
     if (typeof d.text !== 'string' || typeof d.author !== 'string' || typeof d.templateId !== 'string') return null;
     if (d.text.length === 0 && d.author.length === 0) return null; // 全空视为无草稿
     const source = typeof d.source === 'string' ? d.source : undefined;
-    // aspectId / animId / videoRes 仅在合法时保留，否则留空（调用方用默认）
+    // aspectId / animId / videoRes / videoFps 仅在合法时保留，否则留空（调用方用默认）
     const aspectId = isValidAspectId(d.aspectId) ? d.aspectId : undefined;
     const animId = isValidAnimId(d.animId) ? d.animId : undefined;
     const videoRes = isValidVideoResId(d.videoRes) ? d.videoRes : undefined;
-    return { text: d.text, author: d.author, source, templateId: d.templateId, aspectId, animId, videoRes };
+    const videoFps = isValidVideoFpsId(d.videoFps) ? d.videoFps : undefined;
+    return { text: d.text, author: d.author, source, templateId: d.templateId, aspectId, animId, videoRes, videoFps };
   } catch {
     return null;
   }
