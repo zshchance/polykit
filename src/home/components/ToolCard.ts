@@ -55,17 +55,28 @@ export function createToolCard(
       }),
     );
   } else {
-    // 无首图：accent 渐变 + 装饰圆 + emoji 图标居中
+    // 无首图：accent 渐变 + 装饰圆 + 图标居中。
+    // 有矢量图标素材（iconUrl）时优先用 <img>，比 emoji 更精致、跨系统风格统一；
+    // 否则回退 tool.config.ts 的 emoji 图标。
     header.style.cssText = `background:linear-gradient(135deg, ${accent}, ${accent}cc);`;
+    const centerIcon = tool.iconUrl
+      ? h('img', {
+          src: tool.iconUrl,
+          alt: '',
+          // 与 text-4xl emoji 视觉重量相当；矢量圆角图标用 h-12 w-12 撑满
+          class: 'h-12 w-12 object-contain drop-shadow-sm',
+          loading: 'lazy',
+          draggable: false,
+        })
+      : h('span', { class: 'text-4xl', textContent: tool.icon ?? '🧰' });
     header.append(
       h('div', {
         class: 'absolute -right-6 -top-6 h-20 w-20 rounded-full bg-white/10',
       }),
       h('div', {
         class:
-          'absolute inset-0 flex items-center justify-center text-4xl transition-transform duration-500 group-hover:scale-110',
-        textContent: tool.icon ?? '🧰',
-      }),
+          'absolute inset-0 flex items-center justify-center transition-transform duration-500 group-hover:scale-110',
+      }, [centerIcon]),
     );
   }
 

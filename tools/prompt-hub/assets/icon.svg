@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="14" fill="#db2777"/>
+  <rect x="0.5" y="0.5" width="63" height="63" rx="13.5" stroke="#fff" stroke-opacity="0.12"/>
+  <!-- 对话气泡（提示词载体） -->
+  <path d="M16 20a4 4 0 0 1 4-4h24a4 4 0 0 1 4 4v16a4 4 0 0 1-4 4H30l-8 7v-7h-2a4 4 0 0 1-4-4V20z" fill="#fff"/>
+  <!-- 气泡内的四角火花（灵感） -->
+  <path d="M32 22.5l1.7 4.3 4.3 1.7-4.3 1.7L32 34.5l-1.7-4.3L26 28.5l4.3-1.7L32 22.5z" fill="#db2777"/>
+  <circle cx="23.5" cy="28.5" r="1.7" fill="#db2777"/>
+  <circle cx="40.5" cy="28.5" r="1.7" fill="#db2777"/>
+</svg>
