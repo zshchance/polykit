@@ -447,9 +447,10 @@ function renderImageCompress(): void {
   // chips 行（≥sm 显示）；小屏隐藏改用下方 select。
   const purposeContainer = h('div', { class: 'flex flex-wrap gap-2' });
   // 小屏下拉（<sm 显示，≥sm 隐藏），与 chips 同步选中态。
+  // 父容器已控制 sm:hidden 与伸缩，此处只管自身样式与撑满。
   const purposeSelect = h('select', {
     class:
-      'sm:hidden w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      'w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
     'aria-label': '用途',
   }) as HTMLSelectElement;
   let activePurposeId = 'general';
@@ -752,11 +753,12 @@ function renderImageCompress(): void {
       // 用途预设行（参数区最前方）
       h('div', { class: 'space-y-1.5' }, [
         h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '用途（一键预设参数）' }),
-        // chips + 快捷输入按钮同一行：chips 在左、快捷输入靠最右
+        // chips（或窄屏 select）与快捷输入按钮同一行：左侧伸缩、按钮靠最右
         // ≥sm：显示 chips 行、隐藏小屏 select
         // <sm：隐藏 chips 行、显示 select（适配窄屏）；快捷输入按钮始终可见
         h('div', { class: 'flex items-center gap-2' }, [
           h('div', { class: 'hidden min-w-0 flex-1 flex-wrap gap-2 sm:flex' }, [purposeContainer]),
+          h('div', { class: 'min-w-0 flex-1 sm:hidden' }, [purposeSelect]),
           h('button', {
             type: 'button',
             title: '弹出参数 JSON 输入框（快捷键 Alt+J），粘贴 JSON 回车即可精确设参',
@@ -767,7 +769,6 @@ function renderImageCompress(): void {
             onclick: openJsonDialog,
           }),
         ]),
-        purposeSelect,
         customWrap,
       ]),
       h('div', { class: 'space-y-1.5' }, [
