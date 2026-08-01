@@ -318,12 +318,14 @@ function renderImageCompress(): void {
       outUrl = null;
       viewer.setImages(image.url, null);
       viewer.setMode(cfg.mode);
+      syncPreviewVisibility(); // 有图了：显示预览区
       updateStats();
       showStatus(`已加载 ${image.name}（${image.width}×${image.height}）`);
       void encode(); // 立即编码一次
     } catch (err) {
       image = null;
       viewer.setImages(null, null);
+      syncPreviewVisibility(); // 无图：隐藏预览区
       showError(err instanceof Error ? err.message : '加载失败');
     }
   }
@@ -394,6 +396,13 @@ function renderImageCompress(): void {
   // 包装 formatRow 的 onclick 以便切格式时也刷新 ICO 行显隐
   formatContainer.addEventListener('click', syncFormatSensitiveWraps);
 
+  // 预览区显隐：未上传图时整块隐藏（预览标签 / 模式切换 / 画板 / 统计 / 下载 都无意义）。
+  // 上传后显示，清空后再次隐藏。viewer 内部也会同步隐藏 stage（双重保险）。
+  let previewWrap: HTMLElement | null = null;
+  function syncPreviewVisibility(): void {
+    if (previewWrap) previewWrap.style.display = image ? '' : 'none';
+  }
+
   content.append(
     h('p', {
       class: 'mb-5 text-sm text-[var(--fg-muted)]',
@@ -415,8 +424,8 @@ function renderImageCompress(): void {
       ]),
       icoSizesWrap,
     ]),
-    // 预览器 + 模式切换
-    h('div', { class: 'mt-8 space-y-3' }, [
+    // 预览器 + 模式切换（未上传图时整块隐藏）
+    (previewWrap = h('div', { class: 'mt-8 space-y-3' }, [
       h('div', { class: 'flex items-center justify-between gap-3 flex-wrap' }, [
         h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '预览' }),
         modeContainer,
@@ -424,8 +433,11 @@ function renderImageCompress(): void {
       viewer.el,
       statsLine,
       downloadBtn,
-    ]),
+    ])),
   );
+
+  // 初次挂载时无图：隐藏预览区（上传后才显示）
+  syncPreviewVisibility();
 }
 
 renderImageCompress();

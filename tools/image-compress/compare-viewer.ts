@@ -132,6 +132,9 @@ export function createCompareViewer(): CompareViewer {
     setImages(originalUrl, outputUrl) {
       originalImg.src = originalUrl ?? '';
       outputImg.src = outputUrl ?? '';
+      // 没有原图（未上传 / 已清空）时隐藏预览区，避免空棋盘格框占位。
+      // 输出图依赖原图存在，故以原图为准。
+      stage.style.display = originalUrl ? '' : 'none';
     },
     setMode(m) {
       mode = m;
