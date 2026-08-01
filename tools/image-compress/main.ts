@@ -444,8 +444,32 @@ function renderImageCompress(): void {
   // ────────── 用途预设行 ──────────
   // 参数区最前方：通用压缩 + 4 个预设 + 自己描述。
   // 点预设 → applyParams 一步设好参数；点自己描述 → 展开输入框 + 生成 AI 接管提示词。
+  // chips 行（≥sm 显示）；小屏隐藏改用下方 select。
   const purposeContainer = h('div', { class: 'flex flex-wrap gap-2' });
+  // 小屏下拉（<sm 显示，≥sm 隐藏），与 chips 同步选中态。
+  const purposeSelect = h('select', {
+    class:
+      'sm:hidden w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+    'aria-label': '用途',
+  }) as HTMLSelectElement;
   let activePurposeId = 'general';
+
+  /** 应用某用途（预设/自己描述）—— chips 与 select 共用，保证两者同步 */
+  function applyPurpose(id: string): void {
+    activePurposeId = id;
+    if (id === 'custom') {
+      renderPurposeRow();
+      purposeSelect.value = 'custom';
+      customWrap.style.display = '';
+      descInput.focus();
+    } else {
+      const p = PRESETS.find((x) => x.id === id) ?? PRESETS[0]!;
+      applyParams(p.format, p.quality, p.maxLongEdge);
+      renderPurposeRow();
+      purposeSelect.value = p.id;
+      customWrap.style.display = 'none'; // 选预设时收起自定义区
+    }
+  }
 
   // 自定义描述区（默认隐藏，点"自己描述"展开）
   const customWrap = h('div', { class: 'mt-3 space-y-2', style: 'display:none;' });
@@ -472,12 +496,7 @@ function renderImageCompress(): void {
               : 'bg-[var(--bg-elevated)] text-[var(--fg-muted)] border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)]',
           ].join(' '),
           textContent: p.label,
-          onclick: () => {
-            activePurposeId = p.id;
-            applyParams(p.format, p.quality, p.maxLongEdge);
-            renderPurposeRow();
-            customWrap.style.display = 'none'; // 选预设时收起自定义区
-          },
+          onclick: () => applyPurpose(p.id),
         }),
       ),
       // 自己描述（非预设，单独样式提示其特殊性）
@@ -493,15 +512,29 @@ function renderImageCompress(): void {
             : 'bg-[var(--bg-elevated)] text-[var(--fg-muted)] border-dashed border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)]',
         ].join(' '),
         textContent: '✍ 自己描述',
-        onclick: () => {
-          activePurposeId = 'custom';
-          renderPurposeRow();
-          customWrap.style.display = '';
-          descInput.focus();
-        },
+        onclick: () => applyPurpose('custom'),
       }),
     );
   }
+
+  // 填充小屏 select 选项 + change 事件（与 chips 同步选中态）
+  purposeSelect.append(
+    ...PRESETS.map((p) => {
+      const o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = p.label;
+      return o;
+    }),
+    (() => {
+      const o = document.createElement('option');
+      o.value = 'custom';
+      o.textContent = '✍ 自己描述';
+      return o;
+    })(),
+  );
+  purposeSelect.value = activePurposeId;
+  purposeSelect.addEventListener('change', () => applyPurpose(purposeSelect.value));
+
   renderPurposeRow();
 
   // 接管提示词预览区（生成后才显示）
@@ -680,9 +713,11 @@ function renderImageCompress(): void {
     jsonDialogEl = null;
   }
 
-  // 全局快捷键：Alt+J（macOS Option+J）唤出 JSON 框
+  // 全局快捷键：Alt+J（macOS Option+J）唤出 JSON 框。
+  // 注意 macOS 上 Option 是字符修饰键，e.key 会变成特殊字符（非 'j'），
+  // 故用 e.code（物理按键位，不受修饰键影响）判断，跨平台稳定。
   document.addEventListener('keydown', (e) => {
-    if (e.altKey && (e.key === 'j' || e.key === 'J')) {
+    if (e.altKey && e.code === 'KeyJ') {
       e.preventDefault();
       openJsonDialog();
     }
@@ -716,18 +751,23 @@ function renderImageCompress(): void {
     h('div', { class: 'mt-6 space-y-5' }, [
       // 用途预设行（参数区最前方）
       h('div', { class: 'space-y-1.5' }, [
-        h('div', { class: 'flex items-center justify-between gap-2' }, [
-          h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '用途（一键预设参数）' }),
+        h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '用途（一键预设参数）' }),
+        // chips + 快捷输入按钮同一行：chips 在左、快捷输入靠最右
+        // ≥sm：显示 chips 行、隐藏小屏 select
+        // <sm：隐藏 chips 行、显示 select（适配窄屏）；快捷输入按钮始终可见
+        h('div', { class: 'flex items-center gap-2' }, [
+          h('div', { class: 'hidden min-w-0 flex-1 flex-wrap gap-2 sm:flex' }, [purposeContainer]),
           h('button', {
             type: 'button',
             title: '弹出参数 JSON 输入框（快捷键 Alt+J），粘贴 JSON 回车即可精确设参',
             'aria-label': '快捷输入参数 JSON（Alt+J）',
-            class: 'inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-[11px] text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+            class:
+              'inline-flex shrink-0 items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-[11px] text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
             textContent: '⌨ 快捷输入',
             onclick: openJsonDialog,
           }),
         ]),
-        purposeContainer,
+        purposeSelect,
         customWrap,
       ]),
       h('div', { class: 'space-y-1.5' }, [
