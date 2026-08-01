@@ -200,10 +200,15 @@ function renderColorExtractor(): void {
     textContent: '上传图片后，这里会显示提取出的主色与多格式配色。',
   });
 
-  /** 无图时隐藏色板网格，显示空提示；有图则相反 */
+  /**
+   * 有色板数据（当前图片提取的、或从历史恢复的）则显示色板网格、隐藏空提示；
+   * 否则显示空提示。判据是 currentColors 而非 image——因为历史恢复时只有色值没有图，
+   * 此时也应当展示恢复出的色板。
+   */
   function updateEmptyHint(): void {
-    emptyHint.style.display = image ? 'none' : '';
-    colorsGrid.style.display = image ? '' : 'none';
+    const hasColors = currentColors.length > 0;
+    emptyHint.style.display = hasColors ? 'none' : '';
+    colorsGrid.style.display = hasColors ? '' : 'none';
   }
 
   /** 重新提取（图片或色数变化时调用） */
