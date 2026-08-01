@@ -15,7 +15,15 @@ import {
 import { buildModules, drawQr } from './render';
 import { detectAllQr, decodeFailReason, type DetectedCode } from './decode';
 import { decodeImage, decodeBitmap } from './image';
-import { loadConfig, saveConfig } from './settings';
+import {
+  loadConfig,
+  saveConfig,
+  loadLogoImage,
+  saveLogoImage,
+  loadDetectedImage,
+  saveDetectedImage,
+} from './settings';
+import { bitmapToDataUrl, dataUrlToBitmap } from './storage-image';
 import { downloadCanvasPng, copyCanvasToClipboard, safeFilename } from './export';
 
 initTheme();
@@ -41,6 +49,7 @@ function renderQrCode(): void {
   let detectedCodes: DetectedCode[] = [];
   let selectedCodeIndex = 0; // 当前选中的第几个码（默认第一个）
   let detectedPreviewUrl: string | null = null; // 上传图预览 URL（用于在多码选择器旁显示）
+  let detectedDataUrl: string | null = null; // 识别原图压缩后的 dataURL，持久化与切换选中时复用，避免重编码
 
   function persist(): void {
     saveConfig(cfg);
@@ -189,6 +198,9 @@ function renderQrCode(): void {
         // 同步纠错选择器高亮
         renderLevelRow();
       }
+      // 持久化 Logo 图（压缩成 dataURL），重进可恢复
+      const url = await bitmapToDataUrl(logoBitmap);
+      if (url) saveLogoImage(url);
       scheduleDraw();
       persist();
       showStatus('Logo 已加载，纠错已提升至 Q 级', false);
@@ -207,6 +219,7 @@ function renderQrCode(): void {
       cfg.withLogo = false;
       logoToggle.checked = false;
       logoBtn.textContent = '上传 Logo';
+      saveLogoImage(''); // 清除持久化的 Logo
       scheduleDraw();
       persist();
     },
@@ -291,11 +304,14 @@ function renderQrCode(): void {
       if (detectedPreviewUrl) URL.revokeObjectURL(detectedPreviewUrl);
       detectedPreviewUrl = img.previewUrl;
 
-      renderDecodeBar();
+      // 持久化识别原图（压缩成 dataURL）+ 全部识别结果，重进可恢复下拉与选中项。
+      // 编码与下方 applyDetected 复用同一份 dataUrl（存到 detectedDataUrl），避免重复编码。
+      detectedDataUrl = await bitmapToDataUrl(img.bitmap);
+      img.bitmap.close();
 
       if (codes.length === 0) {
-        img.bitmap.close();
         showStatus(decodeFailReason(), true);
+        renderDecodeBar();
         return;
       }
 
@@ -308,7 +324,7 @@ function renderQrCode(): void {
     }
   }
 
-  /** 应用第 idx 个识别结果：回填内容 + 重绘 */
+  /** 应用第 idx 个识别结果：回填内容 + 重绘 + 记住选中项 */
   async function applyDetected(idx: number): Promise<void> {
     const code = detectedCodes[idx];
     if (!code) return;
@@ -316,6 +332,8 @@ function renderQrCode(): void {
     cfg.text = code.text;
     textInput.value = code.text;
     renderDecodeBar(); // 更新下拉选中态
+    // 持久化：原图 dataUrl + 全部码 + 当前选中（重进恢复到同一个码）
+    if (detectedDataUrl) saveDetectedImage(detectedDataUrl, detectedCodes, idx);
     await redraw();
     persist();
   }
@@ -538,6 +556,34 @@ function renderQrCode(): void {
   renderPresetRow();
   renderLogoFitRow();
   void redraw();
+
+  // 恢复持久化的图片（Logo / 识别原图），均异步（dataURL→bitmap），恢复后重绘。
+  // 这两个恢复互相独立，并行进行。
+  void restoreLogo();
+  void restoreDetected();
+
+  /** 恢复 Logo：若存过 Logo dataURL，还原成 ImageBitmap 并恢复 UI 态 */
+  async function restoreLogo(): Promise<void> {
+    const saved = loadLogoImage();
+    if (!saved) return;
+    const bitmap = await dataUrlToBitmap(saved);
+    if (!bitmap) return; // dataURL 损坏：忽略，不阻塞
+    logoBitmap = bitmap;
+    logoBtn.textContent = '更换 Logo';
+    logoToggle.checked = cfg.withLogo; // withLogo 开关已在 cfg 里恢复
+    scheduleDraw(); // 带 Logo 重绘
+  }
+
+  /** 恢复识别态：原图作预览 + 多码下拉恢复 + 选中上次选中的码 */
+  async function restoreDetected(): Promise<void> {
+    const saved = loadDetectedImage();
+    if (!saved) return;
+    detectedCodes = saved.codes;
+    selectedCodeIndex = saved.selectedIndex;
+    detectedDataUrl = saved.dataUrl;
+    detectedPreviewUrl = saved.dataUrl; // dataURL 可直接作 img src，无需 object URL
+    renderDecodeBar(); // 恢复多码下拉与选中项
+  }
 }
 
 /** 形状/等级选择行：一组胶囊按钮，选中高亮 */
