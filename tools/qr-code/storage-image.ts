@@ -11,9 +11,10 @@
 const DEFAULT_MAX_SIDE = 800;
 
 /**
- * 把 ImageBitmap 编码成 dataURL（JPEG，长边压缩到 maxSide）。
- * - JPEG 而非 PNG：照片类图体积小一个数量级（PNG 存照片反而更大）。
- * - quality 0.85：肉眼几乎无差，体积约为 0.92 的 60-70%。
+ * 把 ImageBitmap 编码成 dataURL（长边压缩到 maxSide）。
+ * - **透明度感知**：若图含 alpha<255 的像素（如透明背景 PNG Logo），用 PNG 编码
+ *   保住透明通道；否则用 JPEG（0.85）省体积。JPEG 不支持透明，会把透明像素填成黑，
+ *   导致透明 PNG Logo 存盘后背景变黑，所以必须按需切换格式。
  * @returns dataURL 字符串；失败返回 null（不阻塞功能）
  */
 export async function bitmapToDataUrl(
@@ -27,10 +28,24 @@ export async function bitmapToDataUrl(
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return null;
     ctx.drawImage(bitmap, 0, 0, w, h);
-    return canvas.toDataURL('image/jpeg', 0.85);
+
+    // 检测是否含透明像素：抽样扫描 alpha 通道（抽样而非全扫，兼顾速度）。
+    // 抽样步长按图大小自适应，保证大图也不会扫太久。
+    const data = ctx.getImageData(0, 0, w, h).data;
+    const step = Math.max(4, Math.floor((w * h) / 10000)) * 4; // 约采样 ≤1万像素
+    let hasAlpha = false;
+    for (let i = 3; i < data.length; i += step) {
+      if (data[i]! < 255) {
+        hasAlpha = true;
+        break;
+      }
+    }
+
+    // 含透明 → PNG（保 alpha）；纯不透明 → JPEG（更小）
+    return hasAlpha ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.85);
   } catch {
     // 大图 / 跨域 / canvas 被污染等：静默失败
     return null;
