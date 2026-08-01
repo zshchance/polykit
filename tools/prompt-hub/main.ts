@@ -34,12 +34,13 @@ function renderPromptHub(): void {
     saveFilter({ ...filter });
   }
 
-  /** 应用当前检索：类目 + 标签(AND) + 关键词(模糊) */
+  /** 应用当前检索：类目 + 标签(OR 取并集) + 关键词(模糊) */
   function applyFilter(list: Prompt[]): Prompt[] {
     let r = list;
     if (filter.category !== 'all') r = r.filter((p) => p.category === filter.category);
     if (filter.tags.length > 0) {
-      r = r.filter((p) => filter.tags.every((t) => p.tags.includes(t)));
+      // 多标签取并集（命中任一即入选），而非要求同时满足所有标签
+      r = r.filter((p) => filter.tags.some((t) => p.tags.includes(t)));
     }
     const kw = filter.keyword.trim().toLowerCase();
     if (kw) {
