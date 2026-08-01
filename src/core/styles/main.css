@@ -268,3 +268,16 @@ body {
   display: inline-flex;
 }
 /* 拖拽不可用时（有筛选）手柄隐藏、无 cursor 提示，避免误导 */
+
+/* ─────────────────────────── 配色提取器 ─────────────────────────── */
+/* 拖拽悬停在 dropzone 上时的高亮（dragover 事件加 .dragover 类） */
+[aria-label='选择或拖入图片'].dragover {
+  border-color: var(--accent);
+  background: var(--bg);
+}
+/* 滑块：用主题强调色，跨浏览器统一外观（accent-color 最简，覆盖轨道/拇指） */
+.color-extractor-range {
+  accent-color: var(--accent);
+  height: 1.25rem;
+  cursor: pointer;
+}

@@ -27,6 +27,8 @@ export const registryConfig: RegistryConfig = {
       '密码生成器',
       'AI配色提示词',
       '配色工具',
+      '配色提取器',
+      '取色',
       '万年历',
     ],
   },
@@ -34,5 +36,6 @@ export const registryConfig: RegistryConfig = {
     // password-generator 排到最前（示例工具）
     'password-generator': { order: 1 },
     'color-prompt': { order: 2 },
+    'color-extractor': { order: 3 },
   },
 };
