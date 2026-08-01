@@ -2,12 +2,15 @@ import '@/core/styles/main.css';
 import { h } from '@/core/components/element';
 import { renderToolLayout } from '@/core/components/ToolLayout';
 import { initTheme } from '@/core/components/ThemeToggle';
+import { createCopyButton } from '@/core/components/CopyButton';
 import { downloadBlob } from '@/core/utils/clipboard';
 import { loadImage, revokeImage, type LoadedImage } from './image';
 import { convertToBlob, scaledSize } from './encode';
 import { encodeIco } from './ico';
 import { createCompareViewer } from './compare-viewer';
 import { loadConfig, saveConfig } from './settings';
+import { PRESETS } from './presets';
+import { buildTakeoverPrompt, type CurrentParams } from './ai-takeover';
 import {
   FORMAT_OPTIONS,
   ICO_SIZE_OPTIONS,
@@ -16,6 +19,7 @@ import {
   MAX_QUALITY,
   type CompressConfig,
   type CompareMode,
+  type OutputFormat,
 } from './types';
 
 initTheme();
@@ -122,6 +126,7 @@ function renderImageCompress(): void {
         return h('button', {
           type: 'button',
           'aria-pressed': String(active),
+          'aria-label': `输出格式：${fo.name}`,
           title: fo.hint,
           class: [
             'rounded-md px-3 py-1.5 text-sm border transition-all duration-150',
@@ -150,6 +155,9 @@ function renderImageCompress(): void {
     max: String(MAX_QUALITY),
     step: '1',
     value: String(cfg.quality),
+    'aria-label': '压缩强度',
+    'aria-valuemin': String(MIN_QUALITY),
+    'aria-valuemax': String(MAX_QUALITY),
     class: 'image-compress-range w-full',
   }) as HTMLInputElement;
   qualitySlider.addEventListener('input', () => {
@@ -182,6 +190,7 @@ function renderImageCompress(): void {
   const longEdgeSelect = h('select', {
     class:
       'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+    'aria-label': '最长边缩放上限',
   }) as HTMLSelectElement;
   longEdgeSelect.append(
     ...LONG_EDGE_OPTIONS.map((v) => {
@@ -207,6 +216,7 @@ function renderImageCompress(): void {
         return h('button', {
           type: 'button',
           'aria-pressed': String(active),
+          'aria-label': `ICO 尺寸：${size}px`,
           class: [
             'rounded-md px-2.5 py-1 text-xs border transition-all duration-150',
             active
@@ -340,6 +350,49 @@ function renderImageCompress(): void {
     }, 150);
   }
 
+  /**
+   * 统一的"设置参数"入口：一次设好 format/quality/maxLongEdge（可选 icoSizes），
+   * 同步刷新所有控件 UI（格式行、画质滑块、最长边下拉、ICO 行显隐）并触发重编码。
+   *
+   * 用途预设 chip 与全局 API (window.__IMG_COMPRESS__.applyPreset) 都走这里，
+   * 保证行为一致——单一改动路径，避免散落在各 onclick 里。
+   */
+  function applyParams(
+    format: OutputFormat,
+    quality: number,
+    maxLongEdge: number,
+    icoSizes?: number[],
+  ): void {
+    cfg.format = format;
+    cfg.quality = clampQ(quality);
+    cfg.maxLongEdge = clampL(maxLongEdge);
+    if (icoSizes && icoSizes.length > 0) cfg.icoSizes = icoSizes;
+
+    // 同步控件显示值
+    qualitySlider.value = String(cfg.quality);
+    qualityValue.textContent = String(cfg.quality);
+    longEdgeSelect.value = String(cfg.maxLongEdge);
+
+    // 刷新派生 UI
+    renderFormatRow();
+    syncLossySensitiveControls();
+    renderIcoSizes();
+    syncFormatSensitiveWraps();
+
+    scheduleEncode();
+    persist();
+  }
+
+  // 局部钳制器（避免从 types 导入运行期函数造成循环）
+  function clampQ(n: number): number {
+    return Math.max(MIN_QUALITY, Math.min(MAX_QUALITY, Number.isFinite(n) ? Math.round(n) : 80));
+  }
+  function clampL(n: number): number {
+    if (!Number.isFinite(n)) return 0;
+    const v = Math.round(n);
+    return v === 0 || (v >= 16 && v <= 8000) ? v : 0;
+  }
+
   async function encode(): Promise<void> {
     if (!image) return;
     const token = ++encodeToken;
@@ -388,6 +441,122 @@ function renderImageCompress(): void {
   renderModeRow();
   viewer.setMode(cfg.mode);
 
+  // ────────── 用途预设行 ──────────
+  // 参数区最前方：通用压缩 + 4 个预设 + 自己描述。
+  // 点预设 → applyParams 一步设好参数；点自己描述 → 展开输入框 + 生成 AI 接管提示词。
+  const purposeContainer = h('div', { class: 'flex flex-wrap gap-2' });
+  let activePurposeId = 'general';
+
+  // 自定义描述区（默认隐藏，点"自己描述"展开）
+  const customWrap = h('div', { class: 'mt-3 space-y-2', style: 'display:none;' });
+  const descInput = h('textarea', {
+    class:
+      'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+    rows: 3,
+    placeholder: '描述你的用途，例如：给淘宝主图用，要清晰、保留商品细节；或：做微信文章里的配图，体积尽量小…',
+    'aria-label': '用途描述',
+  }) as HTMLTextAreaElement;
+
+  function renderPurposeRow(): void {
+    purposeContainer.replaceChildren(
+      ...PRESETS.map((p) =>
+        h('button', {
+          type: 'button',
+          'aria-pressed': String(activePurposeId === p.id),
+          'aria-label': `用途：${p.label}`,
+          title: p.hint,
+          class: [
+            'rounded-full px-3 py-1.5 text-xs font-medium border transition-all duration-150',
+            activePurposeId === p.id
+              ? 'bg-[var(--accent)] text-[var(--accent-fg)] border-[var(--accent)]'
+              : 'bg-[var(--bg-elevated)] text-[var(--fg-muted)] border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)]',
+          ].join(' '),
+          textContent: p.label,
+          onclick: () => {
+            activePurposeId = p.id;
+            applyParams(p.format, p.quality, p.maxLongEdge);
+            renderPurposeRow();
+            customWrap.style.display = 'none'; // 选预设时收起自定义区
+          },
+        }),
+      ),
+      // 自己描述（非预设，单独样式提示其特殊性）
+      h('button', {
+        type: 'button',
+        'aria-pressed': String(activePurposeId === 'custom'),
+        'aria-label': '用途：自己描述（展开输入框，生成 AI 接管提示词）',
+        title: '展开输入框，描述用途后生成可粘贴给 AI 浏览器的提示词',
+        class: [
+          'rounded-full px-3 py-1.5 text-xs font-medium border transition-all duration-150',
+          activePurposeId === 'custom'
+            ? 'bg-[var(--accent)] text-[var(--accent-fg)] border-[var(--accent)]'
+            : 'bg-[var(--bg-elevated)] text-[var(--fg-muted)] border-dashed border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)]',
+        ].join(' '),
+        textContent: '✍ 自己描述',
+        onclick: () => {
+          activePurposeId = 'custom';
+          renderPurposeRow();
+          customWrap.style.display = '';
+          descInput.focus();
+        },
+      }),
+    );
+  }
+  renderPurposeRow();
+
+  // 接管提示词预览区（生成后才显示）
+  const takeoverArea = h('div', { class: 'space-y-2' });
+
+  function generateTakeover(): void {
+    const text = buildTakeoverPrompt(descInput.value, snapshotParams(), location.href);
+    const preview = h('textarea', {
+      class:
+        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      rows: 12,
+      readonly: true,
+      'aria-label': 'AI 浏览器接管提示词',
+    }) as HTMLTextAreaElement;
+    preview.value = text;
+    takeoverArea.replaceChildren(
+      h('div', { class: 'rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4' }, [
+        h('div', { class: 'flex items-center justify-between gap-2 mb-2' }, [
+          h('span', { class: 'text-sm font-medium text-[var(--fg)]', textContent: '🤖 AI 浏览器接管提示词' }),
+          createCopyButton(() => preview.value, '复制提示词', '已复制 ✓'),
+        ]),
+        preview,
+        h('p', {
+          class: 'mt-2 text-[11px] text-[var(--fg-muted)]',
+          textContent: '复制后粘贴给 Tabbit 等 AI 浏览器，它会按提示词自动设置好上面的压缩参数（全程本地，图片不会上传）。',
+        }),
+      ]),
+    );
+  }
+
+  const generateBtn = h('button', {
+    type: 'button',
+    class:
+      'inline-flex items-center gap-1.5 rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+    textContent: '🤖 生成 AI 接管提示词',
+    onclick: generateTakeover,
+  });
+
+  customWrap.append(
+    descInput,
+    h('div', { class: 'flex items-center gap-2' }, [generateBtn]),
+    takeoverArea,
+  );
+
+  // 当前参数快照（注入提示词）
+  function snapshotParams(): CurrentParams {
+    return {
+      format: cfg.format,
+      quality: cfg.quality,
+      maxLongEdge: cfg.maxLongEdge,
+      icoSizes: [...cfg.icoSizes],
+    };
+  }
+
+
   // ICO 尺寸行只在选 ICO 时显示
   function syncFormatSensitiveWraps(): void {
     icoSizesWrap.style.display = cfg.format === 'ico' ? '' : 'none';
@@ -413,6 +582,12 @@ function renderImageCompress(): void {
     statusLine,
     // 控件区
     h('div', { class: 'mt-6 space-y-5' }, [
+      // 用途预设行（参数区最前方）
+      h('div', { class: 'space-y-1.5' }, [
+        h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '用途（一键预设参数）' }),
+        purposeContainer,
+        customWrap,
+      ]),
       h('div', { class: 'space-y-1.5' }, [
         h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '输出格式' }),
         formatContainer,
@@ -438,6 +613,17 @@ function renderImageCompress(): void {
 
   // 初次挂载时无图：隐藏预览区（上传后才显示）
   syncPreviewVisibility();
+
+  // ────────── 全局脚本 API（供 AI 浏览器确定性操作）──────────
+  // 挂到 window.__IMG_COMPRESS__，让 Tabbit 等 AI 浏览器可一步设好参数，
+  // 配合页面 aria-label 形成双通道（脚本优先，ARIA 备选）。仅本工具页面存在。
+  (window as unknown as { __IMG_COMPRESS__: unknown }).__IMG_COMPRESS__ = {
+    /** 一步设好 format/quality/maxLongEdge（可选 icoSizes）并触发重编码 */
+    applyPreset: (format: OutputFormat, quality: number, maxLongEdge: number, icoSizes?: number[]) =>
+      applyParams(format, quality, maxLongEdge, icoSizes),
+    /** 读取当前参数快照（供 AI 校验设置是否生效） */
+    getParams: () => snapshotParams(),
+  };
 }
 
 renderImageCompress();
