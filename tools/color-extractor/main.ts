@@ -3,6 +3,7 @@ import { h } from '@/core/components/element';
 import { renderToolLayout } from '@/core/components/ToolLayout';
 import { initTheme } from '@/core/components/ThemeToggle';
 import { createCopyButton } from '@/core/components/CopyButton';
+import { copyText } from '@/core/utils/clipboard';
 import { extractPalette, type ExtractedColor } from './extractor';
 import { loadImage, revokeImage, type LoadedImage } from './image';
 import {
@@ -21,6 +22,9 @@ import {
   clampColorCount,
   MIN_COLOR_COUNT,
   MAX_COLOR_COUNT,
+  loadColors,
+  saveColors,
+  type StoredColor,
 } from './settings';
 
 initTheme();
@@ -104,11 +108,32 @@ function renderColorExtractor(): void {
       renderPreview();
       renderColors();
       renderOutput();
+      // 持久化本次提取结果（仅色值数据，不存图片），重进可恢复色板
+      saveColors(currentColors.map(toStored));
     } catch (err) {
       showError(err instanceof Error ? err.message : '图片加载失败');
     } finally {
       setLoading(false);
     }
+  }
+
+  /** ExtractedColor → 可序列化的 StoredColor（去掉运行期 rgb 对象） */
+  function toStored(c: ExtractedColor): StoredColor {
+    return { hex: c.hex, ratio: c.ratio, count: c.count };
+  }
+  /** StoredColor → ExtractedColor（rgb 由 hex 反解，仅供色板展示/格式化用，不再参与提取） */
+  function fromStored(c: StoredColor): ExtractedColor {
+    const hex6 = c.hex.slice(1);
+    return {
+      hex: c.hex,
+      ratio: c.ratio,
+      count: c.count,
+      rgb: {
+        r: parseInt(hex6.slice(0, 2), 16),
+        g: parseInt(hex6.slice(2, 4), 16),
+        b: parseInt(hex6.slice(4, 6), 16),
+      },
+    };
   }
 
   // ────────── 2. 控制条 ──────────
@@ -224,18 +249,36 @@ function renderColorExtractor(): void {
     updateEmptyHint();
   }
 
-  /** 单色卡片：大色块（显示 hex，黑/白字自适应）+ 中文名 + 占比 + 单色复制 */
+  /**
+   * 单色卡片：大色块（显示 hex，黑/白字自适应）+ 中文名 + 占比。
+   * 整卡可点击复制对应 hex 色值，点击后色块短暂显示"已复制"反馈。
+   */
   function colorCard(c: ExtractedColor): HTMLElement {
     const fgDark = readableForeground(c.rgb); // true→黑字
     const pct = `${(c.ratio * 100).toFixed(1)}%`;
+    // 色块：点击复制 hex，复制成功后短暂切文案
+    const swatch = h('button', {
+      type: 'button',
+      title: `点击复制 ${c.hex}`,
+      class:
+        'flex h-16 w-full cursor-pointer items-center justify-center text-xs font-mono font-semibold transition-opacity hover:opacity-90',
+      style: `background:${c.hex};color:${fgDark ? '#0f172a' : '#ffffff'};`,
+      textContent: c.hex,
+      onclick: async () => {
+        const ok = await copyText(c.hex);
+        const original = c.hex;
+        swatch.textContent = ok ? '已复制 ✓' : '复制失败';
+        swatch.disabled = true;
+        setTimeout(() => {
+          swatch.textContent = original;
+          swatch.disabled = false;
+        }, 1200);
+      },
+    });
     return h('div', {
       class: 'overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]',
     }, [
-      h('div', {
-        class: 'flex h-16 items-center justify-center text-xs font-mono font-semibold',
-        style: `background:${c.hex};color:${fgDark ? '#0f172a' : '#ffffff'};`,
-        textContent: c.hex,
-      }),
+      swatch,
       h('div', { class: 'flex items-center justify-between gap-1 px-2.5 py-1.5' }, [
         h('span', { class: 'text-xs font-medium text-[var(--fg)]', textContent: colorName(c.rgb) }),
         h('span', { class: 'text-[11px] text-[var(--fg-muted)]', textContent: pct }),
@@ -316,6 +359,17 @@ function renderColorExtractor(): void {
       outputArea,
     ]),
   );
+
+  // 恢复上次的提取结果（仅色值，不含图片）：色板与多格式输出直接用历史颜色渲染，
+  // 用户重进即可看到上次的配色，无需重新上传图。新上传图后自然覆盖。
+  const storedColors = loadColors();
+  if (storedColors) {
+    currentColors = storedColors.map(fromStored);
+    // 提示来源：数据来自上次会话，原图未恢复（不可序列化）
+    showStatus('已恢复上次的提取结果（原图需重新上传）');
+    renderColors();
+    renderOutput();
+  }
 }
 
 renderColorExtractor();

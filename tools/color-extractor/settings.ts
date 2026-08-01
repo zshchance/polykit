@@ -80,3 +80,69 @@ export function savePrefs(prefs: ColorExtractorPrefs): void {
     // 容量满 / 隐私模式禁用 localStorage：静默忽略，不影响功能
   }
 }
+
+// ─────────────────────────── 上次提取结果持久化 ───────────────────────────
+//
+// 记住用户上次提取出的主色（仅色值数据，不存图片本身——图片不可序列化且大）。
+// 重进页面时恢复色板与多格式输出，用户不必重新上传图。
+// 颜色数据很小（一条 ~40 字节），与上方偏好分开存，避免每次调色数滑块都连带读写大字符串。
+
+const COLORS_KEY = 'color-extractor:colors';
+
+/** 可序列化的颜色记录（ExtractedColor 去掉运行期 rgb，只留 hex/ratio/count） */
+export interface StoredColor {
+  hex: string;
+  ratio: number;
+  count: number;
+}
+
+interface ColorsBlob {
+  version: number;
+  colors: StoredColor[];
+}
+
+/**
+ * 读取上次提取结果；无/损坏返回 null。
+ * 逐条校验 hex 合法、ratio∈[0,1]、count 为正整数，过滤掉脏数据。
+ */
+export function loadColors(): StoredColor[] | null {
+  try {
+    const raw = localStorage.getItem(COLORS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ColorsBlob>;
+    if (!parsed || !Array.isArray(parsed.colors) || parsed.colors.length === 0) return null;
+    const valid = parsed.colors.filter(
+      (c) =>
+        c &&
+        typeof c.hex === 'string' &&
+        /^#[0-9a-fA-F]{6}$/.test(c.hex) &&
+        typeof c.ratio === 'number' &&
+        c.ratio >= 0 &&
+        c.ratio <= 1 &&
+        typeof c.count === 'number' &&
+        c.count > 0,
+    );
+    return valid.length > 0 ? (valid as StoredColor[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 持久化提取结果（隐私模式 / 配额满时静默忽略） */
+export function saveColors(colors: StoredColor[]): void {
+  try {
+    const blob: ColorsBlob = { version: CURRENT_VERSION, colors };
+    localStorage.setItem(COLORS_KEY, JSON.stringify(blob));
+  } catch {
+    // 静默忽略
+  }
+}
+
+/** 清除提取结果（如用户想从头开始） */
+export function clearColors(): void {
+  try {
+    localStorage.removeItem(COLORS_KEY);
+  } catch {
+    // 静默忽略
+  }
+}
