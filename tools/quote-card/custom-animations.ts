@@ -315,6 +315,61 @@ return content.animate([{ opacity: 1 }, { opacity: 1 }],
 - 缓动用 cubic-bezier(0.22,1,0.36,1) 之类，整体观感更顺滑。
 - 不要用 CSS @keyframes（无法被视频导出精确控时）。只用 element.animate()。
 
-【输出格式】
-直接给出可粘贴的代码块（用 \`\`\`js 包裹），不要多余解释，不要复述上面的约定。`;
+【输出格式（务必照此结构，不要加其它说明）】
+第一行写效果名称，格式严格为：名称：xxx
+空一行后，给出代码块（用 \`\`\`js 包裹），代码块内是函数体。
+示例：
+名称：雪花飘落
+\`\`\`js
+return content.animate([...], {...});
+\`\`\`
+不要写其它解释，不要复述上面的约定。`;
+}
+
+/** 用户粘贴内容解析结果：拆出名称 + 代码函数体 */
+export interface ParsedAIOutput {
+  /** 效果名称（去除「名称：」前缀后）；解析不到则为空串 */
+  name: string;
+  /** 代码函数体（已 trim）；解析不到则为空串 */
+  code: string;
+}
+
+/**
+ * 解析用户从 AI 那里复制回来、粘进「粘贴 AI 代码」框的内容，拆出【效果名称】+【代码函数体】。
+ *
+ * 容错策略（尽量帮用户取到可用内容）：
+ *   - 名称：找首个形如「名称：xxx」/「名称: xxx」/「name: xxx」的行；找不到留空（由调用方提示）。
+ *   - 代码：优先取首个 \`\`\`js / \`\`\`javascript / \`\`\` 代码块里的内容；
+ *     若没有代码块围栏，则把去掉名称行、去掉明显非代码说明行后的剩余文本当作代码。
+ *   - 自动去掉代码里 JS 注释行之外的多余中文说明（启发式：连续多行无 = ; ( { } return 的纯中文行视为说明）。
+ */
+export function parseAIOutput(raw: string): ParsedAIOutput {
+  const text = raw.replace(/\r\n/g, '\n').trim();
+  if (!text) return { name: '', code: '' };
+
+  // 1) 名称：首个「名称：xxx」/「名称: xxx」/「name: xxx」（大小写不敏感，中英文冒号都认）
+  let name = '';
+  const nameMatch = text.match(/^[ \t]*(?:名称|效果名(?:称)?|name)[ \t]*[:：][ \t]*(.+?)[ \t]*$/im);
+  if (nameMatch) {
+    name = nameMatch[1]!.trim().replace(/^["「『（(]+|["」』）)]+$/g, '').trim();
+  }
+
+  // 2) 代码：优先 \`\`\`js / \`\`\`javascript / \`\`\` 围栏
+  let code = '';
+  const fence = text.match(/```(?:js|javascript)?\s*\n([\s\S]*?)\n?```/i);
+  if (fence) {
+    code = fence[1]!.trim();
+  } else {
+    // 无围栏：去掉名称行，去掉 ``` 标记行，剩余当作代码
+    const lines = text.split('\n').filter((l) => {
+      const t = l.trim();
+      return (
+        !/^(?:名称|效果名(?:称)?|name)\s*[:：]/i.test(t) &&
+        !/^```/.test(t)
+      );
+    });
+    code = lines.join('\n').trim();
+  }
+
+  return { name, code };
 }

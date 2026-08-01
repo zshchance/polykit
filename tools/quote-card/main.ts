@@ -24,6 +24,7 @@ import {
   addCustomAnim,
   removeCustomAnim,
   dryRunCheck,
+  parseAIOutput,
   toAnimEffect,
   isCustomAnimId,
   buildAIPrompt,
@@ -310,20 +311,11 @@ function renderQuoteCard() {
   const animOptions = () => getEffectiveAnimations().map((an) => ({ id: an.id, name: an.name }));
 
   // —— 动画效果选择器（折叠）——
-  // 头部右侧挂 ➕（添加自定义）/ 💡（AI 生成提示词）两个操作按钮。
-  const addAnimBtn = h('button', {
-    type: 'button',
-    title: '添加自定义动画效果（输入名称 + WAAPI 代码）',
-    'aria-label': '添加自定义动画效果',
-    class:
-      'inline-flex shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
-    textContent: '➕',
-    onclick: () => openAddCustomAnimDialog(),
-  });
+  // 头部右侧挂 💡 一个按钮：点开「描述→生成提示词→粘 AI 代码→保存」三步合一的模态。
   const helpAnimBtn = h('button', {
     type: 'button',
-    title: '用 AI 生成自定义动画效果：描述你想要的效果，生成提示词给 AI，AI 返回代码后粘回 ➕',
-    'aria-label': '用 AI 生成自定义效果（帮助）',
+    title: '用 AI 生成自定义动画效果：描述想要的效果 → 生成提示词 → 粘贴 AI 返回的代码 → 保存',
+    'aria-label': '用 AI 生成自定义效果',
     class:
       'inline-flex shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
     textContent: '💡',
@@ -340,7 +332,7 @@ function renderQuoteCard() {
       persistDraft();
     },
     {
-      actions: [addAnimBtn, helpAnimBtn],
+      actions: [helpAnimBtn],
       canDelete: (id) => isCustomAnimId(id),
       onDelete: (id) => {
         const target = getEffectiveAnimations().find((a) => a.id === id);
@@ -358,12 +350,13 @@ function renderQuoteCard() {
     },
   );
 
-  // ────────── 添加自定义动画效果模态框（点 ➕ 唤出）──────────
-  // 用户填名称 + WAAPI 函数体代码，保存到本地存储，立即在选择器里可用。
-  // 单实例 guard：同时只允许一个模态（添加 / 帮助共用此 guard 互斥）。
+  // ────────── 💡 AI 生成自定义动画（三步合一模态）──────────
+  // 一个模态走完整流程：① 描述想要的效果 → ② 生成提示词（可复制给 ChatGPT/豆包等）
+  // → ③ 粘贴 AI 返回的代码（含「名称：xxx」首行）→ 保存即在选择器出现并应用。
+  // 单实例 guard：同时只允许一个模态。
   let dialogEl: HTMLElement | null = null;
 
-  /** 关闭当前打开的模态（添加/帮助通用） */
+  /** 关闭当前打开的模态 */
   function closeDialog(): void {
     if (!dialogEl) return;
     dialogEl.remove();
@@ -393,113 +386,63 @@ function renderQuoteCard() {
     }
   }
 
-  function openAddCustomAnimDialog(): void {
+  function openHelpDialog(): void {
     if (dialogEl) closeDialog();
 
-    const nameInput = h('input', {
-      type: 'text',
-      class:
-        'w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
-      placeholder: '给效果起个名（如：彩带飘落）',
-      'aria-label': '效果名称',
-      autocomplete: 'off',
-    }) as HTMLInputElement;
-
-    const codeInput = h('textarea', {
-      class:
-        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 font-mono text-[12px] leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)]',
-      rows: 10,
-      spellcheck: false,
-      'aria-label': '效果代码（WAAPI 函数体）',
-      placeholder: [
-        '// content: 卡片内容层 HTMLElement',
-        '// quote: { text, author, source }',
-        '// 必须 return 一个 Animation（用 element.animate(...)）',
-        'return content.animate(',
-        '  [{ opacity: 0, transform: "translateY(24px)" },',
-        '   { opacity: 1, transform: "translateY(0)" }],',
-        '  { duration: 2400, easing: "ease-out", fill: "both" }',
-        ');',
-      ].join('\n'),
-    }) as HTMLTextAreaElement;
-
+    // —— 三步状态：描述 / 提示词 / 粘代码 各自一块，逐步显现 ——
     const statusRow = h('div', { class: 'min-h-[1.25rem] text-xs' });
     function flashError(msg: string): void {
       statusRow.textContent = '⚠ ' + msg;
       statusRow.style.color = 'var(--holiday-legal)';
     }
-
-    /** 取当前卡片内容层做校验样本（没有则造一个） */
-    function sampleContent(): HTMLElement {
-      const real = cardEl.querySelector('.quote-card-content') as HTMLElement | null;
-      if (real) return real;
-      // 兜底：造一个带正文+落款的样本，保证结构破坏检测有效
-      const sample = h('div', { class: 'quote-card-content' }, [
-        h('div', { textContent: state.quote.text }),
-        h('div', { textContent: state.quote.author }),
-      ]);
-      return sample;
+    function flashOk(msg: string): void {
+      statusRow.textContent = '✓ ' + msg;
+      statusRow.style.color = '#22c55e';
     }
 
-    function save(): void {
-      const name = nameInput.value.trim();
-      const code = codeInput.value.trim();
-      if (!name) {
-        flashError('请填写效果名称。');
-        nameInput.focus();
-        return;
-      }
-      if (!code) {
-        flashError('请填写效果代码。');
-        codeInput.focus();
-        return;
-      }
-      // 保存前校验（在 content 克隆副本上试跑）：语法错 / 运行时报错 / 未返回
-      // Animation / 破坏 DOM 结构 都会拦下并红字提示，不保存。
-      // 不在模态里做实时预览——模态会挡住预览区，用户看不到。保存后效果即应用到卡片。
-      const real = sampleContent();
-      const check = dryRunCheck(code, real, state.quote);
-      if (!check.ok) {
-        flashError(check.reason ?? '代码有问题，无法保存。');
-        return;
-      }
-      const list = addCustomAnim(name, code);
-      // 找到刚保存的那条（按名匹配，addCustomAnim 同名覆盖）
-      const saved = list.find((it) => it.name.trim() === name)!;
-      state.animId = saved.id;
-      animSelect.rebuild(animOptions(), state.animId);
-      rerenderCard(); // 立即应用新效果
-      persistDraft();
-      closeDialog();
-    }
-
-    const card = h('div', {
-      role: 'dialog',
-      'aria-modal': 'true',
-      'aria-label': '添加自定义动画效果',
+    // —— 步骤 1：描述想要的效果 ——
+    const descInput = h('textarea', {
       class:
-        'w-[min(92vw,40rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
-    }, [
-      h('div', { class: 'mb-1 flex items-center justify-between gap-2' }, [
-        h('span', { class: 'text-sm font-semibold text-[var(--fg)]', textContent: '➕ 添加自定义动画效果' }),
-        h('button', {
-          type: 'button',
-          'aria-label': '关闭',
-          class: 'text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors',
-          textContent: '✕',
-          onclick: closeDialog,
-        }),
-      ]),
+        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      rows: 3,
+      'aria-label': '想要的动画效果描述',
+      placeholder: '描述你想要的文字入场效果，例如：每个字从左边飞入并带轻微旋转，最后稳定；或：整段从模糊到清晰，文字像被聚焦。',
+    }) as HTMLTextAreaElement;
+
+    // —— 步骤 2：生成的提示词（点「生成 AI 提示词」后才显示）——
+    const promptArea = h('textarea', {
+      class:
+        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 font-mono text-[12px] leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      rows: 8,
+      readonly: true,
+      'aria-label': '生成的 AI 提示词',
+    }) as HTMLTextAreaElement;
+    const step2 = h('div', { class: 'hidden space-y-2' }, [
       h('p', {
-        class: 'mb-3 text-xs leading-relaxed text-[var(--fg-muted)]',
-        textContent: '写一段 Web Animations API 代码（函数体），return 一个 Animation。保存后即可像内置效果一样选用、导出。代码只在你自己的浏览器里运行，不上传。可点 💡 让 AI 帮你生成。',
+        class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
+        textContent: '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，AI 会返回一段「名称 + 代码」。把 AI 的整段回复粘到下面框里，点保存即可。',
       }),
-      h('label', { class: 'mb-1 block text-xs font-medium text-[var(--fg-muted)]', textContent: '效果名称' }),
-      nameInput,
-      h('label', { class: 'mb-1 mt-3 block text-xs font-medium text-[var(--fg-muted)]', textContent: '效果代码（WAAPI 函数体）' }),
-      codeInput,
-      statusRow,
-      h('div', { class: 'mt-3 flex items-center justify-end gap-2' }, [
+      promptArea,
+      h('div', { class: 'flex items-center justify-end' }, [
+        createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
+      ]),
+    ]);
+
+    // —— 步骤 3：粘贴 AI 返回的代码（含名称行）+ 保存按钮 ——
+    // 与 step2 一样默认隐藏，generate 时才显示。
+    const pasteInput = h('textarea', {
+      class:
+        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 font-mono text-[12px] leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      rows: 8,
+      spellcheck: false,
+      'aria-label': '粘贴 AI 返回的代码（含名称行）',
+      placeholder: '把 AI 的整段回复粘到这里（首行形如「名称：雪花飘落」，后面 ```js 代码块）。工具会自动识别名称和代码。',
+    }) as HTMLTextAreaElement;
+    const step3 = h('div', { class: 'hidden space-y-2' }, [
+      h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '③ 粘贴 AI 返回的代码（含名称行）' }),
+      pasteInput,
+      // 保存按钮放进 step3，跟随其显隐
+      h('div', { class: 'flex items-center justify-end gap-2' }, [
         h('button', {
           type: 'button',
           class: 'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors',
@@ -515,46 +458,60 @@ function renderQuoteCard() {
       ]),
     ]);
 
-    dialogEl = mountDialog(card);
-    requestAnimationFrame(() => nameInput.focus());
-  }
-
-  // ────────── 帮助 / AI 生成提示词模态框（点 💡 唤出）──────────
-  function openHelpDialog(): void {
-    if (dialogEl) closeDialog();
-
-    const descInput = h('textarea', {
-      class:
-        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
-      rows: 4,
-      'aria-label': '想要的动画效果描述',
-      placeholder: '描述你想要的文字入场效果，例如：每个字从左边飞入并带轻微旋转，最后稳定；或：整段从模糊到清晰，文字像被聚焦。',
-    }) as HTMLTextAreaElement;
-
-    const promptArea = h('textarea', {
-      class:
-        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 font-mono text-[12px] leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)]',
-      rows: 12,
-      readonly: true,
-      'aria-label': '生成的 AI 提示词',
-    }) as HTMLTextAreaElement;
-
-    const resultRow = h('div', { class: 'hidden space-y-2' }, [
-      promptArea,
-      h('div', { class: 'flex items-center justify-end' }, [
-        createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
-      ]),
-    ]);
-
     function generate(): void {
       const desc = descInput.value.trim();
       if (!desc) {
+        flashError('请先描述你想要的效果。');
         descInput.focus();
         return;
       }
+      flashError('');
       promptArea.value = buildAIPrompt(desc);
-      resultRow.classList.remove('hidden');
+      step2.classList.remove('hidden');
+      step3.classList.remove('hidden');
       promptArea.scrollTop = 0;
+    }
+
+    /** 取当前卡片内容层做校验样本（没有则造一个） */
+    function sampleContent(): HTMLElement {
+      const real = cardEl.querySelector('.quote-card-content') as HTMLElement | null;
+      if (real) return real;
+      const sample = h('div', { class: 'quote-card-content' }, [
+        h('div', { textContent: state.quote.text }),
+        h('div', { textContent: state.quote.author }),
+      ]);
+      return sample;
+    }
+
+    function save(): void {
+      const parsed = parseAIOutput(pasteInput.value);
+      if (!parsed.name) {
+        flashError('没识别到效果名称——AI 回复首行应形如「名称：雪花飘落」。');
+        pasteInput.focus();
+        return;
+      }
+      if (!parsed.code) {
+        flashError('没识别到代码——请把 AI 的整段回复（含 ```js 代码块）粘进来。');
+        pasteInput.focus();
+        return;
+      }
+      // 保存前校验（在 content 克隆副本上试跑）：语法错 / 运行时报错 / 未返回
+      // Animation / 破坏 DOM 结构 都会拦下并红字提示，不保存。
+      const real = sampleContent();
+      const check = dryRunCheck(parsed.code, real, state.quote);
+      if (!check.ok) {
+        flashError(check.reason ?? '代码有问题，无法保存。');
+        return;
+      }
+      const list = addCustomAnim(parsed.name, parsed.code);
+      const saved = list.find((it) => it.name.trim() === parsed.name)!;
+      state.animId = saved.id;
+      animSelect.rebuild(animOptions(), state.animId);
+      rerenderCard(); // 立即应用新效果
+      persistDraft();
+      flashOk(`已保存「${parsed.name}」并应用，关闭后即可看到效果。`);
+      // 稍延迟关闭，让用户看到成功提示
+      setTimeout(closeDialog, 700);
     }
 
     const card = h('div', {
@@ -565,7 +522,7 @@ function renderQuoteCard() {
         'w-[min(92vw,42rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
     }, [
       h('div', { class: 'mb-1 flex items-center justify-between gap-2' }, [
-        h('span', { class: 'text-sm font-semibold text-[var(--fg)]', textContent: '💡 用 AI 生成自定义效果' }),
+        h('span', { class: 'text-sm font-semibold text-[var(--fg)]', textContent: '💡 用 AI 生成自定义动画' }),
         h('button', {
           type: 'button',
           'aria-label': '关闭',
@@ -574,20 +531,27 @@ function renderQuoteCard() {
           onclick: closeDialog,
         }),
       ]),
-      h('p', {
-        class: 'mb-3 text-xs leading-relaxed text-[var(--fg-muted)]',
-        textContent: '描述你想要的动画文字效果，生成一段提示词。把它复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，AI 会按本工具的代码约定返回一段效果代码，再粘回 ➕ 框即可使用。',
-      }),
-      descInput,
-      h('div', { class: 'mt-3 flex items-center justify-end' }, [
-        h('button', {
-          type: 'button',
-          class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
-          textContent: '生成 AI 提示词',
-          onclick: generate,
-        }),
+      // 步骤 1
+      h('div', { class: 'mt-2 space-y-2' }, [
+        h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '① 描述你想要的效果' }),
+        descInput,
+        h('div', { class: 'flex items-center justify-end' }, [
+          h('button', {
+            type: 'button',
+            class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+            textContent: '生成 AI 提示词',
+            onclick: generate,
+          }),
+        ]),
       ]),
-      h('div', { class: 'mt-2' }, [resultRow]),
+      // 步骤 2（生成后显示）
+      h('div', { class: 'mt-3' }, [
+        h('label', { class: 'mb-1 block text-xs font-medium text-[var(--fg-muted)]', textContent: '② 复制提示词给 AI' }),
+        step2,
+      ]),
+      // 步骤 3（生成后显示，含保存按钮）
+      step3,
+      statusRow,
       h('p', {
         class: 'mt-3 text-center text-[11px] text-[var(--fg-muted)]',
         textContent: '数据不出本地 · 代码仅在你自己的浏览器运行',
