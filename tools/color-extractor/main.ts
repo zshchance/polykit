@@ -12,6 +12,7 @@ import {
   formatName,
   type OutputFormat,
 } from './palette-format';
+import { PROMPT_RECIPES } from './ai-prompts';
 import {
   colorName,
   readableForeground,
@@ -108,6 +109,7 @@ function renderColorExtractor(): void {
       renderPreview();
       renderColors();
       renderOutput();
+      renderAiPrompts();
       // 持久化本次提取结果（仅色值数据，不存图片），重进可恢复色板
       saveColors(currentColors.map(toStored));
     } catch (err) {
@@ -153,6 +155,7 @@ function renderColorExtractor(): void {
     reextract();
     renderColors();
     renderOutput();
+    renderAiPrompts();
     persist();
   });
 
@@ -317,6 +320,71 @@ function renderColorExtractor(): void {
     );
   }
 
+  // ────────── 5. AI 玩法提示词 ──────────
+  // 把提取出的色（hex + 占比）注入成可复制的趣味/实用提示词。
+  // 一排玩法芯片 + 内联预览 + 复制。无色时整块隐藏。
+  let activePromptId: string = PROMPT_RECIPES[0]!.id;
+  const aiPromptArea = h('div', { class: 'space-y-3' });
+
+  function renderAiPrompts(): void {
+    // 无色时隐藏整块（对齐 updateEmptyHint 逻辑）
+    if (currentColors.length === 0) {
+      aiPromptArea.replaceChildren();
+      return;
+    }
+    // 若当前选中 id 已失效（理论不会，防御），回退第一个
+    if (!PROMPT_RECIPES.some((r) => r.id === activePromptId)) {
+      activePromptId = PROMPT_RECIPES[0]!.id;
+    }
+
+    const recipe = PROMPT_RECIPES.find((r) => r.id === activePromptId) ?? PROMPT_RECIPES[0]!;
+    const text = recipe.build(currentColors);
+
+    // 芯片行
+    const chipRow = h('div', { class: 'flex flex-wrap gap-2' },
+      PROMPT_RECIPES.map((r) =>
+        h('button', {
+          type: 'button',
+          title: r.hint,
+          class:
+            r.id === activePromptId
+              ? 'rounded-full px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors'
+              : 'rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-xs font-medium text-[var(--fg)] transition-colors hover:border-[var(--accent)]',
+          style: r.id === activePromptId ? 'background:var(--accent);' : '',
+          textContent: r.label,
+          onclick: () => {
+            activePromptId = r.id;
+            renderAiPrompts();
+          },
+        }),
+      ),
+    );
+
+    // 预览文本框（只读，内容随芯片/色板变化刷新）
+    const preview = h('textarea', {
+      class:
+        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      rows: 10,
+      readonly: true,
+    }) as HTMLTextAreaElement;
+    preview.value = text;
+
+    aiPromptArea.replaceChildren(
+      h('div', { class: 'rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4' }, [
+        chipRow,
+        h('p', { class: 'mt-3 mb-2 text-xs text-[var(--fg-muted)]', textContent: recipe.hint }),
+        h('div', { class: 'flex items-center justify-end gap-2 mb-2' }, [
+          createCopyButton(() => preview.value, '复制提示词', '已复制 ✓'),
+        ]),
+        preview,
+        h('p', {
+          class: 'mt-2 text-[11px] text-[var(--fg-muted)]',
+          textContent: '色值在浏览器本地提取，复制提示词后可丢给任意 AI（GLM / Kimi / 通义 / ChatGPT 等）。',
+        }),
+      ]),
+    );
+  }
+
   // ────────── 反馈：加载态 / 错误提示 ──────────
   const statusLine = h('div', { class: 'min-h-[1.25rem] text-xs text-[var(--fg-muted)]' });
   let statusTimer: number | undefined;
@@ -363,6 +431,10 @@ function renderColorExtractor(): void {
       h('div', { class: 'mb-2 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '多格式输出' }),
       outputArea,
     ]),
+    h('div', { class: 'mt-8' }, [
+      h('div', { class: 'mb-2 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '🎨 AI 玩法提示词' }),
+      aiPromptArea,
+    ]),
   );
 
   // 恢复上次的提取结果（仅色值，不含图片）：色板与多格式输出直接用历史颜色渲染，
@@ -374,6 +446,7 @@ function renderColorExtractor(): void {
     showStatus('已恢复上次的提取结果（原图需重新上传）');
     renderColors();
     renderOutput();
+    renderAiPrompts();
   }
 }
 

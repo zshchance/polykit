@@ -12,12 +12,13 @@ import type { ToolConfig } from '@/core/types';
 export default {
   slug: 'color-extractor',
   name: '配色提取器',
-  description: '上传图片自动提取主色，生成 CSS 变量 / Tailwind / SCSS / JSON 等多格式配色，数据不出本地。',
+  description: '上传图片自动提取主色，生成 CSS 变量 / Tailwind / SCSS / JSON 等多格式配色，并一键生成颜色迁移、风格统一等 AI 玩法提示词，数据不出本地。',
   category: '图像',
   icon: '🎯',
   keywords: [
     '配色', '取色', '主色提取', '颜色提取', '色板', '图像配色',
     'CSS 变量', 'Tailwind', '设计', 'color', 'palette', 'extract',
+    'AI 提示词', '颜色迁移', '风格统一', '配色重造',
   ],
   card: { accent: '#0d9488' },
 } satisfies ToolConfig;
