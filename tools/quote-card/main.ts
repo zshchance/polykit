@@ -428,12 +428,8 @@ function renderQuoteCard() {
       statusRow.textContent = '⚠ ' + msg;
       statusRow.style.color = 'var(--holiday-legal)';
     }
-    function flashOk(msg: string): void {
-      statusRow.textContent = '✓ ' + msg;
-      statusRow.style.color = '#22c55e';
-    }
 
-    /** 取当前卡片内容层做试跑样本（没有则造一个） */
+    /** 取当前卡片内容层做校验样本（没有则造一个） */
     function sampleContent(): HTMLElement {
       const real = cardEl.querySelector('.quote-card-content') as HTMLElement | null;
       if (real) return real;
@@ -443,34 +439,6 @@ function renderQuoteCard() {
         h('div', { textContent: state.quote.author }),
       ]);
       return sample;
-    }
-
-    /** 试跑 + 在真实卡片上预览（临时应用、几秒后恢复） */
-    function preview(): void {
-      const code = codeInput.value.trim();
-      if (!code) {
-        flashError('请先填写效果代码再预览。');
-        codeInput.focus();
-        return;
-      }
-      // 先在 content 克隆副本上校验：报错 / 未返回 Animation / 破坏结构 都拦下
-      const real = sampleContent();
-      const check = dryRunCheck(code, real, state.quote);
-      if (!check.ok) {
-        flashError(check.reason ?? '代码有问题，无法预览。');
-        return;
-      }
-      flashOk('试跑通过，正在卡片上预览…（3 秒后恢复）');
-      // dryRun 已确认安全 → 直接在真实 content 上跑一次，3 秒后 rerenderCard 恢复
-      currentAnimObj?.cancel();
-      const contentEl = cardEl.querySelector('.quote-card-content') as HTMLElement | null;
-      if (contentEl) {
-        const liveCheck = dryRunCheck(code, contentEl, state.quote);
-        currentAnimObj = liveCheck.returnedAnimation ?? null;
-      }
-      setTimeout(() => {
-        rerenderCard(); // 恢复原动画
-      }, 3000);
     }
 
     function save(): void {
@@ -486,7 +454,9 @@ function renderQuoteCard() {
         codeInput.focus();
         return;
       }
-      // 保存前试跑校验：语法错 / 运行时报错 / 未返回 Animation / 破坏 DOM 结构 都会拦下
+      // 保存前校验（在 content 克隆副本上试跑）：语法错 / 运行时报错 / 未返回
+      // Animation / 破坏 DOM 结构 都会拦下并红字提示，不保存。
+      // 不在模态里做实时预览——模态会挡住预览区，用户看不到。保存后效果即应用到卡片。
       const real = sampleContent();
       const check = dryRunCheck(code, real, state.quote);
       if (!check.ok) {
@@ -535,13 +505,6 @@ function renderQuoteCard() {
           class: 'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors',
           textContent: '取消',
           onclick: closeDialog,
-        }),
-        h('button', {
-          type: 'button',
-          class: 'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--accent)] hover:border-[var(--accent)] transition-colors',
-          textContent: '▶ 试跑预览',
-          title: '在卡片上试跑这段代码（3 秒后恢复），报错或破坏布局会提示',
-          onclick: preview,
         }),
         h('button', {
           type: 'button',
