@@ -13,7 +13,7 @@
  */
 
 import { isValidAspectId, type AspectId } from './aspect';
-import { isValidAnimId, type AnimId } from './animations';
+import { isValidAnimId } from './animations';
 import { isValidVideoResId, type VideoResId } from './video-export';
 
 const STORAGE_KEY = 'quote-card:draft';
@@ -27,8 +27,12 @@ export interface QuoteDraft {
   templateId: string;
   /** 宽高比（v2，可选，缺省默认 1:1） */
   aspectId?: AspectId;
-  /** 动画效果（v2，可选，缺省默认淡入） */
-  animId?: AnimId;
+  /**
+   * 动画效果（v2，可选，缺省默认淡入）。
+   * 用 string 而非 AnimId 联合类型：自定义效果的 id 是运行时生成的 'custom:xxx'，
+   * 不在静态联合里。合法性由 isValidAnimId（含自定义）统一校验。
+   */
+  animId?: string;
   /** 视频分辨率（v3，可选，缺省默认 1080p） */
   videoRes?: VideoResId;
 }

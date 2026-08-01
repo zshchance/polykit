@@ -18,7 +18,17 @@ import {
 } from './history';
 import { loadDraft, saveDraft, clearDraft } from './settings';
 import { ASPECTS, getAspect, type AspectId } from './aspect';
-import { ANIMATIONS, getAnimation, type AnimId } from './animations';
+import { getAnimation, getEffectiveAnimations, setCustomAnimProvider } from './animations';
+import {
+  loadCustomAnims,
+  addCustomAnim,
+  removeCustomAnim,
+  compileCustomBuild,
+  toAnimEffect,
+  isCustomAnimId,
+  buildAIPrompt,
+} from './custom-animations';
+import { createCopyButton } from '@/core/components/CopyButton';
 import { exportVideo, VIDEO_RESOLUTIONS, getVideoResolution, type VideoResId } from './video-export';
 
 initTheme();
@@ -33,6 +43,13 @@ const DEFAULT_QUOTE: QuoteData = {
 function renderQuoteCard() {
   const { content } = renderToolLayout(document.getElementById('app')!, '名言卡片');
 
+  // —— 自定义动画效果：先注入 provider 再读草稿 ——
+  // 必须在 loadDraft() 之前接好：草稿校验 animId 时用 isValidAnimId，它查
+  // getEffectiveAnimations() → 依赖此 provider 能读出自定义效果。否则刷新后
+  // 上次选的自定义 animId 会被判非法、回退淡入。provider 每次调用读 localStorage，
+  // 增删自定义效果后实时反映。这层间接是为了打破 animations ↔ custom-animations 的 ESM 循环依赖。
+  setCustomAnimProvider(() => loadCustomAnims().map(toAnimEffect));
+
   // —— 状态 ——
   // 启动时恢复上次编辑的草稿（内容/落款/出处/模板/宽高比/动画），无草稿则用默认值
   const restored = loadDraft();
@@ -40,7 +57,8 @@ function renderQuoteCard() {
     quote: QuoteData;
     templateId: string;
     aspectId: AspectId;
-    animId: AnimId;
+    /** 动画 id：内置（如 'fade'）或自定义（'custom:xxx'）——用 string 容纳运行时 id */
+    animId: string;
     videoRes: VideoResId;
   } = {
     quote: restored
@@ -158,16 +176,28 @@ function renderQuoteCard() {
 
   // —— 可折叠选择器构造器（宽高比 / 动画效果共用，默认折叠让界面更干净）——
   // 头部按钮显示「标签：当前选中名」，点击展开/收起选项区。
+  // 选项区每个按钮可选附带一个删除小 ✕（自定义动画用）。
+  interface CollapsibleSelectOpts {
+    /** 头部右侧额外操作按钮（如动画效果的 ➕ / 💡）；可选 */
+    actions?: HTMLElement[];
+    /** 某项是否可删除；返回 true 时该项按钮右侧渲染小 ✕。可选 */
+    canDelete?: (id: string) => boolean;
+    /** 点击某项的删除 ✕ 时调用（负责从存储删 + rebuild）。可选 */
+    onDelete?: (id: string) => void;
+  }
   interface CollapsibleSelect {
     el: HTMLElement;
     /** 刷新当前选中态（切换后调用） */
     refresh: (selectedId: string) => void;
+    /** 用新列表重建选项面板（自定义效果增删后调用） */
+    rebuild: (newItems: { id: string; name: string }[], selectedId: string) => void;
   }
   function collapsibleSelect(
     label: string,
     items: { id: string; name: string }[],
     selectedId: string,
     onSelect: (item: { id: string; name: string }) => void,
+    opts: CollapsibleSelectOpts = {},
   ): CollapsibleSelect {
     const currentLabel = h('span', { class: 'text-[var(--fg)]' });
     const caret = h('span', { class: 'text-[var(--fg-muted)]', textContent: '▸' });
@@ -176,7 +206,7 @@ function renderQuoteCard() {
       {
         type: 'button',
         class:
-          'flex w-full items-center justify-between rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm hover:border-[var(--accent)] transition-colors',
+          'flex flex-1 items-center justify-between rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm hover:border-[var(--accent)] transition-colors',
         'aria-expanded': 'false',
         onclick: () => {
           const hidden = panel.classList.toggle('hidden');
@@ -193,8 +223,16 @@ function renderQuoteCard() {
       ],
     );
 
-    const buttons = items.map((it) =>
-      h('button', {
+    // 头部行：header（占满）+ 可选操作按钮。这样动画效果行可挂 ➕/💡。
+    const headerRow = h('div', { class: 'flex items-center gap-2' }, [
+      header,
+      ...(opts.actions ?? []),
+    ]);
+
+    const panel = h('div', { class: 'hidden flex flex-wrap gap-2 pt-1' });
+
+    function makeOptionButton(it: { id: string; name: string }): HTMLElement {
+      const btn = h('button', {
         type: 'button',
         'data-id': it.id,
         class:
@@ -208,24 +246,52 @@ function renderQuoteCard() {
           header.setAttribute('aria-expanded', 'false');
           caret.textContent = '▸';
         },
-      }),
-    );
-    const panel = h('div', { class: 'hidden flex flex-wrap gap-2 pt-1' }, buttons);
+      });
+      // 可删除项：在按钮右侧挂一个 ✕（阻止冒泡以免触发选择）
+      if (opts.canDelete?.(it.id) && opts.onDelete) {
+        const del = h('button', {
+          type: 'button',
+          'aria-label': `删除自定义效果 ${it.name}`,
+          title: '删除此自定义效果',
+          class:
+            'ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] leading-none text-[var(--fg-muted)] hover:bg-red-500/15 hover:text-red-500 transition-colors',
+          textContent: '✕',
+          onclick: (e: Event) => {
+            e.stopPropagation();
+            opts.onDelete!(it.id);
+          },
+        });
+        return h('span', { class: 'inline-flex items-center' }, [btn, del]);
+      }
+      return btn;
+    }
 
     function refresh(id: string): void {
       const item = items.find((x) => x.id === id);
       currentLabel.textContent = item ? `：${item.name}` : '';
-      for (const btn of buttons) {
+      for (const child of panel.children) {
+        // 容器可能是 span(可删除) 或 button(普通)，取其首个/自身 button 判态
+        const btn = (child.tagName === 'BUTTON' ? child : child.querySelector('button[data-id]')) as HTMLElement | null;
+        if (!btn) continue;
         const isActive = btn.getAttribute('data-id') === id;
         btn.className = isActive
           ? 'rounded-md border px-2.5 py-1.5 text-xs transition-all border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
           : 'rounded-md border px-2.5 py-1.5 text-xs transition-all border-[var(--border)] text-[var(--fg-muted)] hover:border-[var(--accent)]';
       }
     }
+
+    function rebuild(newItems: { id: string; name: string }[], selectedId: string): void {
+      items.length = 0;
+      items.push(...newItems);
+      panel.replaceChildren(...newItems.map(makeOptionButton));
+      refresh(selectedId);
+    }
+
+    panel.append(...items.map(makeOptionButton));
     refresh(selectedId);
 
-    const el = h('div', { class: 'space-y-1' }, [header, panel]);
-    return { el, refresh };
+    const el = h('div', { class: 'space-y-1' }, [headerRow, panel]);
+    return { el, refresh, rebuild };
   }
 
   // —— 宽高比选择器（折叠）——
@@ -240,17 +306,283 @@ function renderQuoteCard() {
     },
   );
 
+  /** 把「内置 + 自定义」效果列表转成选择器选项（id/name） */
+  const animOptions = () => getEffectiveAnimations().map((an) => ({ id: an.id, name: an.name }));
+
   // —— 动画效果选择器（折叠）——
+  // 头部右侧挂 ➕（添加自定义）/ 💡（AI 生成提示词）两个操作按钮。
+  const addAnimBtn = h('button', {
+    type: 'button',
+    title: '添加自定义动画效果（输入名称 + WAAPI 代码）',
+    'aria-label': '添加自定义动画效果',
+    class:
+      'inline-flex shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+    textContent: '➕',
+    onclick: () => openAddCustomAnimDialog(),
+  });
+  const helpAnimBtn = h('button', {
+    type: 'button',
+    title: '用 AI 生成自定义动画效果：描述你想要的效果，生成提示词给 AI，AI 返回代码后粘回 ➕',
+    'aria-label': '用 AI 生成自定义效果（帮助）',
+    class:
+      'inline-flex shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+    textContent: '💡',
+    onclick: () => openHelpDialog(),
+  });
+
   const animSelect = collapsibleSelect(
     '动画效果',
-    ANIMATIONS.map((an) => ({ id: an.id, name: an.name })),
+    animOptions(),
     state.animId,
     (an) => {
-      state.animId = an.id as AnimId;
+      state.animId = an.id;
       rerenderCard(); // 重新播放新动画
       persistDraft();
     },
+    {
+      actions: [addAnimBtn, helpAnimBtn],
+      canDelete: (id) => isCustomAnimId(id),
+      onDelete: (id) => {
+        const target = getEffectiveAnimations().find((a) => a.id === id);
+        const name = target?.name ?? '此自定义效果';
+        if (!confirm(`确定删除${name}吗？此操作不可撤销。`)) return;
+        removeCustomAnim(id);
+        // 若删的是当前选中，回退淡入
+        if (state.animId === id) {
+          state.animId = 'fade';
+          rerenderCard();
+          persistDraft();
+        }
+        animSelect.rebuild(animOptions(), state.animId);
+      },
+    },
   );
+
+  // ────────── 添加自定义动画效果模态框（点 ➕ 唤出）──────────
+  // 用户填名称 + WAAPI 函数体代码，保存到本地存储，立即在选择器里可用。
+  // 单实例 guard：同时只允许一个模态（添加 / 帮助共用此 guard 互斥）。
+  let dialogEl: HTMLElement | null = null;
+
+  /** 关闭当前打开的模态（添加/帮助通用） */
+  function closeDialog(): void {
+    if (!dialogEl) return;
+    dialogEl.remove();
+    dialogEl = null;
+    document.body.style.overflow = '';
+    document.removeEventListener('keydown', onDialogEsc);
+  }
+
+  /** 通用浮层壳：遮罩 + 居中卡片 + Esc/点遮罩关闭。card 由调用方构建。 */
+  function mountDialog(card: HTMLElement): HTMLElement {
+    const overlay = h('div', {
+      class: 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4',
+      onclick: (e: Event) => {
+        if (e.target === overlay) closeDialog();
+      },
+    });
+    overlay.append(card);
+    document.body.append(overlay);
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', onDialogEsc);
+    return overlay;
+  }
+  function onDialogEsc(e: KeyboardEvent): void {
+    if (e.key === 'Escape' && dialogEl) {
+      e.preventDefault();
+      closeDialog();
+    }
+  }
+
+  function openAddCustomAnimDialog(): void {
+    if (dialogEl) closeDialog();
+
+    const nameInput = h('input', {
+      type: 'text',
+      class:
+        'w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      placeholder: '给效果起个名（如：彩带飘落）',
+      'aria-label': '效果名称',
+      autocomplete: 'off',
+    }) as HTMLInputElement;
+
+    const codeInput = h('textarea', {
+      class:
+        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 font-mono text-[12px] leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      rows: 10,
+      spellcheck: false,
+      'aria-label': '效果代码（WAAPI 函数体）',
+      placeholder: [
+        '// content: 卡片内容层 HTMLElement',
+        '// quote: { text, author, source }',
+        '// 必须 return 一个 Animation（用 element.animate(...)）',
+        'return content.animate(',
+        '  [{ opacity: 0, transform: "translateY(24px)" },',
+        '   { opacity: 1, transform: "translateY(0)" }],',
+        '  { duration: 2400, easing: "ease-out", fill: "both" }',
+        ');',
+      ].join('\n'),
+    }) as HTMLTextAreaElement;
+
+    const statusRow = h('div', { class: 'min-h-[1.25rem] text-xs' });
+    function flashError(msg: string): void {
+      statusRow.textContent = '⚠ ' + msg;
+      statusRow.style.color = 'var(--holiday-legal)';
+    }
+
+    function save(): void {
+      const name = nameInput.value.trim();
+      const code = codeInput.value.trim();
+      if (!name) {
+        flashError('请填写效果名称。');
+        nameInput.focus();
+        return;
+      }
+      if (!code) {
+        flashError('请填写效果代码。');
+        codeInput.focus();
+        return;
+      }
+      // 保存前即时编译校验：语法错直接红字、不关模态
+      try {
+        compileCustomBuild(code);
+      } catch (e) {
+        flashError('代码语法有误：' + (e instanceof Error ? e.message : String(e)));
+        return;
+      }
+      const list = addCustomAnim(name, code);
+      // 找到刚保存的那条（按名匹配，addCustomAnim 同名覆盖）
+      const saved = list.find((it) => it.name.trim() === name)!;
+      state.animId = saved.id;
+      animSelect.rebuild(animOptions(), state.animId);
+      rerenderCard(); // 立即应用新效果
+      persistDraft();
+      closeDialog();
+    }
+
+    const card = h('div', {
+      role: 'dialog',
+      'aria-modal': 'true',
+      'aria-label': '添加自定义动画效果',
+      class:
+        'w-[min(92vw,40rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
+    }, [
+      h('div', { class: 'mb-1 flex items-center justify-between gap-2' }, [
+        h('span', { class: 'text-sm font-semibold text-[var(--fg)]', textContent: '➕ 添加自定义动画效果' }),
+        h('button', {
+          type: 'button',
+          'aria-label': '关闭',
+          class: 'text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors',
+          textContent: '✕',
+          onclick: closeDialog,
+        }),
+      ]),
+      h('p', {
+        class: 'mb-3 text-xs leading-relaxed text-[var(--fg-muted)]',
+        textContent: '写一段 Web Animations API 代码（函数体），return 一个 Animation。保存后即可像内置效果一样选用、导出。代码只在你自己的浏览器里运行，不上传。可点 💡 让 AI 帮你生成。',
+      }),
+      h('label', { class: 'mb-1 block text-xs font-medium text-[var(--fg-muted)]', textContent: '效果名称' }),
+      nameInput,
+      h('label', { class: 'mb-1 mt-3 block text-xs font-medium text-[var(--fg-muted)]', textContent: '效果代码（WAAPI 函数体）' }),
+      codeInput,
+      statusRow,
+      h('div', { class: 'mt-3 flex items-center justify-end gap-2' }, [
+        h('button', {
+          type: 'button',
+          class: 'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors',
+          textContent: '取消',
+          onclick: closeDialog,
+        }),
+        h('button', {
+          type: 'button',
+          class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+          textContent: '保存并应用',
+          onclick: save,
+        }),
+      ]),
+    ]);
+
+    dialogEl = mountDialog(card);
+    requestAnimationFrame(() => nameInput.focus());
+  }
+
+  // ────────── 帮助 / AI 生成提示词模态框（点 💡 唤出）──────────
+  function openHelpDialog(): void {
+    if (dialogEl) closeDialog();
+
+    const descInput = h('textarea', {
+      class:
+        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      rows: 4,
+      'aria-label': '想要的动画效果描述',
+      placeholder: '描述你想要的文字入场效果，例如：每个字从左边飞入并带轻微旋转，最后稳定；或：整段从模糊到清晰，文字像被聚焦。',
+    }) as HTMLTextAreaElement;
+
+    const promptArea = h('textarea', {
+      class:
+        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 font-mono text-[12px] leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      rows: 12,
+      readonly: true,
+      'aria-label': '生成的 AI 提示词',
+    }) as HTMLTextAreaElement;
+
+    const resultRow = h('div', { class: 'hidden space-y-2' }, [
+      promptArea,
+      h('div', { class: 'flex items-center justify-end' }, [
+        createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
+      ]),
+    ]);
+
+    function generate(): void {
+      const desc = descInput.value.trim();
+      if (!desc) {
+        descInput.focus();
+        return;
+      }
+      promptArea.value = buildAIPrompt(desc);
+      resultRow.classList.remove('hidden');
+      promptArea.scrollTop = 0;
+    }
+
+    const card = h('div', {
+      role: 'dialog',
+      'aria-modal': 'true',
+      'aria-label': '用 AI 生成自定义动画效果',
+      class:
+        'w-[min(92vw,42rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
+    }, [
+      h('div', { class: 'mb-1 flex items-center justify-between gap-2' }, [
+        h('span', { class: 'text-sm font-semibold text-[var(--fg)]', textContent: '💡 用 AI 生成自定义效果' }),
+        h('button', {
+          type: 'button',
+          'aria-label': '关闭',
+          class: 'text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors',
+          textContent: '✕',
+          onclick: closeDialog,
+        }),
+      ]),
+      h('p', {
+        class: 'mb-3 text-xs leading-relaxed text-[var(--fg-muted)]',
+        textContent: '描述你想要的动画文字效果，生成一段提示词。把它复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，AI 会按本工具的代码约定返回一段效果代码，再粘回 ➕ 框即可使用。',
+      }),
+      descInput,
+      h('div', { class: 'mt-3 flex items-center justify-end' }, [
+        h('button', {
+          type: 'button',
+          class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+          textContent: '生成 AI 提示词',
+          onclick: generate,
+        }),
+      ]),
+      h('div', { class: 'mt-2' }, [resultRow]),
+      h('p', {
+        class: 'mt-3 text-center text-[11px] text-[var(--fg-muted)]',
+        textContent: '数据不出本地 · 代码仅在你自己的浏览器运行',
+      }),
+    ]);
+
+    dialogEl = mountDialog(card);
+    requestAnimationFrame(() => descInput.focus());
+  }
 
   // —— 视频分辨率选择器（折叠，仅影响视频导出）——
   const videoResSelect = collapsibleSelect(

@@ -25,7 +25,11 @@ export type AnimId =
   | 'bounce';
 
 export interface AnimEffect {
-  id: AnimId;
+  /**
+   * 效果 id。内置效果取自 AnimId 联合；自定义效果为运行时生成的 'custom:xxx'，
+   * 所以用 string 容纳两者。合法性由 isValidAnimId 统一校验（含自定义）。
+   */
+  id: string;
   /** 展示名 */
   name: string;
   /**
@@ -51,6 +55,18 @@ function blockEffect(
   return content.animate(keyframes, {
     duration: dur(),
     easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+    fill: 'both',
+  });
+}
+
+/**
+ * 自定义效果运行时失败时的兜底淡入（导出给 custom-animations.ts 用）。
+ * 故意不用 dur() 里的 reduced 短路——这里就是出错的应急路径，给一段正常淡入即可。
+ */
+export function fallbackFade(content: HTMLElement): Animation {
+  return content.animate([{ opacity: 0 }, { opacity: 1 }], {
+    duration: ANIM_DURATION,
+    easing: 'ease-out',
     fill: 'both',
   });
 }
@@ -406,14 +422,35 @@ export const ANIMATIONS: AnimEffect[] = [
 
 const DEFAULT: AnimEffect = ANIMATIONS[0]!;
 
-/** 按 id 取效果，非法 id 回退淡入 */
-export function getAnimation(id: string | undefined): AnimEffect {
-  return ANIMATIONS.find((a) => a.id === id) ?? DEFAULT;
+/**
+ * 自定义效果提供者钩子：由入口（main.ts）在启动时注入，桥接 custom-animations.ts。
+ *
+ * 为什么要这层间接：custom-animations.ts 反向 import 本文件的 fallbackFade，
+ * 若本文件静态 import 它会形成 ESM 循环依赖。改用"提供者注入"——本文件不认识
+ * 自定义模块，只认一个返回 AnimEffect[] 的函数。main.ts 负责把两者接起来。
+ * 入口初始化后，自定义效果的增删（在 localStorage 里）都会通过它实时反映。
+ */
+let customAnimProvider: (() => AnimEffect[]) | null = null;
+export function setCustomAnimProvider(fn: (() => AnimEffect[]) | null): void {
+  customAnimProvider = fn;
 }
 
-/** 判断 id 是否合法 */
-export function isValidAnimId(id: unknown): id is AnimId {
-  return typeof id === 'string' && ANIMATIONS.some((a) => a.id === id);
+/** 内置 + 用户自定义效果的合并列表（内置在前、自定义在后） */
+export function getEffectiveAnimations(): AnimEffect[] {
+  const customs = customAnimProvider ? customAnimProvider() : [];
+  return customs.length > 0 ? [...ANIMATIONS, ...customs] : [...ANIMATIONS];
+}
+
+/** 按 id 取效果（在内置 + 自定义合并列表里查），找不到回退淡入 */
+export function getAnimation(id: string | undefined): AnimEffect {
+  const list = getEffectiveAnimations();
+  return list.find((a) => a.id === id) ?? DEFAULT;
+}
+
+/** 判断 id 是否合法（含自定义 id；自定义效果被删后此 id 视为非法 → 草稿回退淡入） */
+export function isValidAnimId(id: unknown): boolean {
+  if (typeof id !== 'string') return false;
+  return getEffectiveAnimations().some((a) => a.id === id);
 }
 
 /**

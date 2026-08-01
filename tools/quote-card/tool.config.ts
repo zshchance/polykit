@@ -12,9 +12,9 @@ import type { ToolConfig } from '@/core/types';
 export default {
   slug: "quote-card",
   name: "名言卡片",
-  description: '搜索或输入名言，一键生成精美卡片，多种模板可切换，直接下载图片做文案。',
+  description: '搜索或输入名言，一键生成精美卡片，多种模板与入场动画可切换，支持自定义动画效果代码并生成 AI 提示词，直接下载图片或视频做文案。',
   category: '自媒体',
   icon: '💬',
-  keywords: ['名言', '金句', '卡片', '语录', '文案', '截图', '社交媒体', 'quote', '语录卡片', '金句卡片'],
+  keywords: ['名言', '金句', '卡片', '语录', '文案', '截图', '社交媒体', 'quote', '语录卡片', '金句卡片', '自定义动画', 'AI 提示词', '动画效果', '文字动画', 'Web Animations API'],
   card: { accent: '#0ea5e9' },
 } satisfies ToolConfig;
