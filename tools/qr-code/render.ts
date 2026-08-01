@@ -114,7 +114,18 @@ export function drawQr(
       roundRect(ctx, lx - pad, ly - pad, side + pad * 2, side + pad * 2, pad);
       ctx.fill();
     }
-    ctx.drawImage(logoImage, lx, ly, side, side);
+    // Logo 形状裁剪：圆角(rounded)时把方形位图裁成圆角矩形，避免与码点衔接生硬；
+    // square 时直接 drawImage 保持直角。用离屏 canvas + clip 实现。
+    if (cfg.logoFit === 'rounded') {
+      const radius = Math.round(side * 0.22); // 与码点圆角风格协调的圆角量
+      ctx.save();
+      roundRect(ctx, lx, ly, side, side, radius);
+      ctx.clip();
+      ctx.drawImage(logoImage, lx, ly, side, side);
+      ctx.restore();
+    } else {
+      ctx.drawImage(logoImage, lx, ly, side, side);
+    }
   }
 
   return { canvas, modules: size, scale };

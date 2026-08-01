@@ -13,6 +13,23 @@ export type EyeShape = 'square' | 'rounded' | 'circle';
 /** 纠错等级：越高容错越多（码更大但即使被遮挡/Logo 覆盖也能识别） */
 export type ErrorLevel = 'L' | 'M' | 'Q' | 'H';
 
+/** Logo 裁剪形状 */
+export type LogoFit = 'square' | 'rounded';
+
+/**
+ * 一套美化"预设模板"：把码点/眼/配色/Logo 形状打包成可一键套用的组合。
+ * 用户选预设即覆盖对应字段；预设不绑死，套用后仍可继续微调。
+ */
+export interface QrPreset {
+  id: string;
+  /** 展示名 */
+  name: string;
+  /** 预览用的色条（前→背，给选择器看一眼风格） */
+  swatch: [string, string];
+  /** 套用时覆盖这些字段（未列出的字段保持不变） */
+  apply: Partial<Omit<QrConfig, 'text' | 'errorLevel' | 'withLogo' | 'logoRatio'>>;
+}
+
 /** 完整生成配置（编码 + 外观） */
 export interface QrConfig {
   /** 编码文本/URL */
@@ -31,6 +48,8 @@ export interface QrConfig {
   withLogo: boolean;
   /** Logo 占比（相对于整码边长，0-1），默认 0.22 */
   logoRatio: number;
+  /** Logo 裁剪形状（圆角避免和码点衔接生硬） */
+  logoFit: LogoFit;
 }
 
 export const DOT_SHAPES: { id: DotShape; name: string }[] = [
@@ -61,4 +80,55 @@ export const DEFAULT_CONFIG: QrConfig = {
   bgColor: '#ffffff',
   withLogo: false,
   logoRatio: 0.22,
+  logoFit: 'rounded',
 };
+
+/**
+ * 预设模板库。每套是一个"风格组合"，套用时覆盖对应字段。
+ * 覆盖原则：只改外观（码点/眼/颜色/Logo 形状），不动内容与纠错（用户业务的两个关键项）。
+ * 新增模板：在此数组追加即可被选择器自动渲染。
+ */
+export const PRESETS: QrPreset[] = [
+  {
+    id: 'classic',
+    name: '经典黑白',
+    swatch: ['#0f172a', '#ffffff'],
+    apply: { dotShape: 'square', eyeShape: 'square', fgColor: '#0f172a', bgColor: '#ffffff', logoFit: 'rounded' },
+  },
+  {
+    id: 'mint-dot',
+    name: '薄荷圆点',
+    swatch: ['#0d9488', '#f0fdfa'],
+    apply: { dotShape: 'dot', eyeShape: 'circle', fgColor: '#0d9488', bgColor: '#f0fdfa', logoFit: 'rounded' },
+  },
+  {
+    id: 'sunset-rounded',
+    name: '日落圆角',
+    swatch: ['#c2410c', '#fff7ed'],
+    apply: { dotShape: 'rounded', eyeShape: 'rounded', fgColor: '#c2410c', bgColor: '#fff7ed', logoFit: 'rounded' },
+  },
+  {
+    id: 'midnight',
+    name: '午夜霓虹',
+    swatch: ['#22d3ee', '#0a0118'],
+    apply: { dotShape: 'dot', eyeShape: 'circle', fgColor: '#22d3ee', bgColor: '#0a0118', logoFit: 'rounded' },
+  },
+  {
+    id: 'sakura',
+    name: '樱花粉',
+    swatch: ['#db2777', '#fff5f7'],
+    apply: { dotShape: 'rounded', eyeShape: 'rounded', fgColor: '#db2777', bgColor: '#fff5f7', logoFit: 'rounded' },
+  },
+  {
+    id: 'forest',
+    name: '森林墨绿',
+    swatch: ['#166534', '#f7fee7'],
+    apply: { dotShape: 'rounded', eyeShape: 'circle', fgColor: '#166534', bgColor: '#f7fee7', logoFit: 'rounded' },
+  },
+  {
+    id: 'ink-amber',
+    name: '墨黑琥珀',
+    swatch: ['#1c1917', '#fef3c7'],
+    apply: { dotShape: 'square', eyeShape: 'rounded', fgColor: '#1c1917', bgColor: '#fef3c7', logoFit: 'rounded' },
+  },
+];

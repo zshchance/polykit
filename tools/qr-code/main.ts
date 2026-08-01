@@ -6,12 +6,14 @@ import {
   DOT_SHAPES,
   EYE_SHAPES,
   ERROR_LEVELS,
+  PRESETS,
   type QrConfig,
   type DotShape,
   type EyeShape,
+  type LogoFit,
 } from './types';
 import { buildModules, drawQr } from './render';
-import { decodeQr, decodeFailReason } from './decode';
+import { detectAllQr, decodeFailReason, type DetectedCode } from './decode';
 import { decodeImage, decodeBitmap } from './image';
 import { loadConfig, saveConfig } from './settings';
 import { downloadCanvasPng, copyCanvasToClipboard, safeFilename } from './export';
@@ -34,6 +36,11 @@ function renderQrCode(): void {
   const cfg: QrConfig = loadConfig();
   let logoBitmap: ImageBitmap | null = null; // Logo 缓存，关闭开关不丢
   let lastCanvas: HTMLCanvasElement | null = null; // 供导出复用
+
+  // 多码识别结果：上传的图里可能含多个二维码（海报场景），记下全部供用户在下拉里选择
+  let detectedCodes: DetectedCode[] = [];
+  let selectedCodeIndex = 0; // 当前选中的第几个码（默认第一个）
+  let detectedPreviewUrl: string | null = null; // 上传图预览 URL（用于在多码选择器旁显示）
 
   function persist(): void {
     saveConfig(cfg);
@@ -96,34 +103,58 @@ function renderQrCode(): void {
     persist();
   });
 
-  // 2. 码点形状选择
-  const dotRow = shapeRow(DOT_SHAPES, cfg.dotShape, (id) => {
-    cfg.dotShape = id as DotShape;
-    scheduleDraw();
-    persist();
-  });
+  // 2. 码点形状选择（容器可重建，便于预设套用后同步视觉态）
+  const dotRow = h('div', { class: 'flex flex-wrap gap-2' });
+  function rebuildDotRow(): void {
+    dotRow.replaceChildren(
+      ...shapeRow(DOT_SHAPES, cfg.dotShape, (id) => {
+        cfg.dotShape = id as DotShape;
+        activePresetId = null;
+        rebuildDotRow();
+        renderPresetRow();
+        scheduleDraw();
+        persist();
+      }).childNodes,
+    );
+  }
 
   // 3. 定位眼形状
-  const eyeRow = shapeRow(EYE_SHAPES, cfg.eyeShape, (id) => {
-    cfg.eyeShape = id as EyeShape;
-    scheduleDraw();
-    persist();
-  });
+  const eyeRow = h('div', { class: 'flex flex-wrap gap-2' });
+  function rebuildEyeRow(): void {
+    eyeRow.replaceChildren(
+      ...shapeRow(EYE_SHAPES, cfg.eyeShape, (id) => {
+        cfg.eyeShape = id as EyeShape;
+        activePresetId = null;
+        rebuildEyeRow();
+        renderPresetRow();
+        scheduleDraw();
+        persist();
+      }).childNodes,
+    );
+  }
 
   // 4. 纠错等级 —— 用 levelContainer + renderLevelRow（定义在下方，需在 Logo 自动升级后重渲）
   //    此处先不创建，统一交给下方的 levelContainer。
 
-  // 5. 前景 / 背景色
+  // 5. 前景 / 背景色（保留 picker/text 引用，便于预设套用后同步）
+  let fgPicker: HTMLInputElement;
+  let fgText: HTMLInputElement;
+  let bgPicker: HTMLInputElement;
+  let bgText: HTMLInputElement;
   const fgInput = colorInput('码点颜色', cfg.fgColor, (v) => {
     cfg.fgColor = v;
+    activePresetId = null;
+    renderPresetRow();
     scheduleDraw();
     persist();
-  });
+  }, (p, t) => { fgPicker = p; fgText = t; });
   const bgInput = colorInput('背景颜色', cfg.bgColor, (v) => {
     cfg.bgColor = v;
+    activePresetId = null;
+    renderPresetRow();
     scheduleDraw();
     persist();
-  });
+  }, (p, t) => { bgPicker = p; bgText = t; });
 
   // 6. Logo 上传与开关
   const logoToggle = h('input', { type: 'checkbox', class: 'accent-[var(--accent)] h-4 w-4' }) as HTMLInputElement;
@@ -250,21 +281,87 @@ function renderQrCode(): void {
     showStatus('正在识别…');
     try {
       const img = await decodeImage(file);
-      URL.revokeObjectURL(img.previewUrl);
-      const res = decodeQr(img.data, img.width, img.height);
-      img.bitmap.close();
-      if (!res.text) {
+      // detectAllQr 会就地修改像素缓冲（遮蔽已识别码），所以传一份副本，原像素留作预览
+      const copy = new Uint8ClampedArray(img.data);
+      const codes = detectAllQr(copy, img.width, img.height);
+      detectedCodes = codes;
+      selectedCodeIndex = 0;
+
+      // 保留上传图预览 URL（之前 revoke 了，这里保留以便多码选择时看到原图）
+      if (detectedPreviewUrl) URL.revokeObjectURL(detectedPreviewUrl);
+      detectedPreviewUrl = img.previewUrl;
+
+      renderDecodeBar();
+
+      if (codes.length === 0) {
+        img.bitmap.close();
         showStatus(decodeFailReason(), true);
         return;
       }
-      // 回填内容并重绘（用当前风格美化）
-      cfg.text = res.text;
-      textInput.value = res.text;
-      await redraw();
-      persist();
-      showStatus(`已识别（版本 ${res.version}）并用当前风格重绘`, false);
+
+      // 默认选中第一个并应用
+      applyDetected(0);
+      const more = codes.length > 1 ? `，共识别到 ${codes.length} 个，可在上方切换` : '';
+      showStatus(`已识别（版本 ${codes[0]!.version}）${more}`, false);
     } catch (err) {
       showStatus(err instanceof Error ? err.message : '识别失败', true);
+    }
+  }
+
+  /** 应用第 idx 个识别结果：回填内容 + 重绘 */
+  async function applyDetected(idx: number): Promise<void> {
+    const code = detectedCodes[idx];
+    if (!code) return;
+    selectedCodeIndex = idx;
+    cfg.text = code.text;
+    textInput.value = code.text;
+    renderDecodeBar(); // 更新下拉选中态
+    await redraw();
+    persist();
+  }
+
+  /**
+   * 多码选择条：仅当识别到 ≥1 个码时显示。
+   * - 1 个码：显示"识别到 1 个二维码"提示 + 原图缩略图
+   * - 多个码：额外渲染一个 <select> 下拉，选项为"#1 内容预览…"，默认选中第一个
+   * 切换下拉即切换处理的目标码。
+   */
+  const decodeBar = h('div', { class: 'space-y-2' });
+  function renderDecodeBar(): void {
+    decodeBar.replaceChildren();
+    if (detectedCodes.length === 0) return;
+
+    const header = h('div', { class: 'flex items-center justify-between gap-2' }, [
+      h('span', {
+        class: 'text-xs font-medium text-[var(--fg)]',
+        textContent: detectedCodes.length > 1 ? `识别到 ${detectedCodes.length} 个二维码，选择要美化的` : '已识别二维码',
+      }),
+    ]);
+
+    // 多个码：下拉选择
+    if (detectedCodes.length > 1) {
+      const sel = h('select', {
+        class:
+          'w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+        'aria-label': '选择要美化的二维码',
+      }) as HTMLSelectElement;
+      sel.append(
+        ...detectedCodes.map((c, i) => {
+          const opt = document.createElement('option');
+          opt.value = String(i);
+          // 选项文本：序号 + 内容预览（截断），方便用户区分多个码
+          const preview = c.text.length > 40 ? c.text.slice(0, 40) + '…' : c.text;
+          opt.textContent = `#${i + 1}  ${preview}`;
+          return opt;
+        }),
+      );
+      sel.value = String(selectedCodeIndex);
+      sel.addEventListener('change', () => {
+        void applyDetected(Number(sel.value));
+      });
+      decodeBar.append(header, sel);
+    } else {
+      decodeBar.append(header);
     }
   }
 
@@ -312,8 +409,89 @@ function renderQrCode(): void {
   // ────────── 装配 ──────────
   renderLevelRow();
 
+  // 预设模板：点击即套用（覆盖码点/眼/颜色/Logo形状），不动内容与纠错
+  const presetRow = h('div', { class: 'flex flex-wrap gap-2' });
+  let activePresetId: string | null = null;
+  function renderPresetRow(): void {
+    presetRow.replaceChildren(
+      ...PRESETS.map((p) => {
+        const isActive = p.id === activePresetId;
+        return h('button', {
+          type: 'button',
+          'aria-pressed': String(isActive),
+          title: p.name,
+          class: [
+            'group flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-all duration-150',
+            isActive
+              ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]/40'
+              : 'border-[var(--border)] hover:border-[var(--accent)]',
+          ].join(' '),
+          onclick: () => {
+            activePresetId = p.id;
+            Object.assign(cfg, p.apply);
+            // 套用后同步各个独立选择器的视觉态
+            syncControlsFromCfg();
+            renderPresetRow();
+            scheduleDraw();
+            persist();
+          },
+        }, [
+          // 色条预览：前→背两小格
+          h('span', { class: 'flex overflow-hidden rounded border border-[var(--border)]', style: 'width:22px;height:14px;' }, [
+            h('span', { style: `flex:1;background:${p.swatch[0]};` }),
+            h('span', { style: `flex:1;background:${p.swatch[1]};` }),
+          ]),
+          h('span', { class: 'text-[var(--fg)]', textContent: p.name }),
+        ]);
+      }),
+    );
+  }
+
+  // Logo 形状选择：圆角（默认）/ 直角
+  const logoFitRow = h('div', { class: 'flex gap-2' });
+  function renderLogoFitRow(): void {
+    logoFitRow.replaceChildren(
+      ...([
+        { id: 'rounded' as LogoFit, name: '圆角（推荐）' },
+        { id: 'square' as LogoFit, name: '直角' },
+      ]).map((it) =>
+        h('button', {
+          type: 'button',
+          'aria-pressed': String(it.id === cfg.logoFit),
+          class: [
+            'rounded-md px-3 py-1.5 text-xs border transition-all duration-150',
+            it.id === cfg.logoFit
+              ? 'bg-[var(--accent)] text-[var(--accent-fg)] border-[var(--accent)]'
+              : 'bg-[var(--bg-elevated)] text-[var(--fg-muted)] border-[var(--border)] hover:border-[var(--accent)]',
+          ].join(' '),
+          textContent: it.name,
+          onclick: () => {
+            cfg.logoFit = it.id;
+            renderLogoFitRow();
+            scheduleDraw();
+            persist();
+          },
+        }),
+      ),
+    );
+  }
+
+  /** 套用预设后，把各独立选择器（点/眼/颜色）的视觉态同步到 cfg 的新值 */
+  function syncControlsFromCfg(): void {
+    // 重新构建点/眼行（闭包 selectedId 已是参数，重渲染即可）
+    rebuildDotRow();
+    rebuildEyeRow();
+    // 颜色输入框
+    if (fgPicker) fgPicker.value = cfg.fgColor || '#ffffff';
+    if (fgText) fgText.value = cfg.fgColor;
+    if (bgPicker) bgPicker.value = cfg.bgColor || '#ffffff';
+    if (bgText) bgText.value = cfg.bgColor;
+    renderLogoFitRow();
+  }
+
   const controls = h('div', { class: 'space-y-5' }, [
     field('内容', textInput),
+    field('一键套用风格', presetRow),
     field('码点形状', dotRow),
     field('定位眼形状', eyeRow),
     field('纠错等级', levelContainer),
@@ -329,6 +507,7 @@ function renderQrCode(): void {
         clearLogoBtn,
         logoInput,
       ]),
+      field('Logo 形状', logoFitRow),
     ]),
   ]);
 
@@ -338,20 +517,26 @@ function renderQrCode(): void {
     h('div', { class: 'flex flex-wrap justify-center gap-2' }, [downloadBtn, copyBtn]),
     h('div', { class: 'mt-4' }, [
       h('div', { class: 'mb-2 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '美化已有二维码' }),
+      h('p', { class: 'mb-2 text-[11px] leading-snug text-[var(--fg-muted)]', textContent: '上传海报/截图，自动识别其中所有二维码（含彩色码），多码时可在下方下拉切换。' }),
       decodeDrop,
       decodeInput,
+      decodeBar,
     ]),
   ]);
 
   content.append(
     h('p', {
       class: 'mb-6 text-sm text-[var(--fg-muted)]',
-      textContent: '生成可定制风格的二维码：圆点/圆角码点、定位眼形状、自定义配色、中心 Logo。也可上传已有二维码识别后用当前风格美化重绘。全程本地处理。',
+      textContent: '生成可定制风格的二维码：一键套用风格预设，或自选码点/定位眼/配色/Logo。上传已有二维码（含海报里的多个码）识别后用当前风格美化重绘。全程本地处理。',
     }),
     h('div', { class: 'grid gap-6 lg:grid-cols-2' }, [controls, previewCol]),
   );
 
-  // 初始绘制
+  // 初始绘制：先填充各选择器，再画二维码
+  rebuildDotRow();
+  rebuildEyeRow();
+  renderPresetRow();
+  renderLogoFitRow();
   void redraw();
 }
 
@@ -388,8 +573,16 @@ function shapeRow(
   return wrap;
 }
 
-/** 颜色输入：色块 + hex 文本框 */
-function colorInput(label: string, value: string, onChange: (v: string) => void): HTMLElement {
+/**
+ * 颜色输入：色块 + hex 文本框。
+ * onReady 回调把内部 picker/text 元素交出，便于预设套用后同步显示值。
+ */
+function colorInput(
+  label: string,
+  value: string,
+  onChange: (v: string) => void,
+  onReady?: (picker: HTMLInputElement, text: HTMLInputElement) => void,
+): HTMLElement {
   const picker = h('input', {
     type: 'color',
     value: value || '#ffffff',
@@ -415,6 +608,7 @@ function colorInput(label: string, value: string, onChange: (v: string) => void)
       text.value = value; // 非法还原
     }
   });
+  if (onReady) onReady(picker, text);
   return h('div', { class: 'space-y-1' }, [
     h('label', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: label }),
     h('div', { class: 'flex items-center gap-2' }, [picker, text]),

@@ -16,10 +16,11 @@ import {
   type DotShape,
   type EyeShape,
   type ErrorLevel,
+  type LogoFit,
 } from './types';
 
 const STORAGE_KEY = 'qr-code:config';
-const CURRENT_VERSION = 2;
+const CURRENT_VERSION = 3;
 
 interface ConfigBlob {
   version: number;
@@ -29,6 +30,7 @@ interface ConfigBlob {
 const DOT_IDS = DOT_SHAPES.map((d) => d.id);
 const EYE_IDS = EYE_SHAPES.map((e) => e.id);
 const LEVEL_IDS = ERROR_LEVELS.map((e) => e.id);
+const LOGO_FITS: LogoFit[] = ['square', 'rounded'];
 
 function isDotShape(s: unknown): s is DotShape {
   return typeof s === 'string' && (DOT_IDS as string[]).includes(s);
@@ -38,6 +40,9 @@ function isEyeShape(s: unknown): s is EyeShape {
 }
 function isErrorLevel(s: unknown): s is ErrorLevel {
   return typeof s === 'string' && (LEVEL_IDS as string[]).includes(s);
+}
+function isLogoFit(s: unknown): s is LogoFit {
+  return typeof s === 'string' && (LOGO_FITS as string[]).includes(s);
 }
 function isHex(s: unknown): s is string {
   return typeof s === 'string' && (/^#[0-9a-fA-F]{6}$/.test(s) || s === '');
@@ -67,6 +72,7 @@ export function loadConfig(): QrConfig {
         typeof c.logoRatio === 'number' && c.logoRatio > 0 && c.logoRatio <= 0.4
           ? c.logoRatio
           : DEFAULT_CONFIG.logoRatio,
+      logoFit: isLogoFit(c.logoFit) ? c.logoFit : DEFAULT_CONFIG.logoFit,
     };
   } catch {
     return { ...DEFAULT_CONFIG };
