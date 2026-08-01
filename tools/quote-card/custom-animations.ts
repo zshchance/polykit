@@ -316,14 +316,15 @@ return content.animate([{ opacity: 1 }, { opacity: 1 }],
 - 不要用 CSS @keyframes（无法被视频导出精确控时）。只用 element.animate()。
 
 【输出格式（务必照此结构，不要加其它说明）】
-第一行写效果名称，格式严格为：名称：xxx
-空一行后，给出代码块（用 \`\`\`js 包裹），代码块内是函数体。
+只输出一个代码块（用 \`\`\`js 包裹）。代码块【第一行】必须是效果名称的注释，格式严格为：
+    // 名称：xxx
+其后是函数体。把名称写成代码块内的首行注释，方便用户整块复制。
 示例：
-名称：雪花飘落
 \`\`\`js
+// 名称：雪花飘落
 return content.animate([...], {...});
 \`\`\`
-不要写其它解释，不要复述上面的约定。`;
+代码块之外不要写任何文字（包括不要把名称写在代码块外）。不要复述上面的约定。`;
 }
 
 /** 用户粘贴内容解析结果：拆出名称 + 代码函数体 */
@@ -337,39 +338,60 @@ export interface ParsedAIOutput {
 /**
  * 解析用户从 AI 那里复制回来、粘进「粘贴 AI 代码」框的内容，拆出【效果名称】+【代码函数体】。
  *
+ * 提示词现在要求 AI 把名称写成【代码块内的首行注释】（`// 名称：xxx`），方便用户整块复制。
+ * 解析同时兼容旧式「名称：xxx 写在代码块外」。
+ *
  * 容错策略（尽量帮用户取到可用内容）：
- *   - 名称：找首个形如「名称：xxx」/「名称: xxx」/「name: xxx」的行；找不到留空（由调用方提示）。
+ *   - 名称：优先取代码块内首行 `// 名称：xxx` 注释；其次取代码块外首个 `名称：xxx` 行；
+ *     都找不到留空（由调用方提示）。
  *   - 代码：优先取首个 \`\`\`js / \`\`\`javascript / \`\`\` 代码块里的内容；
- *     若没有代码块围栏，则把去掉名称行、去掉明显非代码说明行后的剩余文本当作代码。
- *   - 自动去掉代码里 JS 注释行之外的多余中文说明（启发式：连续多行无 = ; ( { } return 的纯中文行视为说明）。
+ *     若没有代码块围栏，则把去掉名称行、去掉 ``` 标记行后的剩余文本当作代码。
+ *   - 取到名称后，从代码体里剥掉那条 `// 名称：xxx` 注释行（不污染真正要执行的函数体）。
  */
+
+/** 匹配一行「名称：xxx」（可有 // 前缀，中英文冒号，name 关键字）。捕获组 = 名称文本 */
+const NAME_LINE_RE = /^[ \t]*(?:(?:\/\/|#)\s*)?(?:名称|效果名(?:称)?|name)[ \t]*[:：][ \t]*(.+?)[ \t]*$/i;
+
 export function parseAIOutput(raw: string): ParsedAIOutput {
   const text = raw.replace(/\r\n/g, '\n').trim();
   if (!text) return { name: '', code: '' };
 
-  // 1) 名称：首个「名称：xxx」/「名称: xxx」/「name: xxx」（大小写不敏感，中英文冒号都认）
-  let name = '';
-  const nameMatch = text.match(/^[ \t]*(?:名称|效果名(?:称)?|name)[ \t]*[:：][ \t]*(.+?)[ \t]*$/im);
-  if (nameMatch) {
-    name = nameMatch[1]!.trim().replace(/^["「『（(]+|["」』）)]+$/g, '').trim();
-  }
-
-  // 2) 代码：优先 \`\`\`js / \`\`\`javascript / \`\`\` 围栏
-  let code = '';
+  // 1) 代码：优先 \`\`\`js / \`\`\`javascript / \`\`\` 围栏
+  let codeBody = '';
   const fence = text.match(/```(?:js|javascript)?\s*\n([\s\S]*?)\n?```/i);
   if (fence) {
-    code = fence[1]!.trim();
+    codeBody = fence[1]!.trim();
   } else {
-    // 无围栏：去掉名称行，去掉 ``` 标记行，剩余当作代码
-    const lines = text.split('\n').filter((l) => {
-      const t = l.trim();
-      return (
-        !/^(?:名称|效果名(?:称)?|name)\s*[:：]/i.test(t) &&
-        !/^```/.test(t)
-      );
-    });
-    code = lines.join('\n').trim();
+    // 无围栏：去掉 ``` 标记行，剩余当作代码（名称行稍后统一剥离）
+    codeBody = text
+      .split('\n')
+      .filter((l) => !/^```/.test(l.trim()))
+      .join('\n')
+      .trim();
   }
+
+  // 2) 名称：优先取【代码块内】首行 `// 名称：xxx` 注释；其次取代码块外首个名称行
+  let name = '';
+  // 2a) 代码块内：找第一条名称注释行
+  const inCodeNameLine = codeBody
+    .split('\n')
+    .find((l) => NAME_LINE_RE.test(l.trim()) && /^\s*(?:\/\/|#)/.test(l));
+  if (inCodeNameLine) {
+    name = inCodeNameLine.trim().match(NAME_LINE_RE)![1]!.trim().replace(/^["「『（(]+|["」』）)]+$/g, '').trim();
+  } else {
+    // 2b) 代码块外：整段文本里找首个名称行（兼容旧式「名称：xxx 写在块外」）
+    const outsideNameLine = text.split('\n').find((l) => NAME_LINE_RE.test(l.trim()));
+    if (outsideNameLine) {
+      name = outsideNameLine.trim().match(NAME_LINE_RE)![1]!.trim().replace(/^["「『（(]+|["」』）)]+$/g, '').trim();
+    }
+  }
+
+  // 3) 从代码体里剥掉那条名称注释行 / 名称行（不污染真正要 new Function 执行的函数体）
+  const code = codeBody
+    .split('\n')
+    .filter((l) => !NAME_LINE_RE.test(l.trim()))
+    .join('\n')
+    .trim();
 
   return { name, code };
 }

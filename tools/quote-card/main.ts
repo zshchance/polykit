@@ -435,11 +435,11 @@ function renderQuoteCard() {
         'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 font-mono text-[12px] leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)]',
       rows: 8,
       spellcheck: false,
-      'aria-label': '粘贴 AI 返回的代码（含名称行）',
-      placeholder: '把 AI 的整段回复粘到这里（首行形如「名称：雪花飘落」，后面 ```js 代码块）。工具会自动识别名称和代码。',
+      'aria-label': '粘贴 AI 返回的代码（含名称注释）',
+      placeholder: '把 AI 的整段回复粘到这里（代码块首行形如「// 名称：雪花飘落」，后面是 ```js 代码）。工具会自动识别名称和代码。',
     }) as HTMLTextAreaElement;
     const step3 = h('div', { class: 'hidden space-y-2' }, [
-      h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '③ 粘贴 AI 返回的代码（含名称行）' }),
+      h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '③ 粘贴 AI 返回的代码（含名称注释）' }),
       pasteInput,
       // 保存按钮放进 step3，跟随其显隐
       h('div', { class: 'flex items-center justify-end gap-2' }, [
@@ -486,7 +486,7 @@ function renderQuoteCard() {
     function save(): void {
       const parsed = parseAIOutput(pasteInput.value);
       if (!parsed.name) {
-        flashError('没识别到效果名称——AI 回复首行应形如「名称：雪花飘落」。');
+        flashError('没识别到效果名称——AI 返回的代码块首行应是「// 名称：雪花飘落」这样的注释。');
         pasteInput.focus();
         return;
       }
