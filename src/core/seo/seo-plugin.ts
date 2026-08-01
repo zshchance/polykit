@@ -22,8 +22,8 @@ import type { ToolConfig } from '@/core/types';
 // 因此必须用相对路径导入运行期值，不能用 @/home/...（仅类型 import 可用 @ 别名，因其在编译期被剥离）。
 import { registryConfig } from '../../home/registry-config';
 
-const SITE_NAME = '静态工具箱';
-const SITE_DESC = '纯浏览器运行的在线工具箱：密码生成器、名言卡片等实用工具，数据不出本地。';
+const SITE_NAME = '即开宝匣';
+const SITE_DESC = '即开即用的本地小工具合集：密码生成、名言卡片、二维码、图片压缩、AI 提示词等实用与趣味工具，数据不出本地。';
 // canonical 前缀：含子路径（GitHub Pages 镜像的默认域名）。
 // 用作 SITE_URL 未配置时的兜底，避免泄露 example.com。
 // 双平台部署时（Cloudflare 主站 + GitHub 镜像）都用此 canonical，便于 SEO 聚合。

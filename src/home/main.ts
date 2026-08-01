@@ -131,11 +131,11 @@ function renderHome(): void {
       h('div', {}, [
         h('h1', {
           class: 'text-4xl font-bold tracking-tight text-[var(--fg)]',
-          textContent: '静态工具箱',
+          textContent: '即开宝匣',
         }),
         h('p', {
           class: 'mt-2 text-[var(--fg-muted)]',
-          textContent: '纯浏览器运行，数据不出本地 · 安全实用的在线小工具',
+          textContent: '即开即用，数据不出本地 · 实用与趣味兼得的在线小工具',
         }),
       ]),
       h('div', { class: 'flex items-center gap-2' }, [settingsBtn, createThemeToggle()]),

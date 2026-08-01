@@ -28,10 +28,10 @@ function scanToolInputs(): Record<string, string> {
  * base 路径：构建时由环境变量 BASE_PATH 决定，支持双平台部署。
  *
  * - Cloudflare Pages（根路径）：不设 BASE_PATH，默认 '/'。
- * - GitHub Pages（子路径）：Actions 注入 BASE_PATH=/<repo>/，如 '/static-toolkit/'。
+ * - GitHub Pages（子路径）：Actions 注入 BASE_PATH=/<repo>/，如 '/polykit/'。
  *
  * 应用代码统一用 import.meta.env.BASE_URL 拼接链接，会自动等于此处的 base，
- * 无需关心部署在哪。规范化：确保首尾都带斜杠（如 'static-toolkit' → '/static-toolkit/'）。
+ * 无需关心部署在哪。规范化：确保首尾都带斜杠（如 'polykit' → '/polykit/'）。
  */
 function resolveBase(): string {
   const raw = process.env.BASE_PATH;

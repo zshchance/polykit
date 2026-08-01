@@ -1,4 +1,7 @@
-# 静态工具箱（static-toolkit）
+# 即开宝匣（static-toolkit）
+
+> 站点品牌名「即开宝匣」—— 即开即用、数据不出本地的在线小工具合集。
+> 代码仓库名 `static-toolkit` / `polykit` 为内部技术标识，与品牌名分离。
 
 一个可同时部署到 Cloudflare Pages 或 GitHub Pages 的静态工具站。每个工具是一个独立页面，纯浏览器运行，数据不上传。基于 **Vite + TypeScript + Tailwind CSS**，多页面（MPA）架构。首页带搜索、分类筛选与万年历（节假日来自国务院公告策展数据）。
 

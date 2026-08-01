@@ -15,11 +15,14 @@ export const registryConfig: RegistryConfig = {
     // 关键词默认不显示在卡片 UI 上，但始终写入 <meta> 与 JSON-LD（爬虫/AI 可读）。
     showKeywordsInline: false,
     siteKeywords: [
-      '静态工具箱',
+      '即开宝匣',
       '在线工具',
+      '在线小工具',
+      '小工具合集',
+      '本地工具',
       '浏览器工具',
-      '软件服务',
-      '技术支持',
+      '即用即走',
+      '数据不出本地',
       '自媒体工具',
       '开发者工具',
       '文案工具',
