@@ -1,0 +1,102 @@
+<!doctype html>
+<!--
+  404 页面（独立静态文件，不经 Vite 构建）。
+
+  存在意义：Cloudflare Pages 在"项目缺少顶级 404.html"时，会把站点当作
+  单页应用（SPA）——任何找不到的路径都会回退到 index.html 并返回 200 + text/html。
+  对于本项目（纯静态 MPA，无客户端路由）这是有害的：当一次新构建改动了资源
+  hash（如 SiteFooter-xxxx.css → SiteFooter-yyyy.css）后，仍持有旧 HTML
+  缓存的浏览器会去请求旧 hash 的 .css/.js，Cloudflare 回退成首页 HTML，
+  浏览器因 MIME 不符（text/html 当作 text/css / JS module）报错并白屏。
+
+  有了顶级 404.html，Cloudflare 会对所有未匹配的路径返回真正的 404，
+  浏览器就不会把 HTML 当样式表/脚本加载。GitHub Pages 本就 404，不受影响。
+
+  本文件经 Vite publicDir 原样拷贝到 dist/404.html，作为静态资源部署。
+  不依赖构建产物（无 /assets/*.css 引用），保证部署空窗期也能独立显示。
+-->
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>页面未找到 · 静态工具箱</title>
+    <style>
+      :root { color-scheme: light dark; }
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+      @media (prefers-color-scheme: dark) {
+        html, body { background: #0b1120; color: #e2e8f0; }
+        .card { background: #111827 !important; border-color: #1f2937 !important; }
+        .sub { color: #94a3b8 !important; }
+        a.btn { background: #db2777 !important; }
+      }
+      .wrap {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+        box-sizing: border-box;
+      }
+      .card {
+        max-width: 28rem;
+        text-align: center;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 1rem;
+        padding: 2.5rem 2rem;
+        box-shadow: 0 10px 30px -12px rgba(15, 23, 42, 0.15);
+      }
+      .code {
+        font-size: 3.5rem;
+        font-weight: 800;
+        line-height: 1;
+        color: #db2777;
+        margin: 0 0 0.5rem;
+      }
+      h1 { font-size: 1.25rem; margin: 0 0 0.5rem; }
+      .sub { color: #64748b; margin: 0 0 1.5rem; line-height: 1.6; }
+      a.btn {
+        display: inline-block;
+        background: #db2777;
+        color: #fff;
+        text-decoration: none;
+        padding: 0.6rem 1.25rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+      }
+      a.btn:hover { filter: brightness(1.05); }
+      .meta { margin-top: 1.5rem; font-size: 0.8rem; color: #94a3b8; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <p class="code">404</p>
+        <h1>这里没有对应的工具或资源</h1>
+        <p class="sub">
+          页面可能已被移动，或你访问的链接已过期。<br />
+          如果是刚刷新出的报错，稍候片刻再试一次即可。
+        </p>
+        <a class="btn" href="/">返回首页</a>
+        <p class="meta">静态工具箱 · 纯浏览器运行 · 数据不出本地</p>
+      </div>
+    </div>
+    <script>
+      // 若是历史回退导致的 404，给个软兜底：仅当确实能回到首页时才跳。
+      try {
+        if (location.pathname !== '/' && history.length > 1) {
+          // 不自动跳转，保留 404 语义；用户可点上方按钮返回。
+        }
+      } catch (e) {}
+    </script>
+  </body>
+</html>

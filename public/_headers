@@ -1,0 +1,20 @@
+# Cloudflare Pages 自定义响应头（经 Vite publicDir 原样拷贝到 dist/_headers）。
+#
+# 目的：根治"刷新后白屏 / .css 被当成 text/html"类问题。
+#   1. 入口 HTML 必须每次都回源校验，保证拿到最新资源 hash。
+#   2. 内容哈希资源（/assets/*）内容永不复用同一文件名，可长期不可变缓存，
+#      浏览器命中缓存即不再请求，避免新旧 hash 混用。
+#
+# 参考：https://developers.cloudflare.com/pages/configuration/headers/
+
+# 入口与导航相关 HTML：禁长缓存，强制校验（已是 CF 默认，显式声明更稳妥）
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# 内容哈希产物：一年不可变缓存。文件名随内容变化，永不冲突。
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
