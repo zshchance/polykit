@@ -61,6 +61,7 @@ export const CATEGORIES: readonly CategoryDef[] = [
   { id: 'writing', name: '写作', icon: '✍️' },
   { id: 'design', name: '绘画设计', icon: '🎨' },
   { id: 'productivity', name: '效率学习', icon: '⚡' },
+  { id: 'jargon', name: '黑话翻译', icon: '🎭' },
   { id: 'fun', name: '趣味彩蛋', icon: '✨' },
 ];
 
