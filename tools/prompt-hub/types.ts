@@ -44,6 +44,27 @@ export interface Prompt {
   variables: Variable[];
   /** 提示词模板，含 {{变量名}} 占位 */
   template: string;
+  /**
+   * 可选：多方向变体（如黑话词典的「黑话→大白话 / 大白话→黑话」双向切换）。
+   * 不声明时弹层只有一个模板（现状）；声明时弹层顶部出现「方向切换」控件，
+   * 每个方向用自己的 template 与可选的变量 default/placeholder 覆盖。
+   * base 的 template 仍作默认方向的兜底。
+   */
+  variants?: PromptVariant[];
+}
+
+/** 一个翻译/生成方向（用于支持同卡片内双向切换） */
+export interface PromptVariant {
+  /** 方向 id，如 'decode' | 'encode' */
+  id: string;
+  /** 方向展示名，如「黑话→大白话」 */
+  label: string;
+  /** 该方向的一句话说明（可选，展示在弹层内） */
+  desc?: string;
+  /** 该方向覆盖的变量（按 key 合并到 base variables 之上，覆盖 default/placeholder/label） */
+  variables?: Variable[];
+  /** 该方向专属模板（必填） */
+  template: string;
 }
 
 /** 类目定义：主筛选维度 */
@@ -62,6 +83,7 @@ export const CATEGORIES: readonly CategoryDef[] = [
   { id: 'design', name: '绘画设计', icon: '🎨' },
   { id: 'productivity', name: '效率学习', icon: '⚡' },
   { id: 'jargon', name: '黑话翻译', icon: '🎭' },
+  { id: 'philosophy', name: '哲学思辨', icon: '🤔' },
   { id: 'fun', name: '趣味彩蛋', icon: '✨' },
 ];
 

@@ -5,7 +5,7 @@ import { initTheme } from '@/core/components/ThemeToggle';
 import { createCopyButton } from '@/core/components/CopyButton';
 import { CATEGORIES, categoryName, type Prompt } from './types';
 import { ALL_PROMPTS, FUN_PROMPTS_ONLY, FEATURED_PROMPTS, topTags } from './data';
-import { renderTemplate } from './template';
+import { renderVariant, resolveVariables } from './template';
 import { loadFilter, saveFilter, type FilterState } from './settings';
 
 initTheme();
@@ -228,6 +228,7 @@ function renderPromptHub(): void {
 
   function openDetail(p: Prompt): void {
     currentPrompt = p;
+    // values / preview 跨方向切换持久存在；切换方向时按新方向的变量 default 重置
     const values: Record<string, string> = {};
     const preview = h('textarea', {
       class:
@@ -236,41 +237,114 @@ function renderPromptHub(): void {
       readonly: true,
     }) as HTMLTextAreaElement;
 
-    function refreshPreview(): void {
-      preview.value = currentPrompt ? renderTemplate(currentPrompt, values) : '';
-    }
-    refreshPreview();
-
-    // 变量输入区
-    const varInputs = p.variables.map((v) => {
-      const input = h(v.multiline ? 'textarea' : 'input', {
-        ...(v.multiline ? { rows: 3 } : {}),
-        placeholder: v.placeholder ?? '',
-        class:
-          'w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
-      }) as HTMLInputElement | HTMLTextAreaElement;
-      const onInput = () => {
-        values[v.key] = input.value;
-        refreshPreview();
-      };
-      input.addEventListener('input', onInput);
-      // 延迟注入初始 default，避免被 value 属性覆盖逻辑混乱
-      if (v.default) {
-        input.value = v.default;
-        values[v.key] = v.default;
-      }
-      refreshPreview(); // 用 default 刷新一次
-      return h('div', { class: 'space-y-1' }, [
-        h('label', {
-          class: 'flex items-center gap-1 text-xs font-medium text-[var(--fg-muted)]',
-          textContent: v.label + (v.required ? ' *' : ''),
-        }),
-        input,
-      ]);
-    });
-
-    // 复制按钮：点击瞬间取最新预览值
+    // 复制按钮：点击瞬间取最新预览值（preview 跨方向持久，getter 始终拿到当前值）
     const copyBtn = createCopyButton(() => preview.value, '复制提示词', '已复制 ✓');
+
+    // 当前翻译方向（仅 p.variants 存在时使用）
+    let currentVariantId: string | undefined = p.variants ? p.variants[0]?.id : undefined;
+
+    // 内容区容器：切换方向时整体重建（变量输入 + 预览）
+    const bodyContent = h('div');
+
+    function refreshPreview(): void {
+      if (!currentPrompt) {
+        preview.value = '';
+        return;
+      }
+      preview.value = renderVariant(currentPrompt, currentVariantId, values);
+    }
+
+    /** 按当前方向渲染内容区：变量输入框（含 default 预填）+ 预览 */
+    function renderBody(): void {
+      const vars = resolveVariables(p, currentVariantId);
+      // 切换方向时重置 values（用新方向的 default 预填），避免上一个方向的残留
+      for (const k of Object.keys(values)) delete values[k];
+
+      const varInputs = vars.map((v) => {
+        const input = h(v.multiline ? 'textarea' : 'input', {
+          ...(v.multiline ? { rows: 3 } : {}),
+          placeholder: v.placeholder ?? '',
+          class:
+            'w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+        }) as HTMLInputElement | HTMLTextAreaElement;
+        input.addEventListener('input', () => {
+          values[v.key] = input.value;
+          refreshPreview();
+        });
+        // 预填 default（让用户不填也能得到完整可用提示词）
+        if (v.default) {
+          input.value = v.default;
+          values[v.key] = v.default;
+        }
+        return h('div', { class: 'space-y-1' }, [
+          h('label', {
+            class: 'flex items-center gap-1 text-xs font-medium text-[var(--fg-muted)]',
+            textContent: v.label + (v.required ? ' *' : ''),
+          }),
+          input,
+        ]);
+      });
+
+      // 当前方向的说明（variant.desc 优先，回退卡片 desc）
+      const variant = p.variants?.find((x) => x.id === currentVariantId);
+      const descText = variant?.desc ?? p.desc;
+
+      bodyContent.replaceChildren(
+        h('p', { class: 'mb-4 text-sm leading-relaxed text-[var(--fg-muted)]', textContent: descText }),
+        ...(varInputs.length > 0
+          ? [h('div', { class: 'mb-4 space-y-3' }, [
+              h('div', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '填写你的内容' }),
+              ...varInputs,
+            ])]
+          : [h('div', { class: 'mb-4 text-xs text-[var(--fg-muted)]', textContent: '这条提示词可以直接复制使用，无需填写。' })]),
+        h('div', { class: 'space-y-2' }, [
+          h('div', { class: 'flex items-center justify-between' }, [
+            h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '生成结果（复制后粘贴给 AI）' }),
+            copyBtn,
+          ]),
+          preview,
+        ]),
+      );
+      refreshPreview();
+    }
+
+    // 方向切换控件容器（仅 variants 存在时显示）。初始内容由 rebuildDirectionRow 填充。
+    const directionRow: HTMLElement | null =
+      p.variants && p.variants.length > 0
+        ? h('div', { class: 'flex items-center gap-2 border-b border-[var(--border)] px-5 py-3' })
+        : null;
+
+    /** 重建方向切换行（高亮当前方向）；切换方向后重建内容区（重置 values + 切模板） */
+    function rebuildDirectionRow(): void {
+      if (!directionRow || !p.variants) return;
+      directionRow.replaceChildren(
+        h('span', { class: 'text-xs font-medium text-[var(--fg-muted)]', textContent: '翻译方向' }),
+        h('div', { class: 'flex flex-wrap gap-1.5' },
+          p.variants.map((vv) => {
+            const a = vv.id === currentVariantId;
+            return h('button', {
+              type: 'button',
+              'aria-pressed': String(a),
+              class: [
+                'rounded-md px-2.5 py-1 text-xs border transition-all duration-150',
+                a
+                  ? 'bg-[var(--accent)] text-[var(--accent-fg)] border-[var(--accent)]'
+                  : 'bg-[var(--bg-elevated)] text-[var(--fg-muted)] border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)]',
+              ].join(' '),
+              textContent: vv.label,
+              onclick: () => {
+                currentVariantId = vv.id;
+                rebuildDirectionRow();
+                renderBody();
+              },
+            });
+          }),
+        ),
+      );
+    }
+    rebuildDirectionRow();
+
+    renderBody();
 
     const modal = h('div', {
       class:
@@ -301,23 +375,10 @@ function renderPromptHub(): void {
           onclick: closeDetail,
         }),
       ]),
-      // 内容：变量输入 + 预览
-      h('div', { class: 'flex-1 overflow-y-auto px-5 py-4' }, [
-        h('p', { class: 'mb-4 text-sm leading-relaxed text-[var(--fg-muted)]', textContent: p.desc }),
-        ...(varInputs.length > 0
-          ? [h('div', { class: 'mb-4 space-y-3' }, [
-              h('div', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '填写你的内容' }),
-              ...varInputs,
-            ])]
-          : [h('div', { class: 'mb-4 text-xs text-[var(--fg-muted)]', textContent: '这条提示词可以直接复制使用，无需填写。' })]),
-        h('div', { class: 'space-y-2' }, [
-          h('div', { class: 'flex items-center justify-between' }, [
-            h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '生成结果（复制后粘贴给 AI）' }),
-            copyBtn,
-          ]),
-          preview,
-        ]),
-      ]),
+      // 方向切换行（仅双向提示词有）
+      ...(directionRow ? [directionRow] : []),
+      // 内容：变量输入 + 预览（可随方向切换重建）
+      h('div', { class: 'flex-1 overflow-y-auto px-5 py-4' }, [bodyContent]),
     ]);
 
     detailOverlay.replaceChildren(modal);

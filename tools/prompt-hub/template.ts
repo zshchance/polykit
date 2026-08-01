@@ -41,3 +41,64 @@ export function renderTemplate(prompt: Prompt, values: Record<string, string> = 
 export function isEmpty(v: Variable, raw: string | undefined): boolean {
   return !(raw ?? '').trim() && !v.default;
 }
+
+// ────────── 方向变体（variants）支持 ──────────
+
+/**
+ * 把某方向的变量覆盖合并到 base variables 之上。
+ * 同 key 的变量用 variant 的覆盖（default/placeholder/label 等），新增的追加。
+ * 用于支持「黑话↔大白话」双向切换时，text 变量的 default 随方向变化。
+ */
+export function mergeVariables(
+  base: Variable[],
+  override: Variable[] | undefined,
+): Variable[] {
+  if (!override || override.length === 0) return base;
+  const map = new Map<string, Variable>(base.map((v) => [v.key, { ...v }]));
+  for (const ov of override) {
+    const existing = map.get(ov.key);
+    map.set(ov.key, existing ? { ...existing, ...ov } : { ...ov });
+  }
+  return [...map.values()];
+}
+
+/**
+ * 解析当前应使用的模板：有 variants 且指定了有效 variantId 则用该方向的 template，
+ * 否则回退 base 的 template。
+ */
+export function resolveTemplate(prompt: Prompt, variantId?: string): string {
+  if (variantId && prompt.variants) {
+    const v = prompt.variants.find((x) => x.id === variantId);
+    if (v) return v.template;
+  }
+  return prompt.template;
+}
+
+/**
+ * 解析当前应使用的变量集（含方向覆盖）。
+ * 无 variantId 或无对应 variant 时返回 base variables。
+ */
+export function resolveVariables(prompt: Prompt, variantId?: string): Variable[] {
+  if (variantId && prompt.variants) {
+    const v = prompt.variants.find((x) => x.id === variantId);
+    if (v) return mergeVariables(prompt.variables, v.variables);
+  }
+  return prompt.variables;
+}
+
+/**
+ * 渲染指定方向的模板（供弹层切换方向时复用）。
+ * @param prompt 提示词条目
+ * @param variantId 方向 id（可选；不传或无效则用 base template）
+ * @param values 用户输入的变量值
+ */
+export function renderVariant(
+  prompt: Prompt,
+  variantId: string | undefined,
+  values: Record<string, string> = {},
+): string {
+  // 构造一个"虚拟 prompt"用 base 渲染逻辑，但替换 template
+  const tpl = resolveTemplate(prompt, variantId);
+  return renderTemplate({ ...prompt, template: tpl }, values);
+}
+

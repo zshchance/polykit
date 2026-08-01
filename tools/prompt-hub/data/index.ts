@@ -11,13 +11,15 @@ import { DESIGN_PROMPTS } from './categories/design';
 import { FUN_PROMPTS } from './categories/fun';
 import { PRODUCTIVITY_PROMPTS } from './categories/productivity';
 import { JARGON_PROMPTS } from './categories/jargon';
+import { PHILOSOPHY_PROMPTS } from './categories/philosophy';
 
-/** 全部提示词（类目顺序：写作 → 绘画设计 → 效率学习 → 黑话翻译 → 趣味彩蛋） */
+/** 全部提示词（类目顺序：写作 → 绘画设计 → 效率学习 → 黑话翻译 → 哲学思辨 → 趣味彩蛋） */
 export const ALL_PROMPTS: Prompt[] = [
   ...WRITING_PROMPTS,
   ...DESIGN_PROMPTS,
   ...PRODUCTIVITY_PROMPTS,
   ...JARGON_PROMPTS,
+  ...PHILOSOPHY_PROMPTS,
   ...FUN_PROMPTS,
 ];
 
