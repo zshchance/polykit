@@ -29,6 +29,9 @@ export const registryConfig: RegistryConfig = {
       '配色工具',
       '配色提取器',
       '取色',
+      '二维码生成器',
+      '二维码',
+      'QR码',
       '万年历',
     ],
   },
@@ -37,5 +40,6 @@ export const registryConfig: RegistryConfig = {
     'password-generator': { order: 1 },
     'color-prompt': { order: 2 },
     'color-extractor': { order: 3 },
+    'qr-code': { order: 4 },
   },
 };
