@@ -58,20 +58,23 @@ ${desc}
 ${pagePath}
 （如果你已经在这个页面，则无需跳转；如果不在，请先打开该地址。）
 
-【可用的操作途径（两种，优先用第 1 种，最准确）】
-途径 1 —— 直接执行脚本（推荐）：
-  在该页面的控制台 / 开发者工具里执行：
-    window.__IMG_COMPRESS__.applyPreset(format, quality, maxLongEdge)
-  例如设置为"WebP 格式、画质 80、最长边 ≤1080"：
-    window.__IMG_COMPRESS__.applyPreset('webp', 80, 1080)
-  执行后调用下面这个函数校验参数已生效：
-    window.__IMG_COMPRESS__.getParams()
+【可用的操作途径（按推荐顺序，优先用途径 1）】
+途径 1 —— 快捷键 + JSON 输入（主推，最可靠）：
+  1. 在该页面按下快捷键 Alt + J（macOS 是 Option + J），会弹出一个"参数 JSON"输入框。
+     （该页也有一个「⌨ 快捷输入」按钮可点击唤出同样的输入框。）
+  2. 输入框里已预填当前参数的 JSON。你把它改成目标参数的 JSON，例如：
+       {"format":"webp","quality":80,"maxLongEdge":1080}
+  3. 按回车（Enter）提交，页面参数即自动设为你填的值，输入框会自动关闭。
+     （在输入框内 Shift + Enter 是换行；Esc 或点击遮罩可关闭。）
 
-  format 取值：'webp' | 'jpeg' | 'png' | 'ico'
-  quality：1-100 的整数（仅对 webp/jpeg 有效；png/ico 无损会忽略此项）
-  maxLongEdge：最长边像素上限，0 表示不缩放（保持原尺寸）
+  JSON 字段说明：
+  - format：'webp' | 'jpeg' | 'png' | 'ico'
+  - quality：1-100 的整数（仅对 webp/jpeg 有效；png/ico 无损会忽略此项）
+  - maxLongEdge：最长边像素上限，0 表示不缩放（保持原尺寸）
+  - icoSizes：可选，ICO 内嵌尺寸数组，如 [16,32,48]
+  - 未填的字段会沿用当前值；非法值会被自动钳到合法范围。
 
-途径 2 —— 逐个控件操作（备选，当无法执行脚本时用，读页面无障碍树）：
+途径 2 —— 逐个控件操作（备选，当无法用快捷键时，读页面无障碍树）：
   - 点击 aria-label 为「输出格式：XXX」的按钮（XXX = WebP / JPG / PNG / ICO）
   - 把 aria-label 为「压缩强度」的滑块拖到目标数值
   - 把 aria-label 为「最长边缩放上限」的下拉框选为对应项（如「≤ 1080px」）
@@ -85,7 +88,7 @@ ${pagePath}
    - ICO：多尺寸图标，仅用于网站 favicon。
    - quality 越低体积越小但画质越低；需要看清细节（商品图/教程）就调高，纯分享可调低。
    - maxLongEdge 按发布场景定：手机端社交 720-1080 足够，电商详情/大图可到 1440，需要原图保真填 0。
-2. 用途径 1 或途径 2 把参数设置好。
+2. 用途径 1（快捷键 + JSON，推荐）或途径 2 把参数设置好。
 3. 设置完成后，简要告诉用户你选择了什么参数、为什么这么选。
 
 【设置前的当前参数】

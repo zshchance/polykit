@@ -19,7 +19,7 @@ export default {
     '图片压缩', '图片格式转换', 'WebP 转换', 'PNG 转 JPG', '图片转 ICO',
     'favicon', '压缩图片', 'image compress', 'image converter',
     '压缩强度', '对比预览', '用途预设', '小红书压缩', '电商图片压缩',
-    'AI 浏览器', 'Tabbit', 'AI 接管',
+    'AI 浏览器', 'Tabbit', 'AI 接管', '参数 JSON', '快捷输入',
   ],
   card: { accent: '#7c3aed' },
 } satisfies ToolConfig;

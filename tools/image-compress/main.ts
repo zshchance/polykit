@@ -10,7 +10,7 @@ import { encodeIco } from './ico';
 import { createCompareViewer } from './compare-viewer';
 import { loadConfig, saveConfig } from './settings';
 import { PRESETS } from './presets';
-import { buildTakeoverPrompt, type CurrentParams } from './ai-takeover';
+import { buildTakeoverPrompt, displayFormatName, type CurrentParams } from './ai-takeover';
 import {
   FORMAT_OPTIONS,
   ICO_SIZE_OPTIONS,
@@ -556,6 +556,138 @@ function renderImageCompress(): void {
     };
   }
 
+  // ────────── JSON 快捷参数框（Alt+J 唤出，对 AI 浏览器友好）──────────
+  // 设计动机：AI 浏览器（Tabbit 类）不支持控制台执行命令，可视化精确操作又慢。
+  // 用快捷键唤出一个 JSON 输入框，AI 只需"填文本 + 按回车"即可精确设参，
+  // 绕开它不擅长的可视化点击/拖拽。
+  let jsonDialogEl: HTMLElement | null = null;
+
+  function openJsonDialog(): void {
+    if (jsonDialogEl) return; // 已打开则不重复唤出
+
+    const presetText = JSON.stringify(snapshotParams(), null, 2);
+    const ta = h('textarea', {
+      class:
+        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 font-mono text-sm leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      rows: 8,
+      spellcheck: false,
+      'aria-label': '参数 JSON',
+    }) as HTMLTextAreaElement;
+    ta.value = presetText;
+
+    const statusRow = h('div', { class: 'min-h-[1.25rem] text-xs' });
+
+    function flashError(msg: string): void {
+      statusRow.textContent = '⚠ ' + msg;
+      statusRow.style.color = 'var(--holiday-legal)';
+    }
+
+    function submitJson(): void {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(ta.value);
+      } catch {
+        flashError('JSON 格式有误，请检查括号/引号/逗号。');
+        return;
+      }
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        flashError('需要是一个 JSON 对象，如 {"format":"webp","quality":80,"maxLongEdge":1080}');
+        return;
+      }
+      const obj = parsed as Record<string, unknown>;
+      // 字段校验 + 兜底（缺失/类型错用当前值）
+      const fmt = typeof obj.format === 'string' && (obj.format === 'webp' || obj.format === 'jpeg' || obj.format === 'png' || obj.format === 'ico')
+        ? (obj.format as OutputFormat)
+        : cfg.format;
+      const q = typeof obj.quality === 'number' && Number.isFinite(obj.quality) ? obj.quality : cfg.quality;
+      const le = typeof obj.maxLongEdge === 'number' && Number.isFinite(obj.maxLongEdge) ? obj.maxLongEdge : cfg.maxLongEdge;
+      let ico: number[] | undefined;
+      if (Array.isArray(obj.icoSizes) && obj.icoSizes.every((v) => typeof v === 'number')) {
+        ico = (obj.icoSizes as number[]).filter((v) => ICO_SIZE_OPTIONS.includes(v));
+        if (ico.length === 0) ico = undefined;
+      }
+
+      applyParams(fmt, q, le, ico);
+      closeJsonDialog();
+      showStatus(`已按 JSON 设参：${displayFormatName(fmt)} / 画质 ${Math.round(q)} / 最长边 ${le === 0 ? '不缩放' : '≤' + le + 'px'}`);
+    }
+
+    // Enter 提交 / Shift+Enter 换行 / Esc 关闭
+    ta.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        submitJson();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeJsonDialog();
+      }
+    });
+
+    const card = h('div', {
+      role: 'dialog',
+      'aria-modal': 'true',
+      'aria-label': '参数 JSON 快捷输入',
+      class:
+        'w-[min(92vw,34rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
+    }, [
+      h('div', { class: 'mb-1 flex items-center justify-between gap-2' }, [
+        h('span', { class: 'text-sm font-semibold text-[var(--fg)]', textContent: '⌨ 参数 JSON 快捷输入' }),
+        h('span', { class: 'text-[11px] text-[var(--fg-muted)]', textContent: '回车提交 · Shift+回车换行 · Esc 关闭' }),
+      ]),
+      h('p', {
+        class: 'mb-2 text-xs text-[var(--fg-muted)]',
+        textContent: '合法字段：format(webp/jpeg/png/ico) · quality(1-100) · maxLongEdge(0=不缩放) · icoSizes(可选)。缺失字段沿用当前值。',
+      }),
+      ta,
+      statusRow,
+      h('div', { class: 'mt-3 flex items-center justify-end gap-2' }, [
+        h('button', {
+          type: 'button',
+          class: 'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors',
+          textContent: '取消',
+          onclick: () => closeJsonDialog(),
+        }),
+        h('button', {
+          type: 'button',
+          class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+          textContent: '应用参数',
+          onclick: submitJson,
+        }),
+      ]),
+    ]);
+
+    // 遮罩：点击空白关闭
+    const overlay = h('div', {
+      class: 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4',
+      onclick: (e: Event) => {
+        if (e.target === overlay) closeJsonDialog();
+      },
+    });
+    overlay.append(card);
+
+    document.body.append(overlay);
+    jsonDialogEl = overlay;
+    // 自动聚焦输入框并全选，方便直接覆盖粘贴
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.select();
+    });
+  }
+
+  function closeJsonDialog(): void {
+    if (!jsonDialogEl) return;
+    jsonDialogEl.remove();
+    jsonDialogEl = null;
+  }
+
+  // 全局快捷键：Alt+J（macOS Option+J）唤出 JSON 框
+  document.addEventListener('keydown', (e) => {
+    if (e.altKey && (e.key === 'j' || e.key === 'J')) {
+      e.preventDefault();
+      openJsonDialog();
+    }
+  });
+
 
   // ICO 尺寸行只在选 ICO 时显示
   function syncFormatSensitiveWraps(): void {
@@ -584,7 +716,17 @@ function renderImageCompress(): void {
     h('div', { class: 'mt-6 space-y-5' }, [
       // 用途预设行（参数区最前方）
       h('div', { class: 'space-y-1.5' }, [
-        h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '用途（一键预设参数）' }),
+        h('div', { class: 'flex items-center justify-between gap-2' }, [
+          h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '用途（一键预设参数）' }),
+          h('button', {
+            type: 'button',
+            title: '弹出参数 JSON 输入框（快捷键 Alt+J），粘贴 JSON 回车即可精确设参',
+            'aria-label': '快捷输入参数 JSON（Alt+J）',
+            class: 'inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-[11px] text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+            textContent: '⌨ 快捷输入',
+            onclick: openJsonDialog,
+          }),
+        ]),
         purposeContainer,
         customWrap,
       ]),
