@@ -80,7 +80,11 @@ function splitIntoCharSpans(content: HTMLElement): HTMLElement[] {
     const chars = Array.from(node.textContent ?? '');
     for (const ch of chars) {
       const s = document.createElement('span');
-      s.textContent = ch;
+      // 关键：空格字符用不换行空格（NBSP）渲染。
+      // 因为这些 span 会被设成 display:inline-block，普通空格在行首/行尾/相邻 inline-block
+      // 之间会被空白折叠规则吃掉、宽度归零，导致英文单词之间没有间隔全粘在一起。
+      // NBSP 不参与折叠，能稳定占据一个空格宽度；视觉上与普通空格无异。
+      s.textContent = ch === ' ' ? '\u00A0' : ch;
       s.style.opacity = '0';
       charSpans.push(s);
       parent.insertBefore(s, node);
