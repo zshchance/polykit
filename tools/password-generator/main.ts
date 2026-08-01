@@ -20,6 +20,11 @@ import {
   type StoredPassword,
 } from './history';
 import { loadOptions, saveOptions } from './settings';
+import {
+  buildAIPrompt,
+  PROMPT_STYLES,
+  type PromptStyleId,
+} from './ai-prompt';
 
 initTheme();
 
@@ -198,8 +203,83 @@ function renderPasswordGenerator() {
     ),
   ]);
 
-  // —— 长度滑块 ——
-  const lengthValue = h('span', { class: 'font-mono', textContent: String(state.length) });
+  // —— 长度滑块 + 可点击直输数字 ——
+  // 点「数字」把它替换成 <input type=number>，回车/失焦落库并重生成，Esc 还原。
+  // 这样既保留滑块拖拽的直观，又允许用户直接输入想要的精确长度。
+  const lengthValue = h(
+    'span',
+    {
+      class:
+        'font-mono cursor-text rounded px-1 -mx-1 select-none hover:bg-[var(--bg)] transition-colors',
+      textContent: String(state.length),
+      title: '点击直接输入长度（4-64）',
+      tabindex: '0',
+      role: 'button',
+      'aria-label': '点击编辑密码长度',
+    },
+    [],
+  );
+
+  /** 把数字 span 替换为输入框并聚焦，供用户直接输入长度 */
+  function enterLengthEdit(): void {
+    if (lengthValue.parentElement && lengthValue.parentElement.querySelector('input[data-len-edit]')) {
+      return; // 已在编辑态，避免重复创建
+    }
+    const editInput = h('input', {
+      type: 'number',
+      'data-len-edit': '',
+      min: '4',
+      max: '64',
+      value: String(state.length),
+      class:
+        'w-16 font-mono rounded border border-[var(--accent)] bg-[var(--bg)] px-1 py-0 text-center text-[var(--fg)] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
+    }) as HTMLInputElement;
+
+    /** 落库：校验 4-64 区间，合法则更新 state + 滑块 + 重生成；不合法回退原值 */
+    let committed = false; // 防止 Esc 还原后 blur 再触发一次 commit
+    const commit = (): void => {
+      if (committed) return;
+      committed = true;
+      const raw = Number(editInput.value);
+      const clamped = !Number.isFinite(raw)
+        ? state.length
+        : Math.max(4, Math.min(64, Math.round(raw)));
+      state.length = clamped;
+      lengthValue.textContent = String(clamped);
+      lengthInput.value = String(clamped);
+      editInput.replaceWith(lengthValue);
+      saveOptions(state);
+      generate();
+    };
+
+    editInput.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commit();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        // 还原：丢弃输入，把 span 换回，不触发重生成。
+        // 先置 committed 再 replaceWith，避免移除输入框触发的 blur 重新落库。
+        committed = true;
+        editInput.replaceWith(lengthValue);
+      }
+    });
+    editInput.addEventListener('blur', () => commit());
+
+    lengthValue.replaceWith(editInput);
+    editInput.focus();
+    editInput.select();
+  }
+
+  lengthValue.addEventListener('click', enterLengthEdit);
+  lengthValue.addEventListener('keydown', (e: KeyboardEvent) => {
+    // 键盘可达性：聚焦后按 Enter/Space 也进入编辑
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      enterLengthEdit();
+    }
+  });
+
   const lengthInput = h('input', {
     type: 'range',
     min: '4',
@@ -239,6 +319,229 @@ function renderPasswordGenerator() {
       onclick: generate,
     },
     [],
+  );
+
+  // ────────── 💡 用 AI 生成口令（提示词生成器）──────────
+  // 一条「好记优先」的辅助路径：用户描述需求/主题 → 选风格与长度 → 工具组装提示词 →
+  // 复制给自己的 AI 对话（ChatGPT/豆包/DeepSeek 等）→ AI 直接返回可用口令，无需回填本程序。
+  // 工具本身只生成提示词文本，不联网、不上传；AI 产出的口令会过第三方服务，强度弱于
+  // 主生成器，故模态里给出安全提示：重要账号请用上面的「生成密码」（本地密码学随机）。
+  let dialogEl: HTMLElement | null = null;
+
+  function closeDialog(): void {
+    if (!dialogEl) return;
+    dialogEl.remove();
+    dialogEl = null;
+    document.body.style.overflow = '';
+    document.removeEventListener('keydown', onDialogEsc);
+  }
+  function onDialogEsc(e: KeyboardEvent): void {
+    if (e.key === 'Escape' && dialogEl) {
+      e.preventDefault();
+      closeDialog();
+    }
+  }
+
+  /** 通用浮层壳：遮罩 + 居中卡片 + Esc/点遮罩关闭。card 由调用方构建。 */
+  function mountDialog(card: HTMLElement): HTMLElement {
+    const overlay = h('div', {
+      class: 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4',
+      onclick: (e: Event) => {
+        if (e.target === overlay) closeDialog();
+      },
+    });
+    overlay.append(card);
+    document.body.append(overlay);
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', onDialogEsc);
+    return overlay;
+  }
+
+  function openAIDialog(): void {
+    if (dialogEl) closeDialog();
+
+    // 局部状态：默认风格取第一个预设；「携带页面设置」默认开启
+    let style: PromptStyleId = PROMPT_STYLES[0]!.id;
+    let includePageSettings = true;
+
+    const statusRow = h('div', { class: 'min-h-[1.25rem] text-xs' });
+    function flashOk(msg: string): void {
+      statusRow.textContent = '✓ ' + msg;
+      statusRow.style.color = '#22c55e';
+    }
+
+    // ① 描述 / 主题
+    const descInput = h('textarea', {
+      class:
+        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      rows: 3,
+      'aria-label': '需求或主题描述',
+      placeholder: '可选。描述你的需求或主题，例如：围绕「星空」给我好记的密码；或：我要给家庭 WiFi 设密码、希望家人能记住。',
+    }) as HTMLTextAreaElement;
+
+    // ② 风格（按钮组，单选）
+    const styleBtns: HTMLButtonElement[] = [];
+    const styleRow = h('div', { class: 'flex flex-wrap gap-2' }, [
+      ...PROMPT_STYLES.map((s) => {
+        const btn = h('button', {
+          type: 'button',
+          'data-style': s.id,
+          class:
+            'rounded-md border px-3 py-1.5 text-sm transition-colors ' +
+            (s.id === style
+              ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)]'
+              : 'border-[var(--border)] bg-[var(--bg)] text-[var(--fg-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]'),
+          textContent: s.name,
+          title: s.hint,
+          onclick: () => {
+            style = s.id;
+            // 切换高亮态
+            for (const b of styleBtns) {
+              const active = b.getAttribute('data-style') === style;
+              b.className =
+                'rounded-md border px-3 py-1.5 text-sm transition-colors ' +
+                (active
+                  ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)]'
+                  : 'border-[var(--border)] bg-[var(--bg)] text-[var(--fg-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]');
+            }
+          },
+        }) as HTMLButtonElement;
+        styleBtns.push(btn);
+        return btn;
+      }),
+    ]);
+
+    // ③ 携带页面设置（默认勾选）
+    // 勾选时把主页面当前的长度 / 字符类型勾选 / 每类至少一个作为硬性约束注入提示词；
+    // 取消勾选则提示词完全不提长度与字符限制，交给 AI 自由发挥。
+    // 长度只在主页面有一处，这里不重复出现，避免两个长度互相打架。
+    /** 概括当前会带入哪些设置，开关下方实时展示（打开对话框时按当前 state 快照生成） */
+    function describePageSettings(): string {
+      const types: string[] = [];
+      if (state.useLower) types.push('小写');
+      if (state.useUpper) types.push('大写');
+      if (state.useDigits) types.push('数字');
+      if (state.useSymbols) types.push('符号');
+      const typeText = types.length > 0 ? types.join('/') : '（无字符类型被选中）';
+      const eachText = state.requireEachEnabled ? '、每类至少一个' : '';
+      return `将带入：长度 ${state.length}、${typeText}${eachText}`;
+    }
+    const pageSettingsSummary = h('p', {
+      class: 'text-xs text-[var(--fg-muted)]',
+      textContent: describePageSettings(),
+    });
+    const includeSettingsInput = h('input', {
+      type: 'checkbox',
+      class: 'h-4 w-4 accent-[var(--accent)]',
+      checked: true,
+      onchange: (e) => {
+        includePageSettings = (e.target as HTMLInputElement).checked;
+        // 取消勾选时，带入预览不再相关，置灰提示；勾选时恢复
+        pageSettingsSummary.textContent = includePageSettings
+          ? describePageSettings()
+          : '未勾选：长度与字符组成由 AI 自由决定。';
+      },
+    }) as HTMLInputElement;
+    const includeSettingsRow = h('div', { class: 'space-y-1' }, [
+      h('label', { class: 'flex items-center gap-2 text-sm cursor-pointer' }, [
+        includeSettingsInput,
+        '携带页面当前设置（长度、字符类型、每类至少一个）',
+      ]),
+      pageSettingsSummary,
+    ]);
+
+    // ④ 生成的提示词（点「生成」后才显示）+ 复制
+    const promptArea = h('textarea', {
+      class:
+        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 font-mono text-[12px] leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      rows: 9,
+      readonly: true,
+      'aria-label': '生成的 AI 提示词',
+    }) as HTMLTextAreaElement;
+    const promptWrap = h('div', { class: 'hidden space-y-2' }, [
+      h('p', {
+        class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
+        textContent: '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，AI 会直接返回几个可用口令。选一个你喜欢的即可，无需再回填本工具。',
+      }),
+      promptArea,
+      h('div', { class: 'flex items-center justify-end' }, [
+        createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
+      ]),
+    ]);
+
+    function generatePrompt(): void {
+      const desc = descInput.value.trim();
+      promptArea.value = buildAIPrompt({
+        description: desc,
+        style,
+        // 携带设置时取当前主页面 state 的快照；否则传 undefined，AI 自由发挥
+        pageOptions: includePageSettings ? { ...state } : undefined,
+      });
+      promptWrap.classList.remove('hidden');
+      promptArea.scrollTop = 0;
+      flashOk('提示词已生成，复制后发给 AI 即可。');
+    }
+
+    const card = h('div', {
+      role: 'dialog',
+      'aria-modal': 'true',
+      'aria-label': '用 AI 生成口令',
+      class:
+        'w-[min(92vw,42rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
+    }, [
+      h('div', { class: 'mb-1 flex items-center justify-between gap-2' }, [
+        h('span', { class: 'text-sm font-semibold text-[var(--fg)]', textContent: '💡 用 AI 生成口令' }),
+        h('button', {
+          type: 'button',
+          'aria-label': '关闭',
+          class: 'text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors',
+          textContent: '✕',
+          onclick: closeDialog,
+        }),
+      ]),
+      h('div', { class: 'mt-2 space-y-2' }, [
+        h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '① 描述需求或主题（可选）' }),
+        descInput,
+      ]),
+      h('div', { class: 'mt-3 space-y-2' }, [
+        h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '② 风格' }),
+        styleRow,
+      ]),
+      h('div', { class: 'mt-3 space-y-2' }, [
+        h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '③ 携带页面设置' }),
+        includeSettingsRow,
+      ]),
+      h('div', { class: 'mt-3 flex items-center justify-end' }, [
+        h('button', {
+          type: 'button',
+          class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+          textContent: '生成提示词',
+          onclick: generatePrompt,
+        }),
+      ]),
+      h('div', { class: 'mt-3' }, [promptWrap]),
+      statusRow,
+      h('p', {
+        class: 'mt-2 rounded-md bg-[var(--bg)] px-3 py-2 text-[11px] leading-relaxed text-[var(--fg-muted)]',
+        textContent: '安全提示：AI 生成的口令会经过第三方服务、且非密码学随机，适合低敏感场景。重要账号请用上方「生成密码」（本地密码学随机，数据不出本机）。',
+      }),
+    ]);
+
+    dialogEl = mountDialog(card);
+    requestAnimationFrame(() => descInput.focus());
+  }
+
+  const aiBtn = h(
+    'button',
+    {
+      type: 'button',
+      title: '用 AI 生成口令：描述需求 → 生成提示词 → 复制给 AI 直接拿口令',
+      'aria-label': '用 AI 生成口令',
+      class:
+        'w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-2 text-sm text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+      onclick: () => openAIDialog(),
+    },
+    ['💡 用 AI 生成口令'],
   );
 
   // ────────── 历史记录面板 ──────────
@@ -381,6 +684,7 @@ function renderPasswordGenerator() {
     ]),
     // 操作
     generateBtn,
+    aiBtn,
     // 分隔
     h('div', { class: 'border-t border-[var(--border)]' }, []),
     // 历史

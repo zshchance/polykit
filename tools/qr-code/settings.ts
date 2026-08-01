@@ -80,6 +80,10 @@ export function loadConfig(): QrConfig {
           ? c.logoRatio
           : DEFAULT_CONFIG.logoRatio,
       logoFit: isLogoFit(c.logoFit) ? c.logoFit : DEFAULT_CONFIG.logoFit,
+      activeStyleId:
+        c.activeStyleId === null || typeof c.activeStyleId === 'string'
+          ? c.activeStyleId
+          : DEFAULT_CONFIG.activeStyleId,
     };
   } catch {
     return { ...DEFAULT_CONFIG };

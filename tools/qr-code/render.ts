@@ -13,6 +13,7 @@
 
 import QRCode from 'qrcode';
 import type { DotShape, EyeShape, QrConfig } from './types';
+import type { DotEffectFn } from './custom-styles';
 
 /** qrcode 库的模块矩阵子集（只用到 size / get） */
 interface Modules {
@@ -51,12 +52,16 @@ export async function buildModules(
  * 主绘制函数：模块矩阵 + 配置 → 美化后的 canvas。
  * @param logoImage 中心 Logo 的位图；为 null 表示不嵌。
  * @param pixelSide 画布像素边长，默认 1024（高清下载够用）。
+ * @param dotEffect 可选的逐码点叠加钩子（来自 AI 风格）。在每个 data 码点画完标准
+ *                  形状后被调用，可在其上叠加任意绘制（落雪/高光/描边等）。每个码点
+ *                  的调用被 save/restore 包裹 + try/catch 兜底，单点失败不影响全局。
  */
 export function drawQr(
   modules: Modules,
   cfg: QrConfig,
   logoImage: ImageBitmap | HTMLImageElement | null,
   pixelSide = DEFAULT_PX,
+  dotEffect?: DotEffectFn | null,
 ): RenderResult {
   const size = modules.size;
   // 每模块像素：画布总像素 / (矩阵 + 两侧静默区)
@@ -93,6 +98,19 @@ export function drawQr(
       const x = offset + c * scale;
       const y = offset + r * scale;
       drawModule(ctx, x, y, scale, cfg.dotShape);
+      // AI 风格的逐码点叠加钩子：save/restore 隔离状态，try/catch 兜底单点失败
+      if (dotEffect) {
+        ctx.save();
+        try {
+          dotEffect(ctx, x, y, scale, r, c);
+        } catch {
+          // 单点叠加失败：静默跳过，不影响主码点绘制
+        } finally {
+          ctx.restore();
+        }
+        // restore 后 fillStyle 可能被还原，重设回码点色，确保下一个码点正确
+        ctx.fillStyle = cfg.fgColor;
+      }
     }
   }
 

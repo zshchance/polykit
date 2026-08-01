@@ -50,6 +50,9 @@ export interface QrConfig {
   logoRatio: number;
   /** Logo 裁剪形状（圆角避免和码点衔接生硬） */
   logoFit: LogoFit;
+  /** 当前激活的风格预设 id（内置 PRESETS 的 id、custom:xxx 自定义风格、或 null）。
+   *  仅用于重进时恢复高亮与（若是 AI 风格）码点效果钩子；不参与渲染参数，渲染读 cfg 的其它字段。 */
+  activeStyleId: string | null;
 }
 
 export const DOT_SHAPES: { id: DotShape; name: string }[] = [
@@ -81,6 +84,7 @@ export const DEFAULT_CONFIG: QrConfig = {
   withLogo: false,
   logoRatio: 0.22,
   logoFit: 'rounded',
+  activeStyleId: null,
 };
 
 /**
