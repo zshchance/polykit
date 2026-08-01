@@ -30,8 +30,8 @@ export const FORMAT_OPTIONS: readonly FormatOption[] = [
   { id: 'ico', name: 'ICO', lossy: false, ext: 'ico', hint: '多尺寸图标，用于 favicon' },
 ];
 
-/** ICO 可选尺寸（像素，正方形） */
-export const ICO_SIZE_OPTIONS: readonly number[] = [16, 24, 32, 48, 64];
+/** ICO 可选尺寸（像素，正方形）。256 是 ICO 规范上限，二进制中以 0 表示。 */
+export const ICO_SIZE_OPTIONS: readonly number[] = [16, 24, 32, 48, 64, 128, 256];
 
 export const MIN_QUALITY = 1;
 export const MAX_QUALITY = 100;
