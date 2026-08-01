@@ -85,6 +85,32 @@ interface PickedMime {
 }
 
 /**
+ * 把 content 子树里所有正在播放的 WAAPI 动画强制跳到终态（finish）。
+ *
+ * 用途：视频/图片导出末态收尾。逐字类动画把每个字符 span 各自 animate（独立的 Animation），
+ * 末字的动画可能略晚于 ANIM_DURATION 才到 opacity:1。controller（content 上的占位动画）
+ * finish 不会带动这些子动画。这里遍历 content 及其后代的 getAnimations()，统一 finish，
+ * 确保所有字符停在终态、末字可见，再补录一帧干净成品帧。
+ *
+ * 容错：fill:'forwards' 的动画 finish 后保持终态；个别浏览器 finish 抛错则忽略。
+ */
+export function finishAllAnimations(content: HTMLElement): void {
+  const targets: Element[] = [content, ...content.querySelectorAll('*')];
+  for (const el of targets) {
+    // Element.getAnimations() 返回直接作用于该元素的 Animation（含子动画）
+    const anims = typeof el.getAnimations === 'function' ? el.getAnimations() : [];
+    for (const a of anims) {
+      try {
+        // finish 把 currentTime 跳到 end，fill:forwards/both 的动画保持终态
+        if (a.playState !== 'finished') a.finish();
+      } catch {
+        // 个别动画（无效果时间轴等）finish 可能抛错，忽略
+      }
+    }
+  }
+}
+
+/**
  * 选择浏览器支持的录制 mime，优先 MP4（H.264），回退 WebM（VP9/VP8）。
  *
  * MP4/H.264 兼容性更广（可直接在微信、iOS、各类播放器打开），Chrome 126+、
@@ -202,6 +228,7 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
     //    pixelRatio = scale × 2：先按分辨率档位放大，再 2× 超采样，drawImage 降采样到
     //    录制 canvas，文字在高分辨率下依然锐利。
     const pr = Math.max(2, scale * 2);
+    let settled = false; // 是否已做末态收尾（防重入）
     const paintFrame = async () => {
       try {
         const frame = await toCanvas(surface, { pixelRatio: pr, cacheBust: false });
@@ -214,6 +241,21 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
       const t = anim ? Number(anim.currentTime) : ANIM_DURATION;
       if (t < ANIM_DURATION) {
         rafId = requestAnimationFrame(paintFrame);
+      } else if (!settled) {
+        // —— 末态收尾（修长文本末字缺失）——
+        // 逐字类动画的末字可能略晚于 ANIM_DURATION 才到 opacity:1（如炫光/弹跳 eachDur 较长），
+        // 此时 controller 已到点、绘制循环本会停帧，末字还半透明。这里把 content 上所有子动画
+        // 强制 finish 到终态，再补一帧干净的「成品帧」，保证末字可见后再进入尾帧定格。
+        settled = true;
+        finishAllAnimations(content);
+        await new Promise((r) => setTimeout(r, 30)); // 等重排
+        try {
+          const finalFrame = await toCanvas(surface, { pixelRatio: pr, cacheBust: false });
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(finalFrame, 0, 0, canvas.width, canvas.height);
+        } catch {
+          // 末帧失败则保留上一帧
+        }
       }
     };
 
@@ -226,8 +268,9 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
       anim.play();
       // 启动绘制
       rafId = requestAnimationFrame(paintFrame);
-      // 动画结束 + 尾帧后停止
-      const totalMs = ANIM_DURATION + tailMs;
+      // 动画结束 + 尾帧后停止。逐字末字有时略晚于 ANIM_DURATION，故多留 200ms 余量
+      // 让收尾帧/末字稳定后再定格（上方 paintFrame 也会在到点后补一帧终态）。
+      const totalMs = ANIM_DURATION + 200 + tailMs;
       stopTimer = window.setTimeout(() => {
         if (recorder.state !== 'inactive') {
           recorder.stop();

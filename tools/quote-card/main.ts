@@ -30,7 +30,7 @@ import {
   buildAIPrompt,
 } from './custom-animations';
 import { createCopyButton } from '@/core/components/CopyButton';
-import { exportVideo, VIDEO_RESOLUTIONS, getVideoResolution, type VideoResId } from './video-export';
+import { exportVideo, finishAllAnimations, VIDEO_RESOLUTIONS, getVideoResolution, type VideoResId } from './video-export';
 
 initTheme();
 
@@ -586,8 +586,12 @@ function renderQuoteCard() {
       downloadImgBtn.disabled = true;
       // 图片导出需截「动画完成后的成品」：把动画跳到终态（finish），
       // 否则逐字/淡入等动画停在中间帧会截到半透明/缺字画面。
+      // 注意：逐字类的字符 span 各有独立动画，finish controller 不够——
+      // 必须把 content 子树所有子动画一并 finish，长文本末字才不会缺失。
       try {
         currentAnimObj?.finish();
+        const contentEl = cardEl.querySelector('.quote-card-content') as HTMLElement | null;
+        if (contentEl) finishAllAnimations(contentEl);
       } catch {
         // 忽略
       }
