@@ -32,6 +32,10 @@ export const registryConfig: RegistryConfig = {
       '二维码生成器',
       '二维码',
       'QR码',
+      '图片压缩',
+      '图片格式转换',
+      'WebP转换',
+      '图片转ICO',
       '万年历',
     ],
   },
@@ -41,5 +45,6 @@ export const registryConfig: RegistryConfig = {
     'color-prompt': { order: 2 },
     'color-extractor': { order: 3 },
     'qr-code': { order: 4 },
+    'image-compress': { order: 5 },
   },
 };
