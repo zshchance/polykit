@@ -140,6 +140,66 @@ export function compileCustomBuild(
   };
 }
 
+/** 试跑校验结果：给「添加」模态的预览/保存用，提前暴露问题代码 */
+export interface DryRunResult {
+  ok: boolean;
+  /** 失败原因（ok=false 时有值） */
+  reason?: string;
+  /** 返回的动画是否是真实可用的 Animation */
+  returnedAnimation?: Animation;
+}
+
+/**
+ * 在一段【content 的克隆副本】上试跑代码，检查三件事：
+ *   1. 编译 + 运行不抛错；
+ *   2. 返回的是有效的 Animation（有 play/finish 方法）；
+ *   3. 不破坏 content 的结构（克隆后 childElementCount 与原文一致，且没把文本节点
+ *      揉成一团——用子元素数变化作破坏性 DOM 操作的代理信号）。
+ *
+ * 在副本上跑是为了不污染真实卡片。返回详细结果供 UI 展示。
+ */
+export function dryRunCheck(code: string, content: HTMLElement, quote: QuoteData): DryRunResult {
+  // 克隆真实 content 做试跑（深克隆，保留结构与文本）
+  const clone = content.cloneNode(true) as HTMLElement;
+  const beforeChildCount = clone.childElementCount;
+  const beforeTextLength = (clone.textContent ?? '').length;
+  let build: (c: HTMLElement, q: QuoteData) => Animation;
+  try {
+    build = compileCustomBuild(code);
+  } catch (e) {
+    return { ok: false, reason: '代码语法有误：' + (e instanceof Error ? e.message : String(e)) };
+  }
+  let anim: Animation;
+  try {
+    anim = build(clone, quote);
+  } catch (e) {
+    return {
+      ok: false,
+      reason: '运行时报错：' + (e instanceof Error ? e.message : String(e)) + '（常见：用了 GroupEffect 等浏览器不支持的 API）',
+    };
+  }
+  // 返回值是否真实 Animation
+  if (!anim || typeof anim.play !== 'function' || typeof anim.finish !== 'function') {
+    return { ok: false, reason: '代码未返回有效的 Animation（请用 return content.animate(...) 结尾）' };
+  }
+  // 结构破坏检测：清空/替换 content 的代码会让 childElementCount 或文本长度剧变
+  const afterChildCount = clone.childElementCount;
+  const afterTextLength = (clone.textContent ?? '').length;
+  if (afterChildCount < beforeChildCount || afterTextLength < beforeTextLength * 0.5) {
+    return {
+      ok: false,
+      reason: '代码破坏了卡片结构（疑似清空/替换了 content，会丢失作者落款和排版）。请只对文本节点拆字，不要改 content 的 DOM 结构。',
+    };
+  }
+  // 立即取消试跑产生的动画（副本未挂载到文档，但保险起见）
+  try {
+    anim.cancel();
+  } catch {
+    // 忽略
+  }
+  return { ok: true, returnedAnimation: anim };
+}
+
 /**
  * 把一条 CustomAnim 包成内置同款的 AnimEffect：id/name/build 三件套。
  * build 内 try/catch：编译或运行时出错 → 回退淡入，避免整页崩。
@@ -175,36 +235,86 @@ export function buildAIPrompt(description: string): string {
 【我想要的动画效果】
 ${desc}
 
+【⚠ 最关键的禁令（违反任何一条，卡片布局会彻底毁掉）】
+1. 绝对不要执行 content.textContent = ''、content.innerHTML = '...'、content.replaceChildren()、
+   或任何会【清空/替换 content 内部 DOM】的操作。
+   原因：content 里除了名言正文，还有作者落款、出处、装饰元素（强调竖条/光斑等），它们共同
+   构成排版。一旦清空重建，所有样式结构和布局都会消失，卡片会变得很难看。
+2. 你的代码只能【读取】或【包裹】已有的文本，不能改动 content 的结构。如果要做逐字动画，
+   只能把【现有文本节点的内容】替换成等价的字符 <span>（保持父元素、样式、位置不变），
+   而不是把整个 content 的文本揉成一团重新铺。
+3. 不要用 GroupEffect / new Animation(groupEffect,...)。这两个 API 在绝大多数浏览器里
+   【根本不存在】（会抛 ReferenceError）。逐字动画请用下面的"占位 controller"写法。
+
 【本工具的代码约定（务必严格遵守）】
 你只需返回一个【函数体】的 JavaScript 代码，不要写 function 包裹，不要写外层括号。
 该函数会被这样调用：new Function('content', 'quote', <你的代码>)(content, quote)。
 两个参数：
-- content：HTMLElement，是卡片的内容层（文字已经渲染在里面）。注意：动画每次播放前内容会被重新渲染，所以你的代码不应依赖之前留下的副作用。
+- content：HTMLElement，卡片的内容层。内部已经渲染好：可能有装饰元素、名言正文、作者落款等
+  多个子节点。你只能在其上【加】动画，不要【改】它的 DOM 结构。
 - quote：{ text: string; author: string; source?: string }，当前名言文本。
 
 你的函数体必须用 Web Animations API（element.animate(...)）并 return 出一个 Animation 对象。
-这是硬性要求——工具的视频导出靠 animation.currentTime 判定结束、图片导出靠 animation.finish() 跳终态，所以必须 return 真实的 Animation。
+这是硬性要求——工具的视频导出靠 animation.currentTime 判定结束、图片导出靠 animation.finish() 跳终态。
 
-技术要点：
-- 整体效果示例：
-    return content.animate(
-      [{ opacity: 0, transform: 'translateY(24px)' },
-       { opacity: 1, transform: 'translateY(0)' }],
-      { duration: 2400, easing: 'ease-out', fill: 'both' }
-    );
-- 建议总时长 ~2400ms，fill 用 'both' 或 'forwards'，保证末帧稳定（视频尾帧才干净）。
-- 如需逐字错峰，可把 content 内文本节点拆成 inline-block 的 <span> 再逐个 animate，每个 span 用 delay 错峰；末帧 opacity 必须 = 1，否则字符会消失。
+【两种推荐写法，按效果复杂度二选一】
+
+写法 A —— 整体动画（简单，推荐优先）：
+\`\`\`js
+return content.animate(
+  [{ opacity: 0, transform: 'translateY(24px)' },
+   { opacity: 1, transform: 'translateY(0)' }],
+  { duration: 2400, easing: 'cubic-bezier(0.22,1,0.36,1)', fill: 'both' }
+);
+\`\`\`
+
+写法 B —— 逐字错峰（复杂，务必照抄"占位 controller"结构）：
+  原理：用 TreeWalker 收集 content 里所有【文本节点】，把每个文本节点的字符替换成 inline-block
+  的 <span>（只动这个文本节点、不动其它元素），对每个 span 调 element.animate() 错峰播放；
+  最后在 content 上播一个【总时长 = 各字动画的总时长】的"占位 controller" Animation 并 return 它。
+  （这个 controller 不产生视觉效果，只是为了让工具有一个可控的总 Animation；视频导出按它的
+   currentTime 判结束。绝不要尝试用 GroupEffect 合并——那个 API 不存在。）
+\`\`\`js
+// 1) 收集 content 内所有文本节点（不动装饰元素/作者落款的结构）
+const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, {
+  acceptNode: (n) => n.textContent && n.textContent.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT,
+});
+const textNodes = [];
+let tn;
+while ((tn = walker.nextNode())) textNodes.push(tn);
+// 2) 把每个文本节点就地替换成逐字 span（保持父元素与样式不变）
+const spans = [];
+for (const node of textNodes) {
+  const parent = node.parentNode;
+  for (const ch of Array.from(node.textContent)) {
+    const s = document.createElement('span');
+    s.textContent = ch === ' ' ? '\\u00A0' : ch; // 空格用不换行空格，防 inline-block 间空白折叠
+    s.style.display = 'inline-block';
+    s.style.opacity = '0';
+    parent.insertBefore(s, node);
+    spans.push(s);
+  }
+  parent.removeChild(node);
+}
+// 3) 逐字错峰播放（末帧 opacity 必须 = 1，否则字符消失）
+const perChar = 1400;
+const step = 45;
+spans.forEach((s, i) => s.animate(
+  [{ opacity: 0, transform: 'translateY(-20px)' },
+   { opacity: 1, transform: 'translateY(0)' }],
+  { duration: perChar, delay: i * step, fill: 'forwards', easing: 'cubic-bezier(0.22,1,0.36,1)' }
+));
+// 4) 占位 controller：总时长 = 最后一字播完的时间，return 它供工具控制
+const total = perChar + Math.max(0, spans.length - 1) * step;
+return content.animate([{ opacity: 1 }, { opacity: 1 }],
+  { duration: Math.min(2400, Math.max(total, 2400)), fill: 'both' });
+\`\`\`
+
+其它技术要点：
+- 建议总时长 ~2400ms，fill 用 'both'/'forwards'，末帧稳定（视频尾帧才干净）。
 - 缓动用 cubic-bezier(0.22,1,0.36,1) 之类，整体观感更顺滑。
-- 适配 prefers-reduced-motion 不是必须的（工具会兜底），但加分。
 - 不要用 CSS @keyframes（无法被视频导出精确控时）。只用 element.animate()。
 
 【输出格式】
-直接给出可粘贴的代码块（用 \`\`\`js 包裹），不要多余解释。函数体里以 return content.animate(...) 结尾。
-示例输出形如：
-\`\`\`js
-return content.animate([...], {...});
-\`\`\`
-
-【安全边界】
-这段代码只在我自己的浏览器里运行，不联网、不上传任何数据。`;
+直接给出可粘贴的代码块（用 \`\`\`js 包裹），不要多余解释，不要复述上面的约定。`;
 }
