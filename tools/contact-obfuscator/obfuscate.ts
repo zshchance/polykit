@@ -199,6 +199,25 @@ function toRoman(n: number): string {
 const SEGMENT_SPLIT_RE = /([,，\s、；;]+)/;
 
 /**
+ * 邮箱 @ 符号替换：把邮箱地址里的 @ 替换成邮箱相关 emoji。
+ * 只替换「邮箱格式」的 @（前后是字母/数字），避免误伤 @用户名、代码装饰器等。
+ * 机器靠 @ 的正则（\S+@\S+\.\S+）识别邮箱，替换后正则失效。
+ */
+const AT_EMOJIS: readonly string[] = ['📧', '✉️', '💌', '📨', '📮'];
+/** 匹配邮箱格式的 @：前一位是字母/数字/下划线，后一位也是（确保是邮箱不是 @昵称） */
+const EMAIL_AT_RE = /([a-zA-Z0-9_])@([a-zA-Z0-9])/g;
+
+/** 把邮箱里的 @ 替换成随机 emoji，返回替换次数 */
+function replaceEmailAt(text: string): { text: string; count: number } {
+  let count = 0;
+  const result = text.replace(EMAIL_AT_RE, (_m, before: string, after: string) => {
+    count++;
+    return before + securePick(AT_EMOJIS) + after;
+  });
+  return { text: result, count };
+}
+
+/**
  * 同形字映射：拉丁字母 → 视觉上几乎一样的西里尔/希腊字母。
  * 机器按 ASCII 码点匹配会失败（码点完全不同），人眼几乎看不出差别。
  */
@@ -232,6 +251,12 @@ export function obfuscate(input: string, opts: ObfuscateOptions): ObfuscateResul
   const { text: disguisedText, count: disguiseCount } = applyKeywordDisguise(input);
   sourceText = disguisedText;
   if (disguiseCount > 0) applied.push('敏感词伪装');
+
+  // —— 邮箱 @ 符号替换（强制层）：把邮箱地址里的 @ 替换成 emoji，
+  //    让 \S+@\S+\.\S+ 这类邮箱正则失效。只匹配邮箱格式的 @。
+  const { text: atReplacedText, count: atCount } = replaceEmailAt(sourceText);
+  sourceText = atReplacedText;
+  if (atCount > 0) applied.push('邮箱@替换');
 
   const codePoints = Array.from(sourceText); // 正确按 Unicode 码点拆分（含 emoji 不被拆碎）
   const out: string[] = [];
@@ -436,6 +461,9 @@ function buildNote(applied: string[]): string {
   }
   if (applied.includes('敏感词伪装')) {
     hints.push('电话/微信/邮箱/QQ 等关键词已替换为 emoji 或反写或夹乱码，请还原原词');
+  }
+  if (applied.includes('邮箱@替换')) {
+    hints.push('邮箱地址中的 @ 已替换为 emoji（📧/✉️/💌 等），请还原为 @');
   }
 
   if (hints.length === 0) return '';
