@@ -24,24 +24,27 @@ export const dark: CardTemplate = {
         style: `font-size:${long ? 80 : 120}px;line-height:1;color:#d4af37;font-family:Georgia,serif;margin-bottom:${long ? 16 : 24}px;`,
         textContent: '\u201C',
       }),
-      // 名言（字号随长度自适应 + 断词安全网）
+      // 名言（字号随长度自适应 + 断词安全网）。
+      // max-width 用百分比而非固定 px：固定 900px 在横版宽画板（如 16:9 = 1920×1080）上
+      // 会把文本挤窄、被迫换更多行、总高超过画板高度，导致底部出处被 overflow:hidden 裁掉。
+      // 百分比让正文随画板宽度自适应，横版时充分利用宽度、减少行数。
       h('div', {
-        style: `font-size:${fontSize}px;line-height:1.5;font-weight:500;max-width:900px;word-break:break-word;overflow-wrap:anywhere;`,
+        style: `font-size:${fontSize}px;line-height:1.5;font-weight:500;max-width:92%;word-break:break-word;overflow-wrap:anywhere;`,
         textContent: quote.text,
       }),
       // 金色分隔点（长文本时收紧间距）
       h('div', {
-        style: `margin:${long ? '24px 0 16px' : '48px 0 24px'};font-size:32px;color:#d4af37;letter-spacing:12px;`,
+        style: `margin:${long ? '20px 0 12px' : '40px 0 20px'};font-size:32px;color:#d4af37;letter-spacing:12px;`,
         textContent: '• • •',
       }),
       // 作者
       h('div', {
-        style: 'font-size:32px;color:#d4af37;font-weight:600;',
+        style: 'font-size:32px;color:#d4af37;font-weight:600;max-width:92%;word-break:break-word;overflow-wrap:anywhere;',
         textContent: quote.author,
       }),
       ...(quote.source
         ? [h('div', {
-            style: 'margin-top:12px;font-size:24px;color:#94a3b8;',
+            style: 'margin-top:10px;font-size:24px;color:#94a3b8;max-width:92%;word-break:break-word;overflow-wrap:anywhere;',
             textContent: quote.source,
           })]
         : []),

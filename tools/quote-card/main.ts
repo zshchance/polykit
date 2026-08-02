@@ -4,8 +4,8 @@ import { renderToolLayout } from '@/core/components/ToolLayout';
 import { initTheme } from '@/core/components/ThemeToggle';
 import { on } from '@/core/utils/dom';
 import { searchQuotes, getRandomQuote, getQuoteCount, type QuoteRecord } from './data/quotes';
-import { templates, defaultTemplate, getTemplate } from './templates';
-import type { QuoteData } from './templates/types';
+import { defaultTemplate, getTemplate, getEffectiveTemplates, setCustomTemplateProvider } from './templates';
+import type { QuoteData, CardTemplate } from './templates/types';
 import { renderCard } from './card';
 import { downloadCard, safeFilename } from './export';
 import {
@@ -29,6 +29,16 @@ import {
   isCustomAnimId,
   buildAIPrompt,
 } from './custom-animations';
+import {
+  loadCustomTemplates,
+  addCustomTemplate,
+  removeCustomTemplate,
+  dryRunCheck as dryRunTemplateCheck,
+  parseTemplateAIOutput,
+  toCardTemplate,
+  isCustomTemplateId,
+  buildTemplatePrompt,
+} from './custom-templates';
 import { createCopyButton } from '@/core/components/CopyButton';
 import { exportVideo, finishAllAnimations, VIDEO_RESOLUTIONS, getVideoResolution, type VideoResId, VIDEO_FPS, getVideoFps, type VideoFpsId } from './video-export';
 
@@ -50,6 +60,12 @@ function renderQuoteCard() {
   // 上次选的自定义 animId 会被判非法、回退淡入。provider 每次调用读 localStorage，
   // 增删自定义效果后实时反映。这层间接是为了打破 animations ↔ custom-animations 的 ESM 循环依赖。
   setCustomAnimProvider(() => loadCustomAnims().map(toAnimEffect));
+
+  // —— 自定义模板：同样先注入 provider 再读草稿 ——
+  // 必须在 loadDraft() 之前接好：草稿校验 templateId 时用 isValidTemplateId，
+  // 它查 getEffectiveTemplates() → 依赖此 provider 能读出自定义模板。否则刷新后
+  // 上次选的自定义 templateId 会被判非法、回退默认。与动画侧 provider 完全对称。
+  setCustomTemplateProvider(() => loadCustomTemplates().map(toCardTemplate));
 
   // —— 状态 ——
   // 启动时恢复上次编辑的草稿（内容/落款/出处/模板/宽高比/动画），无草稿则用默认值
@@ -136,9 +152,13 @@ function renderQuoteCard() {
   // 画板外层容器（决定显示宽度，承载缩放后的画板）
   const cardStage = h('div', { class: 'w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]' }, [cardEl]);
 
-  // 模板选择器
-  const templateButtons = templates.map((t) =>
-    h('button', {
+  // 模板选择器（4 列缩略图网格 + 右上角 💡 AI 生成 + 自定义项 ✕ 删除）
+  // 与动画选择器交互对称，但保留缩略图网格（模板风格靠色块预览最直观，折叠成文字按钮会丢这个价值）。
+  // 自定义模板由 AI 生成、存 localStorage，通过 getEffectiveTemplates() 与内置模板合并。
+  const templateGrid = h('div', { class: 'grid grid-cols-4 gap-2' });
+
+  function makeTemplateButton(t: CardTemplate): HTMLElement {
+    const btn = h('button', {
       type: 'button',
       'data-tpl': t.id,
       class: [
@@ -166,12 +186,46 @@ function renderQuoteCard() {
         }),
       ]),
       h('span', { class: 'text-xs text-[var(--fg-muted)]', textContent: t.name }),
-    ]),
-  );
-  const templateSelector = h('div', { class: 'grid grid-cols-4 gap-2' }, templateButtons);
+    ]);
+
+    // 自定义模板：右下角挂 ✕ 删除（阻止冒泡以免触发选择）
+    if (isCustomTemplateId(t.id)) {
+      const del = h('button', {
+        type: 'button',
+        'aria-label': `删除自定义模板 ${t.name}`,
+        title: '删除此自定义模板',
+        class:
+          'absolute -right-1.5 -bottom-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-[11px] leading-none text-[var(--fg-muted)] hover:bg-red-500/15 hover:text-red-500 transition-colors',
+        textContent: '✕',
+        onclick: (e: Event) => {
+          e.stopPropagation();
+          const name = t.name;
+          if (!confirm(`确定删除${name}吗？此操作不可撤销。`)) return;
+          removeCustomTemplate(t.id);
+          // 若删的是当前选中，回退默认模板
+          if (state.templateId === t.id) {
+            state.templateId = defaultTemplate.id;
+            rerenderCard();
+            persistDraft();
+          }
+          rebuildTemplateGrid();
+        },
+      });
+      return h('div', { class: 'relative' }, [btn, del]);
+    }
+    return btn;
+  }
+
+  function rebuildTemplateGrid(): void {
+    templateGrid.replaceChildren(...getEffectiveTemplates().map(makeTemplateButton));
+    updateTemplateSelection();
+  }
 
   function updateTemplateSelection(): void {
-    for (const btn of templateButtons) {
+    for (const child of Array.from(templateGrid.children)) {
+      // 容器可能是 div.relative(可删除) 或 button(普通)，取其内首个/自身 button 判态
+      const btn = (child.tagName === 'BUTTON' ? child : child.querySelector('button[data-tpl]')) as HTMLElement | null;
+      if (!btn) continue;
       const isActive = btn.getAttribute('data-tpl') === state.templateId;
       btn.className = [
         'flex', 'flex-col', 'items-center', 'gap-1.5', 'rounded-lg', 'border-2', 'p-2', 'transition-all',
@@ -179,6 +233,28 @@ function renderQuoteCard() {
       ].join(' ');
     }
   }
+
+  rebuildTemplateGrid();
+
+  // 💡 按钮：点开「描述→生成提示词→粘 AI 代码→保存」三步合一的模态（与动画 💡 对称）
+  const helpTplBtn = h('button', {
+    type: 'button',
+    title: '用 AI 生成自定义模板：描述风格 → 生成提示词 → 粘贴 AI 返回的代码 → 保存',
+    'aria-label': '用 AI 生成自定义模板',
+    class:
+      'inline-flex shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+    textContent: '💡',
+    onclick: () => openTemplateDialog(),
+  });
+
+  // 模板选择器外层（标题行「模板」+ 💡，下方网格）
+  const templateSelector = h('div', { class: 'space-y-2' }, [
+    h('div', { class: 'flex items-center justify-between' }, [
+      h('span', { class: 'text-xs font-medium text-[var(--fg-muted)]', textContent: '模板' }),
+      helpTplBtn,
+    ]),
+    templateGrid,
+  ]);
 
   // —— 可折叠选择器构造器（宽高比 / 动画效果共用，默认折叠让界面更干净）——
   // 头部按钮显示「标签：当前选中名」，点击展开/收起选项区。
@@ -372,13 +448,23 @@ function renderQuoteCard() {
 
   /** 通用浮层壳：遮罩 + 居中卡片 + Esc/点遮罩关闭。card 由调用方构建。 */
   function mountDialog(card: HTMLElement): HTMLElement {
+    // overlay 用 overflow-y-auto 而非纯 flex 居中：小屏（尤其手机）上模态内容比视口高时，
+    // 纯居中会把卡片上下都裁掉且无法滚动，底部的「保存并应用」按钮点不到。
+    // 改成可滚动容器 + 内容顶部对齐，短屏能下滑看到底部按钮，长屏仍居中（my-auto）。
     const overlay = h('div', {
-      class: 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4',
+      class: 'fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4',
       onclick: (e: Event) => {
-        if (e.target === overlay) closeDialog();
+        // 点遮罩空白处（overlay 本身或 wrap 容器，非卡片）关闭
+        if (e.target === overlay || e.target === wrap) closeDialog();
       },
     });
-    overlay.append(card);
+    // 包一层容器：my-auto 让卡片在内容比视口短时垂直居中、比视口高时从顶部开始
+    // （margin:auto 在内容溢出时会塌缩为 0，于是卡片贴顶、向下溢出部分可滚动）。
+    // 这是「短屏居中 / 长屏可滚」两全的稳健写法，比 items-center 更可靠
+    // （items-center 在内容高于容器时会把顶部溢出裁掉、滚不到）。
+    const wrap = h('div', { class: 'flex min-h-full justify-center' }, [card]);
+    card.classList.add('my-auto');
+    overlay.append(wrap);
     document.body.append(overlay);
     document.body.style.overflow = 'hidden';
     document.addEventListener('keydown', onDialogEsc);
@@ -567,7 +653,174 @@ function renderQuoteCard() {
     requestAnimationFrame(() => descInput.focus());
   }
 
-  // —— 视频分辨率选择器（折叠，仅影响视频导出）——
+  // ────────── 💡 AI 生成自定义模板（三步合一模态，与动画模态对称）──────────
+  // 流程同动画：① 描述想要的风格 → ② 生成提示词（可复制给 ChatGPT/豆包等）
+  // → ③ 粘贴 AI 返回的代码（首三行注释声明名称/背景/图标色）→ 保存即在选择器出现并应用。
+  // dryRun 在离屏 1080×1080 容器上试渲染，校验产出可见内容 + svg 非空 + 无越界操作。
+  function openTemplateDialog(): void {
+    if (dialogEl) closeDialog();
+
+    const statusRow = h('div', { class: 'min-h-[1.25rem] text-xs' });
+    function flashError(msg: string): void {
+      statusRow.textContent = '⚠ ' + msg;
+      statusRow.style.color = 'var(--holiday-legal)';
+    }
+    function flashOk(msg: string): void {
+      statusRow.textContent = '✓ ' + msg;
+      statusRow.style.color = '#22c55e';
+    }
+
+    // —— 步骤 1：描述想要的风格 ——
+    const descInput = h('textarea', {
+      class:
+        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      rows: 3,
+      'aria-label': '想要的卡片风格描述',
+      placeholder: '描述你想要的卡片风格，例如：深蓝星空背景，金色衬线大字，右下角一个抽象山脉 SVG 轮廓，整体高级沉稳；或：莫兰迪色系纸质感，手写体，左上角一束淡彩 SVG 花纹。',
+    }) as HTMLTextAreaElement;
+
+    // —— 步骤 2：生成的提示词 ——
+    const promptArea = h('textarea', {
+      class:
+        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 font-mono text-[12px] leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      rows: 10,
+      readonly: true,
+      'aria-label': '生成的 AI 提示词',
+    }) as HTMLTextAreaElement;
+    const step2 = h('div', { class: 'hidden space-y-2' }, [
+      h('p', {
+        class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
+        textContent: '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，AI 会返回一段「名称 + 背景 + 图标色 + 代码」。把 AI 的整段回复粘到下面框里，点保存即可。',
+      }),
+      promptArea,
+      h('div', { class: 'flex items-center justify-end' }, [
+        createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
+      ]),
+    ]);
+
+    // —— 步骤 3：粘贴 AI 返回的代码 + 保存 ——
+    const pasteInput = h('textarea', {
+      class:
+        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 font-mono text-[12px] leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      rows: 10,
+      spellcheck: false,
+      'aria-label': '粘贴 AI 返回的代码（含名称/背景/图标色注释）',
+      placeholder: '把 AI 的整段回复粘到这里（代码块首三行形如「// 名称：星河」「// 背景：...」「// 图标色：...」，后面是 ```js 代码）。工具会自动识别并生成缩略图。',
+    }) as HTMLTextAreaElement;
+    const step3 = h('div', { class: 'hidden space-y-2' }, [
+      h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '③ 粘贴 AI 返回的代码（含名称/背景/图标色注释）' }),
+      pasteInput,
+      h('div', { class: 'flex items-center justify-end gap-2' }, [
+        h('button', {
+          type: 'button',
+          class: 'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors',
+          textContent: '取消',
+          onclick: closeDialog,
+        }),
+        h('button', {
+          type: 'button',
+          class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+          textContent: '保存并应用',
+          onclick: save,
+        }),
+      ]),
+    ]);
+
+    function generate(): void {
+      const desc = descInput.value.trim();
+      if (!desc) {
+        flashError('请先描述你想要的风格。');
+        descInput.focus();
+        return;
+      }
+      flashError('');
+      promptArea.value = buildTemplatePrompt(desc);
+      step2.classList.remove('hidden');
+      step3.classList.remove('hidden');
+      promptArea.scrollTop = 0;
+    }
+
+    function save(): void {
+      const parsed = parseTemplateAIOutput(pasteInput.value);
+      if (!parsed.name) {
+        flashError('没识别到名称——AI 返回的代码块首行应是「// 名称：星河」这样的注释。');
+        pasteInput.focus();
+        return;
+      }
+      if (!parsed.code) {
+        flashError('没识别到代码——请把 AI 的整段回复（含 ```js 代码块）粘进来。');
+        pasteInput.focus();
+        return;
+      }
+      // dryRun：在离屏 1080×1080 容器上试渲染（须挂载到文档，svg 才有真实 boundingBox）
+      const sandbox = h('div', {
+        style: 'position:fixed;left:-99999px;top:0;width:1080px;height:1080px;box-sizing:border-box;',
+      });
+      document.body.append(sandbox);
+      let check: { ok: boolean; reason?: string };
+      try {
+        check = dryRunTemplateCheck(parsed.code, sandbox, state.quote);
+      } finally {
+        sandbox.remove();
+      }
+      if (!check.ok) {
+        flashError(check.reason ?? '代码有问题，无法保存。');
+        return;
+      }
+      const list = addCustomTemplate(parsed.name, parsed.code, parsed.background, parsed.iconColor);
+      const saved = list.find((it) => it.name.trim() === parsed.name)!;
+      state.templateId = saved.id;
+      rebuildTemplateGrid();
+      rerenderCard(); // 立即应用新模板
+      persistDraft();
+      flashOk(`已保存「${parsed.name}」并应用，关闭后即可看到效果。`);
+      setTimeout(closeDialog, 700);
+    }
+
+    const card = h('div', {
+      role: 'dialog',
+      'aria-modal': 'true',
+      'aria-label': '用 AI 生成自定义模板',
+      class:
+        'w-[min(92vw,42rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
+    }, [
+      h('div', { class: 'mb-1 flex items-center justify-between gap-2' }, [
+        h('span', { class: 'text-sm font-semibold text-[var(--fg)]', textContent: '💡 用 AI 生成自定义模板' }),
+        h('button', {
+          type: 'button',
+          'aria-label': '关闭',
+          class: 'text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors',
+          textContent: '✕',
+          onclick: closeDialog,
+        }),
+      ]),
+      h('div', { class: 'mt-2 space-y-2' }, [
+        h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '① 描述你想要的风格' }),
+        descInput,
+        h('div', { class: 'flex items-center justify-end' }, [
+          h('button', {
+            type: 'button',
+            class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+            textContent: '生成 AI 提示词',
+            onclick: generate,
+          }),
+        ]),
+      ]),
+      h('div', { class: 'mt-3' }, [
+        h('label', { class: 'mb-1 block text-xs font-medium text-[var(--fg-muted)]', textContent: '② 复制提示词给 AI' }),
+        step2,
+      ]),
+      step3,
+      statusRow,
+      h('p', {
+        class: 'mt-3 text-center text-[11px] text-[var(--fg-muted)]',
+        textContent: '数据不出本地 · 代码仅在你自己的浏览器运行 · 支持 AI 内嵌 SVG 图形',
+      }),
+    ]);
+
+    dialogEl = mountDialog(card);
+    requestAnimationFrame(() => descInput.focus());
+  }
   const videoResSelect = collapsibleSelect(
     '视频清晰度',
     VIDEO_RESOLUTIONS.map((r) => ({ id: r.id, name: r.name })),
@@ -671,14 +924,11 @@ function renderQuoteCard() {
   const exportRow = h('div', { class: 'flex gap-2' }, [downloadImgBtn, downloadVideoBtn]);
 
   // 预览列：移动端置顶（order-first），桌面端在右（order 重置为 0）。
-  // 模板仍是网格（视觉重要、常用）；宽高比/动画用折叠选择器，界面更干净。
+  // 模板仍是网格（视觉重要、常用，自带标题行 + 💡 AI 生成按钮）；宽高比/动画用折叠选择器，界面更干净。
   const previewCol = h('div', { class: 'space-y-4 min-w-0 order-first lg:order-none lg:sticky lg:top-6' }, [
     cardStage,
-    // 模板（常用，保持展开网格）
-    h('div', { class: 'space-y-2' }, [
-      h('span', { class: 'text-xs font-medium text-[var(--fg-muted)]', textContent: '模板' }),
-      templateSelector,
-    ]),
+    // 模板（常用，保持展开网格；templateSelector 内含标题行「模板」+ 💡 + 网格）
+    templateSelector,
     // 宽高比（折叠）
     aspectSelect.el,
     // 动画效果（折叠）

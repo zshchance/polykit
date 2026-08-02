@@ -33,10 +33,11 @@ export const gradient: CardTemplate = {
         style: `font-size:${fontSize}px;line-height:1.4;font-weight:700;letter-spacing:1px;position:relative;text-shadow:0 2px 12px rgba(0,0,0,0.15);word-break:break-word;overflow-wrap:anywhere;`,
         textContent: quote.text,
       }),
-      // 作者胶囊（用半透明背景模拟毛玻璃，避免 backdrop-filter 导致导出极慢/失败）
+      // 作者胶囊（用半透明背景模拟毛玻璃，避免 backdrop-filter 导致导出极慢/失败）。
+      // 出处 source 一并拼进胶囊——和极简模板一样不漏出处。
       h('div', {
         style: `margin-top:${long ? 28 : 48}px;display:inline-block;align-self:flex-start;background:rgba(255,255,255,0.28);padding:14px 28px;border-radius:999px;font-size:28px;font-weight:500;position:relative;border:1px solid rgba(255,255,255,0.35);`,
-        textContent: quote.author,
+        textContent: quote.source ? `${quote.author} · ${quote.source}` : quote.author,
       }),
     );
   },

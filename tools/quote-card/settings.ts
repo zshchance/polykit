@@ -15,6 +15,7 @@
 import { isValidAspectId, type AspectId } from './aspect';
 import { isValidAnimId } from './animations';
 import { isValidVideoResId, type VideoResId, isValidVideoFpsId, type VideoFpsId } from './video-export';
+import { isValidTemplateId, defaultTemplate } from './templates';
 
 const STORAGE_KEY = 'quote-card:draft';
 const CURRENT_VERSION = 4;
@@ -57,12 +58,15 @@ export function loadDraft(): QuoteDraft | null {
     if (typeof d.text !== 'string' || typeof d.author !== 'string' || typeof d.templateId !== 'string') return null;
     if (d.text.length === 0 && d.author.length === 0) return null; // 全空视为无草稿
     const source = typeof d.source === 'string' ? d.source : undefined;
+    // templateId 校验合法性（内置 + 自定义合并列表里存在）；非法（如删除的自定义模板）
+    // 回退默认模板。与 animId 的 isValidAnimId 行为一致。
+    const templateId = isValidTemplateId(d.templateId) ? d.templateId : defaultTemplate.id;
     // aspectId / animId / videoRes / videoFps 仅在合法时保留，否则留空（调用方用默认）
     const aspectId = isValidAspectId(d.aspectId) ? d.aspectId : undefined;
     const animId = isValidAnimId(d.animId) ? d.animId : undefined;
     const videoRes = isValidVideoResId(d.videoRes) ? d.videoRes : undefined;
     const videoFps = isValidVideoFpsId(d.videoFps) ? d.videoFps : undefined;
-    return { text: d.text, author: d.author, source, templateId: d.templateId, aspectId, animId, videoRes, videoFps };
+    return { text: d.text, author: d.author, source, templateId, aspectId, animId, videoRes, videoFps };
   } catch {
     return null;
   }
