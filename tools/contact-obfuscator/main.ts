@@ -11,6 +11,7 @@ import {
   type ObfuscateOptions,
   type ObfuscateResult,
 } from './obfuscate';
+import { buildDecodePrompt, HINT_SUFFIX } from './ai-prompt';
 import { loadOptions, saveOptions } from './settings';
 import {
   loadHistory,
@@ -39,7 +40,7 @@ function renderObfuscator() {
   const intro = h('p', {
     class: 'text-sm leading-relaxed text-[var(--fg-muted)]',
     textContent:
-      '把手机号 / 微信 / QQ / 邮箱等联系方式经多层随机字符变换，让机器正则识别失效、对人仍可读。一次生成多条候选，挑满意的复制。所有数据仅在浏览器处理，不上传。',
+      '把手机号 / 微信 / QQ / 邮箱等联系方式经多层随机字符变换，让机器正则识别失效、对人仍可读。生成的文本附带 AI 还原暗示，接收方可借助 AI 还原原联系方式。一次生成多条候选，挑满意的复制。所有数据仅在浏览器处理，不上传。',
   });
   const disclaimer = h('p', {
     class:
@@ -182,6 +183,66 @@ function renderObfuscator() {
     onclick: generate,
   });
 
+  // ════════════════════════════════════════════════════════════
+  // 💡 AI 还原提示词：根据当前开关动态生成，供接收方用 AI 还原原文
+  // ════════════════════════════════════════════════════════════
+  /** prompt 展示区（点💡后展开，默认隐藏） */
+  const promptArea = h('textarea', {
+    class:
+      'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 font-mono text-[12px] leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)] transition-colors',
+    rows: 8,
+    readonly: true,
+    'aria-label': 'AI 还原提示词',
+  }) as HTMLTextAreaElement;
+  const promptWrap = h('div', { class: 'space-y-2 hidden' }, [
+    h('p', {
+      class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
+      textContent:
+        '把这段提示词 + 变换后的文字一起发给豆包 / DeepSeek / ChatGPT，AI 会按规则还原出原始联系方式。改了设置请重新生成。',
+    }),
+    promptArea,
+    h('div', { class: 'flex items-center justify-end' }, [
+      createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
+    ]),
+  ]);
+  const aiPromptBtn = h('button', {
+    type: 'button',
+    class:
+      'w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-4 py-2 text-sm text-[var(--fg)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors',
+    textContent: '💡 生成 AI 还原提示词',
+    onclick: generateDecodePrompt,
+  });
+
+  /** 根据当前开关生成解密 prompt，展示在按钮下方 */
+  function generateDecodePrompt(): void {
+    const prompt = buildDecodePrompt(state);
+    if (!prompt) {
+      // 所有变换都关闭：无需还原
+      promptArea.value = '';
+      promptWrap.replaceChildren(
+        h('p', {
+          class: 'py-2 text-center text-sm text-[var(--fg-muted)]',
+          textContent: '当前未开启任何变换，原文无需还原提示词。',
+        }),
+      );
+    } else {
+      promptArea.value = prompt;
+      promptWrap.replaceChildren(
+        h('p', {
+          class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
+          textContent:
+            '把这段提示词 + 变换后的文字一起发给豆包 / DeepSeek / ChatGPT，AI 会按规则还原出原始联系方式。改了设置请重新生成。',
+        }),
+        promptArea,
+        h('div', { class: 'flex items-center justify-end' }, [
+          createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
+        ]),
+      );
+    }
+    promptWrap.classList.remove('hidden');
+    promptArea.scrollTop = 0;
+  }
+
   /** 候选结果容器（生成前隐藏） */
   const candidatesWrap = h('div', { class: 'space-y-2 hidden' }, []);
   const candidatesLabel = h('p', {
@@ -189,8 +250,10 @@ function renderObfuscator() {
     textContent: '候选结果（挑选满意的一条复制，复制即记入历史）',
   });
 
-  /** 渲染一条候选：文本 + note + 复制按钮 */
+  /** 渲染一条候选：文本 + note + 复制按钮（复制时追加 AI 暗示文案） */
   function renderCandidate(result: ObfuscateResult, index: number): HTMLElement {
+    // 完整文本 = 变换文本 + 暗示文案（复制和历史都存这份完整文本）
+    const fullText = result.text + HINT_SUFFIX;
     const textCode = h('code', {
       class: 'flex-1 break-all font-mono text-sm text-[var(--fg)]',
       textContent: result.text,
@@ -202,6 +265,11 @@ function renderObfuscator() {
           textContent: result.note,
         })
       : null;
+    // 提示用户复制会带 AI 暗示
+    const hintTip = h('p', {
+      class: 'mt-0.5 text-[11px] text-[var(--fg-muted)]/70',
+      textContent: '📋 复制时会自动附带「复制给 AI 可还原」的提示',
+    });
 
     return h(
       'div',
@@ -216,18 +284,19 @@ function renderObfuscator() {
             textContent: `${index + 1}`,
           }),
           textCode,
-          // 复制即入历史
+          // 复制即入历史（存完整文本，与复制一致）
           createCopyButton(() => {
             const items = addResult({
               input: inputArea.value,
-              output: result.text,
+              output: fullText,
               note: result.note,
             });
             renderHistory(items);
-            return result.text;
+            return fullText;
           }, '复制', '已复制 ✓'),
         ]),
         ...(noteEl ? [noteEl] : []),
+        hintTip,
       ],
     );
   }
@@ -412,6 +481,9 @@ function renderObfuscator() {
         presetRow,
       ]),
       generateBtn,
+      // 💡 AI 还原提示词
+      aiPromptBtn,
+      promptWrap,
       // 分隔
       h('div', { class: 'border-t border-[var(--border)]' }, []),
       // 候选结果
