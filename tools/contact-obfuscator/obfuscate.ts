@@ -512,7 +512,7 @@ export const DEFAULT_OPTIONS: ObfuscateOptions = {
   insertSymbol: true,
   visibleSeparator: true,
   emailObfuscate: true,
-  zeroWidth: false,
+  zeroWidth: true,
   homoglyph: false,
   leetReplace: false,
   digitToRoman: false,
@@ -521,7 +521,7 @@ export const DEFAULT_OPTIONS: ObfuscateOptions = {
   keywordDisguise: false,
 };
 
-/** 全部可见层开关 true、不可见层全 false（= DEFAULT_OPTIONS，预设内部复用别名） */
+/** 全部可见层开关 true（= DEFAULT_OPTIONS，预设内部复用别名） */
 const VISIBLE_ALL_ON: ObfuscateOptions = { ...DEFAULT_OPTIONS };
 
 export const PRESETS: Preset[] = [

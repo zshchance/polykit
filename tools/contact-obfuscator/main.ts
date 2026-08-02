@@ -116,6 +116,31 @@ function renderObfuscator() {
 
   const visibleGrid = h('div', { class: 'grid grid-cols-2 gap-2 sm:grid-cols-3' }, visibleSwitches);
 
+  // 可见变换：可收起面板（默认展开）
+  let visibleOpen = true;
+  const visibleToggleIndicator = h('span', { class: 'text-xs', textContent: '▼' });
+  const visibleBody = h('div', { class: 'space-y-2' }, [visibleGrid]);
+  const visibleHeader = h(
+    'button',
+    {
+      type: 'button',
+      class:
+        'flex w-full items-center justify-between rounded-md px-2 py-2 text-sm text-[var(--fg)] hover:bg-[var(--bg)] transition-colors',
+      'aria-expanded': 'true',
+      onclick: () => {
+        visibleOpen = !visibleOpen;
+        visibleBody.classList.toggle('hidden', !visibleOpen);
+        visibleHeader.setAttribute('aria-expanded', String(visibleOpen));
+        visibleToggleIndicator.textContent = visibleOpen ? '▼' : '▶';
+      },
+    },
+    [
+      h('span', { class: 'font-medium', textContent: '可见变换（稳健，能扛平台规范化）' }),
+      visibleToggleIndicator,
+    ],
+  );
+  const visibleSection = h('div', { class: 'space-y-1' }, [visibleHeader, visibleBody]);
+
   const invisibleWarning = h('p', {
     class: 'text-xs leading-relaxed text-amber-600 dark:text-amber-400',
     textContent:
@@ -126,11 +151,35 @@ function renderObfuscator() {
     { class: 'grid grid-cols-2 gap-2 sm:grid-cols-3' },
     invisibleSwitches,
   );
-  /** 不可见变换组容器（激进档及以上才显示） */
-  const invisibleSection = h('div', { class: 'space-y-2' }, [
-    h('p', { class: 'text-sm font-medium', textContent: '不可见变换（激进，可能被平台过滤）' }),
+  // 不可见变换：可收起面板（默认收起，不再随预设显隐）
+  let invisibleOpen = false;
+  const invisibleToggleIndicator = h('span', { class: 'text-xs', textContent: '▶' });
+  const invisibleBody = h('div', { class: 'space-y-2 hidden' }, [
     invisibleWarning,
     invisibleGrid,
+  ]);
+  const invisibleHeader = h(
+    'button',
+    {
+      type: 'button',
+      class:
+        'flex w-full items-center justify-between rounded-md px-2 py-2 text-sm text-[var(--fg)] hover:bg-[var(--bg)] transition-colors',
+      'aria-expanded': 'false',
+      onclick: () => {
+        invisibleOpen = !invisibleOpen;
+        invisibleBody.classList.toggle('hidden', !invisibleOpen);
+        invisibleHeader.setAttribute('aria-expanded', String(invisibleOpen));
+        invisibleToggleIndicator.textContent = invisibleOpen ? '▼' : '▶';
+      },
+    },
+    [
+      h('span', { class: 'font-medium', textContent: '不可见变换（激进，可能被平台过滤）' }),
+      invisibleToggleIndicator,
+    ],
+  );
+  const invisibleSection = h('div', { class: 'space-y-1' }, [
+    invisibleHeader,
+    invisibleBody,
   ]);
 
   const insaneWarning = h('p', {
@@ -147,18 +196,16 @@ function renderObfuscator() {
   ]);
 
   /**
-   * 按当前开关状态更新变换组的显隐（需求2）：
-   * - 不可见组：任一不可见开关开了（=激进及以上）才显示
+   * 按当前开关状态更新变态变换组的显隐：
    * - 变态组：任一变态开关开了（=变态档）才显示
+   * - 可见/不可见组已改为用户手动折叠，不再随预设或开关状态自动显隐
    */
   function updateGroupVisibility(): void {
-    const showInvisible = state.zeroWidth || state.homoglyph;
     const showInsane =
       state.leetReplace ||
       state.digitToRoman ||
       state.shuffleWords ||
       state.base64Encode;
-    invisibleSection.classList.toggle('hidden', !showInvisible);
     insaneSection.classList.toggle('hidden', !showInsane);
   }
 
@@ -499,15 +546,9 @@ function renderObfuscator() {
         }),
         inputArea,
       ]),
-      // 可见变换
-      h('div', { class: 'space-y-2' }, [
-        h('p', {
-          class: 'text-sm font-medium',
-          textContent: '可见变换（稳健，能扛平台规范化）',
-        }),
-        visibleGrid,
-      ]),
-      // 不可见变换（条件显示：激进档及以上）
+      // 可见变换（可收起面板）
+      visibleSection,
+      // 不可见变换（可收起面板，不再随预设显隐）
       invisibleSection,
       // 变态变换（条件显示：变态档）
       insaneSection,
