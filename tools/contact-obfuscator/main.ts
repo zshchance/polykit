@@ -82,6 +82,7 @@ function renderObfuscator() {
     { key: 'zeroWidth', label: '零宽字符', title: '穿插肉眼不可见的 Unicode 字符（可能被平台过滤）' },
     { key: 'homoglyph', label: '同形字替换', title: '拉丁字母替换为视觉相同的西里尔/希腊字母' },
     // 变态层（人难读、AI 易解）
+    { key: 'keywordDisguise', label: '敏感词伪装', title: '电话/微信/邮箱/QQ 等关键词替换成 emoji/反写/夹乱码' },
     { key: 'leetReplace', label: 'leet 替换', title: '字母转形近符号（a→@ e→3 o→0 等，AI 易还原）' },
     { key: 'digitToRoman', label: '数字转罗马/二进制', title: '数字串转罗马数字或二进制（138→CXXXVIII/10001010）' },
     { key: 'shuffleWords', label: '段序打乱+密集零宽', title: '段落顺序打乱、字符间密集插入零宽字符' },
@@ -153,7 +154,11 @@ function renderObfuscator() {
   function updateGroupVisibility(): void {
     const showInvisible = state.zeroWidth || state.homoglyph;
     const showInsane =
-      state.leetReplace || state.digitToRoman || state.shuffleWords || state.base64Encode;
+      state.keywordDisguise ||
+      state.leetReplace ||
+      state.digitToRoman ||
+      state.shuffleWords ||
+      state.base64Encode;
     invisibleSection.classList.toggle('hidden', !showInvisible);
     insaneSection.classList.toggle('hidden', !showInsane);
   }

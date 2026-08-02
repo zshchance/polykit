@@ -130,6 +130,9 @@ export function buildInlineRules(applied: string[]): string {
   if (applied.includes('二进制')) {
     rules.push('二进制转十进制');
   }
+  if (applied.includes('敏感词伪装')) {
+    rules.push('emoji/反写/夹码还原成电话/微信/邮箱/QQ等原词');
+  }
   // 清理干扰
   if (applied.includes('穿插汉字') || applied.includes('穿插表情') || applied.includes('穿插符号')) {
     rules.push('删穿插的符号/表情');
@@ -207,6 +210,9 @@ export function buildEncryptPrompt(input: string, opts: ObfuscateOptions): strin
   }
   if (opts.base64Encode) {
     techniques.push('最后把整段文本做 Base64 编码');
+  }
+  if (opts.keywordDisguise) {
+    techniques.push('把「电话/微信/邮箱/QQ」等敏感关键词替换成相关 emoji（如微信→💚）或反着写（如电话→话电）或中间夹符号（如邮箱→邮★箱）');
   }
 
   const techBlock = techniques.length > 0

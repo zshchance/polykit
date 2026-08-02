@@ -32,6 +32,7 @@ const OPTION_KEYS: (keyof ObfuscateOptions)[] = [
   'digitToRoman',
   'shuffleWords',
   'base64Encode',
+  'keywordDisguise',
 ];
 
 /** 读取记忆的选项；存储损坏/为空时返回默认值（可见层全开、不可见层全关） */

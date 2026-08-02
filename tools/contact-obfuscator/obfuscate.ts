@@ -49,6 +49,8 @@ export interface ObfuscateOptions {
   shuffleWords: boolean;
   /** 整段 Base64 编码（终态变换，最后一步） */
   base64Encode: boolean;
+  /** 敏感词伪装：把「电话/微信/邮箱/QQ」等关键词替换成表情/反写/夹乱码 */
+  keywordDisguise: boolean;
 }
 
 /** 单次变换结果 */
@@ -92,6 +94,77 @@ const SEPARATORS: readonly string[] = ['\u3000', '\t']; // 全角空格 / 制表
 const LEET_MAP: Readonly<Record<string, string>> = {
   a: '@', e: '3', i: '!', o: '0', s: '$', t: '7', l: '1', b: '8', g: '9',
 };
+
+/**
+ * 敏感联系方式关键词 → 伪装策略。
+ * 机器靠这些关键词识别「这里藏着联系方式」，所以把它们替换成
+ * 人能联想、但机器正则匹配不上的形态。
+ *
+ * 每个关键词对应多种伪装方式，运行时随机选一种：
+ * - emoji：用相关表情替代（微信→💚，人能联想到「加微信」）
+ * - reverse：反着写（电话→话电）
+ * - split：中间夹乱码（邮箱→邮★箱）
+ */
+interface KeywordDisguiseEntry {
+  /** 原始关键词（小写匹配，中文原样） */
+  keyword: string;
+  /** emoji 替代 */
+  emoji: string;
+}
+
+const KEYWORD_DISGUISES: readonly KeywordDisguiseEntry[] = [
+  { keyword: '微信', emoji: '💚' },
+  { keyword: '电话', emoji: '📞' },
+  { keyword: '手机', emoji: '📱' },
+  { keyword: '邮箱', emoji: '✉️' },
+  { keyword: 'qq', emoji: '🐧' },
+  { keyword: 'QQ', emoji: '🐧' },
+  { keyword: 'tel', emoji: '☎️' },
+  { keyword: 'Tel', emoji: '☎️' },
+  { keyword: 'email', emoji: '📧' },
+  { keyword: 'Email', emoji: '📧' },
+  { keyword: 'wx', emoji: '💚' },
+  { keyword: 'Wx', emoji: '💚' },
+  { keyword: 'WX', emoji: '💚' },
+];
+
+/** 伪装单个关键词：随机用 emoji / 反写 / 夹乱码三种方式之一 */
+function disguiseKeyword(keyword: string, emoji: string): string {
+  const mode = secureRandomInt(0, 2);
+  if (mode === 0) {
+    // emoji 替代
+    return emoji;
+  }
+  if (mode === 1) {
+    // 反着写（中文字符倒序；英文也倒序）
+    return Array.from(keyword).reverse().join('');
+  }
+  // 中间夹乱码符号
+  const chars = Array.from(keyword);
+  if (chars.length < 2) return keyword;
+  const mid = Math.floor(chars.length / 2);
+  const filler = securePick(SYMBOL_FILLERS);
+  return chars.slice(0, mid).join('') + filler + chars.slice(mid).join('');
+}
+
+/**
+ * 对整段文本做敏感词伪装：扫描所有关键词，每个命中随机伪装。
+ * 返回 { text, count } —— count 是伪装了几个关键词。
+ */
+function applyKeywordDisguise(text: string): { text: string; count: number } {
+  let result = text;
+  let count = 0;
+  // 按关键词长度降序处理（避免短词先匹配破坏长词，如「邮箱」含「邮」）
+  const sorted = [...KEYWORD_DISGUISES].sort((a, b) => b.keyword.length - a.keyword.length);
+  for (const entry of sorted) {
+    // 用 split+join 替换所有出现（不用正则避免特殊字符转义问题）
+    while (result.includes(entry.keyword)) {
+      result = result.replace(entry.keyword, disguiseKeyword(entry.keyword, entry.emoji));
+      count++;
+    }
+  }
+  return { text: result, count };
+}
 
 /** 罗马数字基本符号（1-10、50、100、500、1000） */
 const ROMAN_VALUES: readonly [number, string][] = [
@@ -140,14 +213,24 @@ function chance(percent: number): boolean {
  * 这是设计如此——用户每次点「生成」拿到 3 条不同候选挑最满意的。
  */
 export function obfuscate(input: string, opts: ObfuscateOptions): ObfuscateResult {
-  const codePoints = Array.from(input); // 正确按 Unicode 码点拆分（含 emoji 不被拆碎）
-  const out: string[] = [];
   /** 记录实际生效的变换，用于生成 note */
   const applied: string[] = [];
 
-  // —— 需求2：大小写混杂检测。若原文同时含大小写字母，说明用户原值就有大小写
+  // —— 敏感词伪装（变态层）：在字符级变换之前，先把「电话/微信/邮箱/QQ」
+  //    等关键词替换成 emoji/反写/夹乱码。必须最先做，否则后续变换会打散关键词。
+  let sourceText = input;
+  if (opts.keywordDisguise) {
+    const { text, count } = applyKeywordDisguise(input);
+    sourceText = text;
+    if (count > 0) applied.push('敏感词伪装');
+  }
+
+  const codePoints = Array.from(sourceText); // 正确按 Unicode 码点拆分（含 emoji 不被拆碎）
+  const out: string[] = [];
+
+  // —— 大小写混杂检测。若原文同时含大小写字母，说明用户原值就有大小写
   //    区分（如微信号 AbcDef），打乱会丢失信息 → 强制跳过 caseShuffle。
-  const hasMixedCase = /[a-z]/.test(input) && /[A-Z]/.test(input);
+  const hasMixedCase = /[a-z]/.test(sourceText) && /[A-Z]/.test(sourceText);
   const effectiveCaseShuffle = opts.caseShuffle && !hasMixedCase;
   if (opts.caseShuffle && hasMixedCase) {
     applied.push('大小写已保留');
@@ -343,6 +426,9 @@ function buildNote(applied: string[]): string {
   if (applied.includes('Base64编码')) {
     hints.push('整段已 Base64 编码，请先解码（atob）');
   }
+  if (applied.includes('敏感词伪装')) {
+    hints.push('电话/微信/邮箱/QQ 等关键词已替换为 emoji 或反写或夹乱码，请还原原词');
+  }
 
   if (hints.length === 0) return '';
   return '（' + hints.join('；') + '）';
@@ -378,6 +464,7 @@ export const DEFAULT_OPTIONS: ObfuscateOptions = {
   digitToRoman: false,
   shuffleWords: false,
   base64Encode: false,
+  keywordDisguise: false,
 };
 
 /** 全部可见层开关 true、不可见层全 false（= DEFAULT_OPTIONS，预设内部复用别名） */
@@ -401,6 +488,7 @@ export const PRESETS: Preset[] = [
       digitToRoman: false,
       shuffleWords: false,
       base64Encode: false,
+      keywordDisguise: false,
     },
   },
   {
@@ -422,7 +510,7 @@ export const PRESETS: Preset[] = [
   {
     id: 'insane',
     name: '变态',
-    hint: '人几乎看不懂，但 AI 按附带规则可精准还原（leet/罗马数字/Base64/打乱）',
+    hint: '人几乎看不懂，但 AI 按附带规则可精准还原（敏感词伪装/leet/罗马数字/打乱）',
     options: {
       ...VISIBLE_ALL_ON,
       zeroWidth: true,
@@ -430,7 +518,8 @@ export const PRESETS: Preset[] = [
       leetReplace: true,
       digitToRoman: true,
       shuffleWords: true,
-      base64Encode: true,
+      base64Encode: false,
+      keywordDisguise: true,
     },
   },
 ];
