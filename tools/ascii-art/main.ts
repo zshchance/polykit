@@ -27,7 +27,7 @@ import { imageToCells } from './render/image-to-cells';
 import { textToLogoCells } from './render/text-to-logo-cells';
 import { buildTerminalFrame } from './render/terminal-frame';
 import { serializeText } from './serialize/to-text';
-import { serializeHtml } from './serialize/to-html';
+import { buildStandaloneHtml } from './serialize/to-html';
 import { downloadPng, safeFilename } from './export';
 import {
   loadCustomStyles, addCustomStyle, removeCustomStyle,
@@ -147,13 +147,24 @@ function render() {
     if (!loadedImage) {
       currentCells = [];
       currentGridWidth = 0;
-      pre.textContent = '';
+      // 占位提示用固定大字号（不走字符画的 stageWidth/width 自适应公式，
+      // 否则默认 width=100 时字号仅 ~4px，提示文字看不清）
+      pre.style.fontSize = '18px';
+      pre.style.whiteSpace = 'pre-wrap';
+      pre.style.wordBreak = 'normal';
       pre.style.color = state.cfg.fg;
-      pre.style.opacity = '0.4';
-      pre.textContent = '↑ 上传一张图片，生成终端风字符画';
+      pre.style.opacity = '0.5';
+      pre.style.padding = '24px';
+      pre.style.textAlign = 'center';
+      pre.textContent = '等待上传图片';
       replaceFrame();
+      // 有图后会在下方恢复字符画的字号/对齐样式
       return;
     }
+    // 有图：恢复字符画渲染所需的严格排版样式
+    pre.style.padding = '';
+    pre.style.textAlign = '';
+    pre.style.opacity = '1';
     pre.style.opacity = '1';
 
     const token = ++renderToken;
@@ -607,8 +618,9 @@ function render() {
       contrastSlider.row.style.display = imgShow ? '' : 'none';
       brightnessSlider.row.style.display = imgShow ? '' : 'none';
       invertChk.row.style.display = imgShow ? '' : 'none';
-      // 彩色 HTML 按钮：仅图片模式（文字流纯文本/logo 都是单色，无彩色 HTML）
-      if (htmlCopyBtn) htmlCopyBtn.style.display = imgShow ? '' : 'none';
+      // 复制 HTML 按钮：图片模式 或 文字流 logo 模式（这两种都有终端外框 + 字符画）
+      const htmlShow = imgShow || state.textLogo;
+      if (htmlCopyBtn) htmlCopyBtn.style.display = htmlShow ? '' : 'none';
     }
 
     // 初始化
@@ -864,10 +876,16 @@ function render() {
     htmlCopyBtn = h('button', {
       type: 'button',
       class: 'inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg)] hover:opacity-80 transition-opacity',
-      title: '复制彩色 HTML（字符带色，不含外框）',
-      textContent: '复制彩色 HTML',
+      title: '复制完整 HTML 页面（含终端外框、配色、CRT 效果、字符画，粘到 .html 文件可直接打开）',
+      textContent: '复制 HTML',
       onclick: async () => {
-        const html = serializeHtml(currentCells);
+        // 从预览区取实际终端外框元素，生成完整独立 HTML 页面源码
+        const frame = frameWrap.firstElementChild as HTMLElement | null;
+        if (!frame) {
+          flash(htmlCopyBtn, '无内容可复制');
+          return;
+        }
+        const html = buildStandaloneHtml(frame);
         const ok = await copyRichHtml(html);
         flash(htmlCopyBtn, ok ? '已复制 ✓' : '复制失败');
       },
@@ -909,19 +927,28 @@ function render() {
     }, 1500);
   }
 
-  /** 复制富文本 HTML（保留颜色 span），用 ClipboardItem。失败回退纯文本。 */
+  /**
+   * 复制完整 HTML 页面源码到剪贴板。
+   * text/html 和 text/plain 都写同一份完整 HTML 源码（<!doctype>...</html>），
+   * 这样无论粘贴方读哪个 MIME，粘到空白 .html 文件 / 记事本 / 编辑器，
+   * 都得到完整页面源码，保存为 .html 打开即可预览完整终端页面。
+   * ClipboardItem 不可用时回退 execCommand 复制纯文本（同样是 HTML 源码）。
+   */
   async function copyRichHtml(html: string): Promise<boolean> {
     try {
       if (navigator.clipboard && window.ClipboardItem) {
-        const blob = new Blob([html], { type: 'text/html' });
-        await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
+        const htmlBlob = new Blob([html], { type: 'text/html' });
+        const plainBlob = new Blob([html], { type: 'text/plain' });
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': plainBlob }),
+        ]);
         return true;
       }
     } catch {
       // 回退
     }
-    // 回退：复制去掉标签的纯文本
-    return copyText(html.replace(/<[^>]+>/g, ''));
+    // 回退：execCommand 复制（内容同样是完整 HTML 源码）
+    return copyText(html);
   }
 }
 
