@@ -73,6 +73,12 @@ function render() {
     textLogo: restored.textLogo,
     logoSize: restored.logoSize,
   };
+  // 首次访问（无保存配置）时，图片模式默认关闭辉光（默认复古预设带辉光，用户反馈过亮）
+  // 有保存配置则尊重用户之前的选择，不覆盖
+  const isFirstVisit = !localStorage.getItem('ascii-art:cfg');
+  if (isFirstVisit && state.mode === 'image') {
+    state.cfg.crtGlow = false;
+  }
   let loadedImage: LoadedImage | null = null;
   let currentCells: Rendered = []; // 图片/logo 模式最新渲染结果（供复制用）
   let renderToken = 0; // 防抖/竞态
@@ -283,12 +289,18 @@ function render() {
     controls,
     actions,
   ]);
-  const previewCol = h('div', { class: 'space-y-3 min-w-0 order-first lg:order-none lg:sticky lg:top-6' }, [
+  // 预览区：始终 sticky 吸顶。
+  //   大屏：右侧悬浮（lg:top-6），滚动参数区时预览始终可见。
+  //   小屏：顶部吸顶（top-0），预览区最高不超过可视区域一半（50vh）+ 内部滚动，
+  //         下方参数区始终可见可操作。
+  const previewCol = h('div', {
+    class: 'space-y-3 min-w-0 order-first lg:order-none sticky top-0 lg:top-6 z-10 bg-[var(--bg)] py-2 max-h-[50vh] lg:max-h-none overflow-auto lg:overflow-visible',
+  }, [
     h('div', { class: 'text-sm font-medium text-[var(--fg)]' }, ['预览']),
     stage,
   ]);
   const layout = h('div', {
-    class: 'grid gap-6 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)]',
+    class: 'grid gap-6 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] items-start',
   }, [inputCol, previewCol]);
 
   content.append(layout);
@@ -303,6 +315,8 @@ function render() {
 
   // —— 控制面板 ——
   function buildControls(): HTMLElement {
+    // 控制面板根元素引用（updateModeVisibility 通过它查 details 做显隐，下方 return 时赋值）
+    let controlsEl: HTMLElement;
     // Tab：图片 / 文字流
     const tabImage = h('button', {
       type: 'button',
@@ -493,6 +507,16 @@ function render() {
     // 字符集
     const charsetSel = select('字符集', CHARSET_PRESETS.map((c) => ({ value: c.chars, label: c.name })), state.cfg.charset, (v) => {
       state.cfg.charset = v;
+      // 字符集只在纯字符灰度模式生效（半块模式用 ▀+双色，不读 charset）。
+      // 彩色+半块时改字符集无反应，故自动切回单色灰度：取消彩色 → 联动取消半块。
+      if (state.cfg.colorMode) {
+        state.cfg.colorMode = false;
+        state.cfg.halfBlock = false;
+        state.cfg.aspectRatio = aspectRatioForHalfBlock(false);
+        colorModeChk.input.checked = false;
+        halfBlockChk.input.disabled = true;
+        halfBlockChk.input.checked = false;
+      }
       persist();
       rerenderPreview();
     });
@@ -609,7 +633,14 @@ function render() {
       dropzone.style.display = imgShow ? '' : 'none';
       textArea.style.display = textShow ? '' : 'none';
       logoChk.row.style.display = textShow ? '' : 'none'; // Logo 开关仅文字流
-      logoSizeSlider.row.style.display = textShow ? '' : 'none'; // Logo 大小滑动条仅文字流
+      // Logo 大小滑动条：仅文字流 + logo 勾选时显示
+      logoSizeSlider.row.style.display = textShow && state.textLogo ? '' : 'none';
+      // 字符画参数整区：仅图片模式显示（文字流模式下完全隐藏）
+      // controlsEl 在 return 时赋值，初次调用可能尚未赋值，需守护
+      if (controlsEl) {
+        const charParamsDetails = controlsEl.querySelector('details');
+        if (charParamsDetails) charParamsDetails.style.display = imgShow ? '' : 'none';
+      }
       // 图片专属参数
       widthSlider.row.style.display = imgShow ? '' : 'none';
       halfBlockChk.row.style.display = imgShow ? '' : 'none';
@@ -803,7 +834,7 @@ function render() {
       setTimeout(focusDesc, 60);
     }
 
-    return h('div', { class: 'space-y-5' }, [
+    controlsEl = h('div', { class: 'space-y-5' }, [
       tabBar,
       // 图片输入
       h('div', { class: 'space-y-2' }, [
@@ -829,30 +860,43 @@ function render() {
         ]),
         presetGrid,
       ]),
-      // 字符画参数
-      h('div', { class: 'space-y-3' }, [
-        h('div', { class: 'text-sm font-medium text-[var(--fg)]' }, ['字符画参数']),
-        widthSlider.row,
-        colorModeChk.row,
-        halfBlockChk.row,
-        charsetSel.row,
-        contrastSlider.row,
-        brightnessSlider.row,
-        invertChk.row,
-      ]),
-      // 终端外观
-      h('div', { class: 'space-y-3' }, [
-        h('div', { class: 'text-sm font-medium text-[var(--fg)]' }, ['终端外观']),
-        terminalSel.row,
-        h('div', { class: 'space-y-1' }, [
-          h('label', { class: 'text-xs text-[var(--fg-muted)]', textContent: '标题栏文字' }),
-          titleInput,
+      // 字符画参数（默认展开；文字流模式下整区隐藏）
+      h('details', { open: true, class: 'group' }, [
+        h('summary', {
+          class: 'cursor-pointer select-none text-sm font-medium text-[var(--fg)] marker:text-[var(--fg-muted)] marker:no-underline',
+          textContent: '字符画参数',
+        }),
+        h('div', { class: 'mt-3 space-y-3' }, [
+          widthSlider.row,
+          colorModeChk.row,
+          halfBlockChk.row,
+          charsetSel.row,
+          contrastSlider.row,
+          brightnessSlider.row,
+          invertChk.row,
         ]),
-        h('div', { class: 'grid grid-cols-2 gap-2' }, [
-          scanChk.row, glowChk.row, curveChk.row, frameChk.row,
+      ]),
+      // 终端外观（默认折叠）
+      h('details', { class: 'group' }, [
+        h('summary', {
+          class: 'cursor-pointer select-none text-sm font-medium text-[var(--fg)] marker:text-[var(--fg-muted)] marker:no-underline',
+          textContent: '终端外观',
+        }),
+        h('div', { class: 'mt-3 space-y-3' }, [
+          terminalSel.row,
+          h('div', { class: 'space-y-1' }, [
+            h('label', { class: 'text-xs text-[var(--fg-muted)]', textContent: '标题栏文字' }),
+            titleInput,
+          ]),
+          h('div', { class: 'grid grid-cols-2 gap-2' }, [
+            scanChk.row, glowChk.row, curveChk.row, frameChk.row,
+          ]),
         ]),
       ]),
     ]);
+    // 元素已构造，controlsEl 已赋值；再调一次确保字符画参数区按当前模式显隐
+    updateModeVisibility();
+    return controlsEl;
   }
 
   // —— 操作按钮 ——
