@@ -18,7 +18,7 @@
  *   只提示对人有意义的、确实改变了文本的变换。
  */
 
-import { secureRandomInt, securePick } from '@/core/utils/random';
+import { secureRandomInt, securePick, secureShuffle } from '@/core/utils/random';
 
 /** 变换选项：每个开关独立控制一种变换策略 */
 export interface ObfuscateOptions {
@@ -40,6 +40,15 @@ export interface ObfuscateOptions {
   zeroWidth: boolean;
   /** 同形字替换（拉丁 a/e/o 等 → 西里尔/希腊同形字） */
   homoglyph: boolean;
+  // —— 变态变换（人难读、AI 易解，默认关）——
+  /** leet 字母替换（a→@ s→$ o→0 e→3 等，经典可逆变换） */
+  leetReplace: boolean;
+  /** 数字串转罗马数字或二进制（138→CXXXVIII 或 10001010） */
+  digitToRoman: boolean;
+  /** 段落顺序打乱 + 字符间密集插入零宽字符 */
+  shuffleWords: boolean;
+  /** 整段 Base64 编码（终态变换，最后一步） */
+  base64Encode: boolean;
 }
 
 /** 单次变换结果 */
@@ -48,6 +57,8 @@ export interface ObfuscateResult {
   text: string;
   /** 给人的示意说明（已生效变换的汇总，附在文本后帮助人理解原值） */
   note: string;
+  /** 实际生效的变换标签（去重），供 buildInlineRules 精确生成还原规则 */
+  applied: string[];
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -73,6 +84,38 @@ const ZERO_WIDTH_CHARS: readonly string[] = ['\u200B', '\u200C', '\u200D', '\u20
 
 /** 可见分隔符（打断连续数字用） */
 const SEPARATORS: readonly string[] = ['\u3000', '\t']; // 全角空格 / 制表符
+
+/**
+ * leet 字母映射：经典可逆替换，人需辨别但 AI 一看就懂。
+ * 只选一对一映射（保证无损还原）。
+ */
+const LEET_MAP: Readonly<Record<string, string>> = {
+  a: '@', e: '3', i: '!', o: '0', s: '$', t: '7', l: '1', b: '8', g: '9',
+};
+
+/** 罗马数字基本符号（1-10、50、100、500、1000） */
+const ROMAN_VALUES: readonly [number, string][] = [
+  [1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'],
+  [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'],
+  [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I'],
+];
+
+/** 阿拉伯数字 → 罗马数字（仅 1-3999 有意义；0 或超大返回原数字串） */
+function toRoman(n: number): string {
+  if (n < 1 || n > 3999) return String(n);
+  let result = '';
+  let remaining = n;
+  for (const [value, symbol] of ROMAN_VALUES) {
+    while (remaining >= value) {
+      result += symbol;
+      remaining -= value;
+    }
+  }
+  return result;
+}
+
+/** 段落分隔正则：按逗号/空格/换行/中文标点拆段（保留分隔符） */
+const SEGMENT_SPLIT_RE = /([,，\s、；;]+)/;
 
 /**
  * 同形字映射：拉丁字母 → 视觉上几乎一样的西里尔/希腊字母。
@@ -101,6 +144,14 @@ export function obfuscate(input: string, opts: ObfuscateOptions): ObfuscateResul
   const out: string[] = [];
   /** 记录实际生效的变换，用于生成 note */
   const applied: string[] = [];
+
+  // —— 需求2：大小写混杂检测。若原文同时含大小写字母，说明用户原值就有大小写
+  //    区分（如微信号 AbcDef），打乱会丢失信息 → 强制跳过 caseShuffle。
+  const hasMixedCase = /[a-z]/.test(input) && /[A-Z]/.test(input);
+  const effectiveCaseShuffle = opts.caseShuffle && !hasMixedCase;
+  if (opts.caseShuffle && hasMixedCase) {
+    applied.push('大小写已保留');
+  }
 
   // 数字转中文：每条结果随机选用简体或大写财务版（避免单一映射被识破）
   const useFormalDigits = opts.digitToWords && chance(50);
@@ -141,9 +192,16 @@ export function obfuscate(input: string, opts: ObfuscateOptions): ObfuscateResul
     }
 
     // 大小写随机：字母有概率改大写（原本小写→大写，打乱规律）
-    if (opts.caseShuffle && /[a-z]/.test(transformed) && chance(55)) {
+    // 用 effectiveCaseShuffle：原文大小写混杂时自动失效（需求2）
+    if (effectiveCaseShuffle && /[a-z]/.test(transformed) && chance(55)) {
       transformed = transformed.toUpperCase();
       applied.push('大小写打乱');
+    }
+
+    // leet 字母替换（变态层）：命中映射表的小写字母有概率替换成形近符号
+    if (opts.leetReplace && LEET_MAP[transformed.toLowerCase()] && chance(50)) {
+      transformed = LEET_MAP[transformed.toLowerCase()]!;
+      applied.push('leet替换');
     }
 
     // 数字转中文：有概率转（不全部转，保留部分阿拉伯数字，识别难度更高）
@@ -172,11 +230,70 @@ export function obfuscate(input: string, opts: ObfuscateOptions): ObfuscateResul
     if (!applied.includes('零宽字符')) applied.push('零宽字符');
   }
 
+  // —— 变态层后处理（作用于 join 后的完整文本）——
+  let text = out.join('');
+
+  // 数字串转罗马/二进制：找出连续阿拉伯数字串（未被 digitToWords 转走的），
+  // 整体转罗马数字或二进制（二选一，按串独立随机）。
+  if (opts.digitToRoman) {
+    text = text.replace(/\d{2,}/g, (match) => {
+      const n = Number(match);
+      // 随机选罗马或二进制；罗马对 0 或超大无意义时退回原数字
+      if (chance(50)) {
+        const roman = toRoman(n);
+        if (roman !== match) {
+          if (!applied.includes('罗马数字')) applied.push('罗马数字');
+          return roman;
+        }
+        return match;
+      }
+      if (!applied.includes('二进制')) applied.push('二进制');
+      return n.toString(2);
+    });
+  }
+
+  // 段落打乱 + 密集零宽：按分隔符拆段，段序随机打乱，再在字符间密集插零宽。
+  if (opts.shuffleWords) {
+    const segments = text.split(SEGMENT_SPLIT_RE).filter((s) => s.length > 0);
+    // 只打乱「内容段」（非分隔符），分隔符位置保留
+    const contentSegs = segments.filter((s) => !SEGMENT_SPLIT_RE.test(s));
+    const sepSegs = segments.filter((s) => SEGMENT_SPLIT_RE.test(s));
+    if (contentSegs.length > 1) {
+      const shuffledContent = secureShuffle(contentSegs);
+      // 重新交错：内容段 + 分隔符交替（分隔符不足时直接拼接）
+      const rebuilt: string[] = [];
+      for (let i = 0; i < shuffledContent.length; i++) {
+        rebuilt.push(shuffledContent[i]!);
+        if (i < sepSegs.length) rebuilt.push(sepSegs[i]!);
+      }
+      text = rebuilt.join('');
+      applied.push('段序打乱');
+    }
+    // 密集零宽：每个字符间都插一个零宽字符（比激进档密集得多）
+    text = Array.from(text)
+      .join(securePick(ZERO_WIDTH_CHARS));
+    applied.push('密集零宽');
+  }
+
+  // Base64 终态编码（最后一步）：整段编码，人完全看不懂，AI 一眼识别。
+  if (opts.base64Encode) {
+    try {
+      // 用 UTF-8 安全编码（支持中文）
+      const bytes = new TextEncoder().encode(text);
+      let binary = '';
+      for (const b of bytes) binary += String.fromCharCode(b);
+      text = btoa(binary);
+      applied.push('Base64编码');
+    } catch {
+      // btoa 失败（极端情况）：保留原文本
+    }
+  }
+
   // —— 生成 note：去重 + 汇总 ——
   const uniqueApplied = [...new Set(applied)];
   const note = buildNote(uniqueApplied);
 
-  return { text: out.join(''), note };
+  return { text, note, applied: uniqueApplied };
 }
 
 /**
@@ -203,6 +320,28 @@ function buildNote(applied: string[]): string {
   }
   if (applied.includes('零宽字符')) {
     hints.push('含不可见字符（部分平台可能已过滤）');
+  }
+  // —— 变态层 ——
+  if (applied.includes('大小写已保留')) {
+    hints.push('原文已含大小写区分，未做大小写变换');
+  }
+  if (applied.includes('leet替换')) {
+    hints.push('部分字母已替换为形近符号（a→@、e→3、o→0 等 leet）');
+  }
+  if (applied.includes('罗马数字')) {
+    hints.push('部分数字串已转为罗马数字（如 138→CXXXVIII）');
+  }
+  if (applied.includes('二进制')) {
+    hints.push('部分数字串已转为二进制（如 138→10001010）');
+  }
+  if (applied.includes('段序打乱')) {
+    hints.push('文本段落顺序已被打乱，请按语义重排');
+  }
+  if (applied.includes('密集零宽')) {
+    hints.push('字符间密集插入了零宽字符，请全部去除');
+  }
+  if (applied.includes('Base64编码')) {
+    hints.push('整段已 Base64 编码，请先解码（atob）');
   }
 
   if (hints.length === 0) return '';
@@ -235,6 +374,10 @@ export const DEFAULT_OPTIONS: ObfuscateOptions = {
   visibleSeparator: true,
   zeroWidth: false,
   homoglyph: false,
+  leetReplace: false,
+  digitToRoman: false,
+  shuffleWords: false,
+  base64Encode: false,
 };
 
 /** 全部可见层开关 true、不可见层全 false（= DEFAULT_OPTIONS，预设内部复用别名） */
@@ -254,6 +397,10 @@ export const PRESETS: Preset[] = [
       visibleSeparator: false,
       zeroWidth: false,
       homoglyph: false,
+      leetReplace: false,
+      digitToRoman: false,
+      shuffleWords: false,
+      base64Encode: false,
     },
   },
   {
@@ -270,6 +417,20 @@ export const PRESETS: Preset[] = [
       ...VISIBLE_ALL_ON,
       zeroWidth: true,
       homoglyph: true,
+    },
+  },
+  {
+    id: 'insane',
+    name: '变态',
+    hint: '人几乎看不懂，但 AI 按附带规则可精准还原（leet/罗马数字/Base64/打乱）',
+    options: {
+      ...VISIBLE_ALL_ON,
+      zeroWidth: true,
+      homoglyph: true,
+      leetReplace: true,
+      digitToRoman: true,
+      shuffleWords: true,
+      base64Encode: true,
     },
   },
 ];

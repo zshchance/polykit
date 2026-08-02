@@ -11,8 +11,8 @@ import {
   type ObfuscateOptions,
   type ObfuscateResult,
 } from './obfuscate';
-import { buildDecodePrompt, HINT_SUFFIX } from './ai-prompt';
-import { loadOptions, saveOptions } from './settings';
+import { buildDecodePrompt, buildInlineRules, HINT_SUFFIX } from './ai-prompt';
+import { loadOptions, saveOptions, loadInput, saveInput } from './settings';
 import {
   loadHistory,
   addResult,
@@ -59,6 +59,9 @@ function renderObfuscator() {
     placeholder:
       '输入要变换的联系方式，例如：\n13800138000\n微信：AbcDef\nQQ：12345678\n邮箱：hello@example.com\n也可以整段混写：电话13800138000微信AbcDef邮箱test@x.com',
     'aria-label': '原文输入',
+    // 启动时还原上次输入（需求1）
+    value: loadInput(),
+    oninput: () => saveInput(inputArea.value),
   }) as HTMLTextAreaElement;
 
   // ════════════════════════════════════════════════════════════
@@ -78,6 +81,11 @@ function renderObfuscator() {
     { key: 'visibleSeparator', label: '可见分隔符', title: '用全角空格/制表符打断连续数字串' },
     { key: 'zeroWidth', label: '零宽字符', title: '穿插肉眼不可见的 Unicode 字符（可能被平台过滤）' },
     { key: 'homoglyph', label: '同形字替换', title: '拉丁字母替换为视觉相同的西里尔/希腊字母' },
+    // 变态层（人难读、AI 易解）
+    { key: 'leetReplace', label: 'leet 替换', title: '字母转形近符号（a→@ e→3 o→0 等，AI 易还原）' },
+    { key: 'digitToRoman', label: '数字转罗马/二进制', title: '数字串转罗马数字或二进制（138→CXXXVIII/10001010）' },
+    { key: 'shuffleWords', label: '段序打乱+密集零宽', title: '段落顺序打乱、字符间密集插入零宽字符' },
+    { key: 'base64Encode', label: 'Base64 编码', title: '整段 Base64 编码（终态变换，人完全看不懂）' },
   ];
 
   /** 创建一个 checkbox + label，绑定到 state */
@@ -101,7 +109,8 @@ function renderObfuscator() {
   }
 
   const visibleSwitches = SWITCH_META.slice(0, 6).map(makeSwitch);
-  const invisibleSwitches = SWITCH_META.slice(6).map(makeSwitch);
+  const invisibleSwitches = SWITCH_META.slice(6, 8).map(makeSwitch);
+  const insaneSwitches = SWITCH_META.slice(8).map(makeSwitch);
 
   const visibleGrid = h('div', { class: 'grid grid-cols-2 gap-2 sm:grid-cols-3' }, visibleSwitches);
 
@@ -115,6 +124,13 @@ function renderObfuscator() {
     { class: 'grid grid-cols-2 gap-2 sm:grid-cols-3' },
     invisibleSwitches,
   );
+
+  const insaneWarning = h('p', {
+    class: 'text-xs leading-relaxed text-purple-600 dark:text-purple-400',
+    textContent:
+      '⚡ 变态层：人几乎看不懂，但 AI 按附带的还原规则可精准解密。适合「只给 AI 看」的场景。',
+  });
+  const insaneGrid = h('div', { class: 'grid grid-cols-2 gap-2 sm:grid-cols-3' }, insaneSwitches);
 
   // ════════════════════════════════════════════════════════════
   // 预设档位按钮
@@ -154,7 +170,7 @@ function renderObfuscator() {
 
   /** 把 state 同步到所有 checkbox 的勾选态 */
   function syncSwitchesFromState(): void {
-    const allCbs = [...visibleSwitches, ...invisibleSwitches].map(
+    const allCbs = [...visibleSwitches, ...invisibleSwitches, ...insaneSwitches].map(
       (label) => label.querySelector('input[type=checkbox]') as HTMLInputElement,
     );
     for (const cb of allCbs) {
@@ -213,9 +229,12 @@ function renderObfuscator() {
     onclick: generateDecodePrompt,
   });
 
-  /** 根据当前开关生成解密 prompt，展示在按钮下方 */
+  /** 最近一次生成（第一条候选）的 applied 标签，供💡prompt 精确判断哪些变换实际生效 */
+  let lastApplied: string[] = [];
+
+  /** 根据当前开关 + 最近一次 applied 生成解密 prompt，展示在按钮下方 */
   function generateDecodePrompt(): void {
-    const prompt = buildDecodePrompt(state);
+    const prompt = buildDecodePrompt(state, lastApplied);
     if (!prompt) {
       // 所有变换都关闭：无需还原
       promptArea.value = '';
@@ -250,10 +269,11 @@ function renderObfuscator() {
     textContent: '候选结果（挑选满意的一条复制，复制即记入历史）',
   });
 
-  /** 渲染一条候选：文本 + note + 复制按钮（复制时追加 AI 暗示文案） */
+  /** 渲染一条候选：文本 + note + 复制按钮（复制时附带还原规则 + AI 暗示） */
   function renderCandidate(result: ObfuscateResult, index: number): HTMLElement {
-    // 完整文本 = 变换文本 + 暗示文案（复制和历史都存这份完整文本）
-    const fullText = result.text + HINT_SUFFIX;
+    // 完整文本 = 变换文本 + 内联还原规则 + 暗示文案（自包含，接收方直接粘给 AI）
+    const inlineRules = buildInlineRules(result.applied);
+    const fullText = result.text + (inlineRules ? '\n' + inlineRules : '') + HINT_SUFFIX;
     const textCode = h('code', {
       class: 'flex-1 break-all font-mono text-sm text-[var(--fg)]',
       textContent: result.text,
@@ -265,10 +285,12 @@ function renderObfuscator() {
           textContent: result.note,
         })
       : null;
-    // 提示用户复制会带 AI 暗示
+    // 提示用户复制会带还原规则 + AI 暗示
     const hintTip = h('p', {
       class: 'mt-0.5 text-[11px] text-[var(--fg-muted)]/70',
-      textContent: '📋 复制时会自动附带「复制给 AI 可还原」的提示',
+      textContent: inlineRules
+        ? '📋 复制时自动附带还原规则 + AI 暗示（接收方直接粘给 AI 即可解密）'
+        : '📋 复制时会自动附带「复制给 AI 可还原」的提示',
     });
 
     return h(
@@ -318,6 +340,8 @@ function renderObfuscator() {
     for (let i = 0; i < CANDIDATE_COUNT; i++) {
       results.push(obfuscate(input, state));
     }
+    // 记录第一条候选的 applied，供💡prompt 精确判断实际生效的变换
+    lastApplied = results[0]?.applied ?? [];
 
     candidatesWrap.replaceChildren(
       candidatesLabel,
@@ -471,6 +495,15 @@ function renderObfuscator() {
         }),
         invisibleWarning,
         invisibleGrid,
+      ]),
+      // 变态变换
+      h('div', { class: 'space-y-2' }, [
+        h('p', {
+          class: 'text-sm font-medium',
+          textContent: '变态变换（人难读、AI 可解）',
+        }),
+        insaneWarning,
+        insaneGrid,
       ]),
       // 预设
       h('div', { class: 'space-y-2' }, [
