@@ -59,7 +59,13 @@ export async function loadImage(file: File): Promise<LoadedImage> {
     typeof OffscreenCanvas !== 'undefined'
       ? new OffscreenCanvas(w, h)
       : Object.assign(document.createElement('canvas'), { width: w, height: h });
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  // canvas 是 OffscreenCanvas | HTMLCanvasElement 联合类型，getContext('2d') 返回
+  // OffscreenCanvasRenderingContext2D | RenderingContext | null，其中 RenderingContext
+  // 类型声明里没有 drawImage/getImageData（运行时实际都有）。断言收窄为统一的 2D 上下文。
+  const ctx = canvas.getContext('2d', { willReadFrequently: true }) as
+    | CanvasRenderingContext2D
+    | OffscreenCanvasRenderingContext2D
+    | null;
   if (!ctx) {
     bitmap.close?.();
     URL.revokeObjectURL(previewUrl);
