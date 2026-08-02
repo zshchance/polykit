@@ -100,13 +100,14 @@ const LEET_MAP: Readonly<Record<string, string>> = {
  * 机器靠这些关键词识别「这里藏着联系方式」，所以把它们替换成
  * 人能联想、但机器正则匹配不上的形态。
  *
- * 每个关键词对应多种伪装方式，运行时随机选一种：
- * - emoji：用相关表情替代（微信→💚，人能联想到「加微信」）
- * - reverse：反着写（电话→话电）
- * - split：中间夹乱码（邮箱→邮★箱）
+ * 【百分百混淆原则】替换后的结果里绝对不能出现原始关键词的连续
+ * 字符序列。三种策略都保证打散原词：
+ * - emoji：用相关表情完全替代（微信→💚，原词字符全部消失）
+ * - 反写+夹码：倒序且每个字符间插符号（电话→话◆电，原序列被打断）
+ * - 拆字夹码：每个字符之间都插符号（邮箱→邮★箱◇，非连续）
  */
 interface KeywordDisguiseEntry {
-  /** 原始关键词（小写匹配，中文原样） */
+  /** 原始关键词（中文原样，英文区分大小写变体） */
   keyword: string;
   /** emoji 替代 */
   emoji: string;
@@ -114,11 +115,15 @@ interface KeywordDisguiseEntry {
 
 const KEYWORD_DISGUISES: readonly KeywordDisguiseEntry[] = [
   { keyword: '微信', emoji: '💚' },
+  { keyword: '加微', emoji: '💚' },
   { keyword: '电话', emoji: '📞' },
   { keyword: '手机', emoji: '📱' },
+  { keyword: '号码', emoji: '#️⃣' },
   { keyword: '邮箱', emoji: '✉️' },
+  { keyword: '邮件', emoji: '📧' },
   { keyword: 'qq', emoji: '🐧' },
   { keyword: 'QQ', emoji: '🐧' },
+  { keyword: 'Q群', emoji: '🐧' },
   { keyword: 'tel', emoji: '☎️' },
   { keyword: 'Tel', emoji: '☎️' },
   { keyword: 'email', emoji: '📧' },
@@ -126,38 +131,41 @@ const KEYWORD_DISGUISES: readonly KeywordDisguiseEntry[] = [
   { keyword: 'wx', emoji: '💚' },
   { keyword: 'Wx', emoji: '💚' },
   { keyword: 'WX', emoji: '💚' },
+  { keyword: 'contact', emoji: '👤' },
+  { keyword: 'Contact', emoji: '👤' },
 ];
 
-/** 伪装单个关键词：随机用 emoji / 反写 / 夹乱码三种方式之一 */
+/**
+ * 伪装单个关键词：保证替换后不出现原始字符序列。
+ * 随机用三种方式之一，每种都彻底打断原词：
+ */
 function disguiseKeyword(keyword: string, emoji: string): string {
   const mode = secureRandomInt(0, 2);
   if (mode === 0) {
-    // emoji 替代
+    // emoji 完全替代（原词字符全部消失）
     return emoji;
   }
-  if (mode === 1) {
-    // 反着写（中文字符倒序；英文也倒序）
-    return Array.from(keyword).reverse().join('');
-  }
-  // 中间夹乱码符号
   const chars = Array.from(keyword);
-  if (chars.length < 2) return keyword;
-  const mid = Math.floor(chars.length / 2);
-  const filler = securePick(SYMBOL_FILLERS);
-  return chars.slice(0, mid).join('') + filler + chars.slice(mid).join('');
+  if (mode === 1) {
+    // 反写 + 每字间插符号（原序列彻底打断，如 电话→话◆电）
+    return chars.reverse().map((c, i) => (i < chars.length - 1 ? c + securePick(SYMBOL_FILLERS) : c)).join('');
+  }
+  // 拆字 + 每字间插符号（如 邮箱→邮★箱，单字间有符号不连续）
+  if (chars.length < 2) return emoji;
+  return chars.map((c, i) => (i < chars.length - 1 ? c + securePick(SYMBOL_FILLERS) : c)).join('');
 }
 
 /**
- * 对整段文本做敏感词伪装：扫描所有关键词，每个命中随机伪装。
+ * 对整段文本做敏感词伪装（强制层，始终生效）：
+ * 扫描所有关键词，每个出现都替换，保证百分百混淆。
  * 返回 { text, count } —— count 是伪装了几个关键词。
  */
 function applyKeywordDisguise(text: string): { text: string; count: number } {
   let result = text;
   let count = 0;
-  // 按关键词长度降序处理（避免短词先匹配破坏长词，如「邮箱」含「邮」）
+  // 按关键词长度降序处理（避免短词先匹配破坏长词）
   const sorted = [...KEYWORD_DISGUISES].sort((a, b) => b.keyword.length - a.keyword.length);
   for (const entry of sorted) {
-    // 用 split+join 替换所有出现（不用正则避免特殊字符转义问题）
     while (result.includes(entry.keyword)) {
       result = result.replace(entry.keyword, disguiseKeyword(entry.keyword, entry.emoji));
       count++;
@@ -216,14 +224,14 @@ export function obfuscate(input: string, opts: ObfuscateOptions): ObfuscateResul
   /** 记录实际生效的变换，用于生成 note */
   const applied: string[] = [];
 
-  // —— 敏感词伪装（变态层）：在字符级变换之前，先把「电话/微信/邮箱/QQ」
-  //    等关键词替换成 emoji/反写/夹乱码。必须最先做，否则后续变换会打散关键词。
+  // —— 敏感词伪装（强制层，始终生效）：在字符级变换之前，先把「电话/微信/
+  //    邮箱/QQ」等关键词替换成 emoji/反写夹码/拆字夹码。保证百分百混淆，
+  //    替换后不出现原始关键词的连续字符序列。必须最先做，否则后续变换会
+  //    打散关键词，导致部分漏网。
   let sourceText = input;
-  if (opts.keywordDisguise) {
-    const { text, count } = applyKeywordDisguise(input);
-    sourceText = text;
-    if (count > 0) applied.push('敏感词伪装');
-  }
+  const { text: disguisedText, count: disguiseCount } = applyKeywordDisguise(input);
+  sourceText = disguisedText;
+  if (disguiseCount > 0) applied.push('敏感词伪装');
 
   const codePoints = Array.from(sourceText); // 正确按 Unicode 码点拆分（含 emoji 不被拆碎）
   const out: string[] = [];

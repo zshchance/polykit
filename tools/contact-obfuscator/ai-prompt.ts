@@ -211,9 +211,8 @@ export function buildEncryptPrompt(input: string, opts: ObfuscateOptions): strin
   if (opts.base64Encode) {
     techniques.push('最后把整段文本做 Base64 编码');
   }
-  if (opts.keywordDisguise) {
-    techniques.push('把「电话/微信/邮箱/QQ」等敏感关键词替换成相关 emoji（如微信→💚）或反着写（如电话→话电）或中间夹符号（如邮箱→邮★箱）');
-  }
+  // 敏感词伪装是强制层（始终生效），无论开关状态都告知 AI
+  techniques.push('把「电话/微信/邮箱/QQ/手机」等敏感关键词百分百替换成相关 emoji（微信→💚 电话→📞 邮箱→✉️ QQ→🐧）或反写夹符号（电话→话◆电），绝对不能保留原始关键词');
 
   const techBlock = techniques.length > 0
     ? techniques.map((t, i) => `${i + 1}. ${t}`).join('\n')
