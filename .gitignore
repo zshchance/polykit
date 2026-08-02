@@ -35,6 +35,11 @@ gui-test-screenshots/
 
 # ZCode 工作区元数据（计划文件等，不入库）
 .zcode/
+.reasonix/
+reasonix.toml
+
+# 规划评审草稿（工作区过程文档，不入库）
+docs/ascii-art-plan-review.md
 
 # 数据更新临时导入文件（批量录入入口，用完即删）
 _tmp-*-add.json
