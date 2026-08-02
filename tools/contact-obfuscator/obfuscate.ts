@@ -35,6 +35,8 @@ export interface ObfuscateOptions {
   insertSymbol: boolean;
   /** 用全角空格/制表符打断连续数字串（机器正则常靠 \d{11} 抓手机号） */
   visibleSeparator: boolean;
+  /** 邮箱混淆：@ 替换成 emoji + 域名点号打断（x.com→x◆com），让邮箱正则失效 */
+  emailObfuscate: boolean;
   // —— 不可见变换（激进层，默认关，可能被平台过滤）——
   /** 零宽字符穿插（U+200B/200C/200D/2060） */
   zeroWidth: boolean;
@@ -199,20 +201,33 @@ function toRoman(n: number): string {
 const SEGMENT_SPLIT_RE = /([,，\s、；;]+)/;
 
 /**
- * 邮箱 @ 符号替换：把邮箱地址里的 @ 替换成邮箱相关 emoji。
- * 只替换「邮箱格式」的 @（前后是字母/数字），避免误伤 @用户名、代码装饰器等。
- * 机器靠 @ 的正则（\S+@\S+\.\S+）识别邮箱，替换后正则失效。
+ * 邮箱混淆：@ 替换成 emoji + 域名点号打断。
+ *
+ * 两步处理，让 \S+@\S+\.\S+ 这类邮箱正则彻底失效：
+ * 1. @ 替换：只匹配邮箱格式的 @（前后是字母/数字），换成 📧/✉️/💌/📨/📮。
+ *    避免误伤 @用户名、代码装饰器等。
+ * 2. 域名点号打断：把邮箱域名里的 . 替换成可见符号（如 x.com→x◆com）。
+ *    只处理 @ 之后域名部分的点（用户名部分的点如 first.last@ 不动，
+ *    避免破坏邮箱语义）。点号换成符号后人仍能辨认（x◆com = x.com）。
  */
 const AT_EMOJIS: readonly string[] = ['📧', '✉️', '💌', '📨', '📮'];
-/** 匹配邮箱格式的 @：前一位是字母/数字/下划线，后一位也是（确保是邮箱不是 @昵称） */
+/** 匹配邮箱格式的 @：前一位是字母/数字/下划线，后一位也是 */
 const EMAIL_AT_RE = /([a-zA-Z0-9_])@([a-zA-Z0-9])/g;
+/** 匹配域名里的点：字母/数字 后跟 . 再跟字母（如 x.com 的 .com） */
+const DOMAIN_DOT_RE = /([a-zA-Z0-9])\.([a-zA-Z])/g;
 
-/** 把邮箱里的 @ 替换成随机 emoji，返回替换次数 */
-function replaceEmailAt(text: string): { text: string; count: number } {
+/** 对整段文本做邮箱混淆（@ 替换 + 域名点号打断），返回替换次数 */
+function applyEmailObfuscate(text: string): { text: string; count: number } {
   let count = 0;
-  const result = text.replace(EMAIL_AT_RE, (_m, before: string, after: string) => {
+  // 1) @ 替换成 emoji
+  let result = text.replace(EMAIL_AT_RE, (_m, before: string, after: string) => {
     count++;
     return before + securePick(AT_EMOJIS) + after;
+  });
+  // 2) 域名点号打断（只处理字母.字母模式，如 x.com 的点）
+  result = result.replace(DOMAIN_DOT_RE, (_m, before: string, after: string) => {
+    count++;
+    return before + securePick(SYMBOL_FILLERS) + after;
   });
   return { text: result, count };
 }
@@ -252,11 +267,13 @@ export function obfuscate(input: string, opts: ObfuscateOptions): ObfuscateResul
   sourceText = disguisedText;
   if (disguiseCount > 0) applied.push('敏感词伪装');
 
-  // —— 邮箱 @ 符号替换（强制层）：把邮箱地址里的 @ 替换成 emoji，
-  //    让 \S+@\S+\.\S+ 这类邮箱正则失效。只匹配邮箱格式的 @。
-  const { text: atReplacedText, count: atCount } = replaceEmailAt(sourceText);
-  sourceText = atReplacedText;
-  if (atCount > 0) applied.push('邮箱@替换');
+  // —— 邮箱混淆（可见层）：@ 替换成 emoji + 域名点号打断。
+  //    让 \S+@\S+\.\S+ 邮箱正则失效。受 emailObfuscate 开关控制。
+  if (opts.emailObfuscate) {
+    const { text: emailObfText, count: emailObfCount } = applyEmailObfuscate(sourceText);
+    sourceText = emailObfText;
+    if (emailObfCount > 0) applied.push('邮箱混淆');
+  }
 
   const codePoints = Array.from(sourceText); // 正确按 Unicode 码点拆分（含 emoji 不被拆碎）
   const out: string[] = [];
@@ -462,8 +479,8 @@ function buildNote(applied: string[]): string {
   if (applied.includes('敏感词伪装')) {
     hints.push('电话/微信/邮箱/QQ 等关键词已替换为 emoji 或反写或夹乱码，请还原原词');
   }
-  if (applied.includes('邮箱@替换')) {
-    hints.push('邮箱地址中的 @ 已替换为 emoji（📧/✉️/💌 等），请还原为 @');
+  if (applied.includes('邮箱混淆')) {
+    hints.push('邮箱地址中的 @ 已替换为 emoji（📧/✉️/💌 等），域名点号已替换为符号，请还原（@ 和 .）');
   }
 
   if (hints.length === 0) return '';
@@ -494,6 +511,7 @@ export const DEFAULT_OPTIONS: ObfuscateOptions = {
   insertEmoji: true,
   insertSymbol: true,
   visibleSeparator: true,
+  emailObfuscate: true,
   zeroWidth: false,
   homoglyph: false,
   leetReplace: false,
@@ -510,7 +528,7 @@ export const PRESETS: Preset[] = [
   {
     id: 'mild',
     name: '温和',
-    hint: '只做大小写打乱 + 数字转中文，最稳、文本最干净',
+    hint: '大小写打乱 + 数字转中文 + 邮箱混淆，最稳、文本最干净',
     options: {
       caseShuffle: true,
       digitToWords: true,
@@ -518,6 +536,7 @@ export const PRESETS: Preset[] = [
       insertEmoji: false,
       insertSymbol: false,
       visibleSeparator: false,
+      emailObfuscate: true,
       zeroWidth: false,
       homoglyph: false,
       leetReplace: false,

@@ -79,6 +79,7 @@ function renderObfuscator() {
     { key: 'insertEmoji', label: '穿插表情', title: '随机穿插 emoji' },
     { key: 'insertSymbol', label: '穿插符号', title: '随机穿插 ★◆※ 等可见符号' },
     { key: 'visibleSeparator', label: '可见分隔符', title: '用全角空格/制表符打断连续数字串' },
+    { key: 'emailObfuscate', label: '邮箱混淆', title: '@ 替换成 emoji + 域名点号打断（x.com→x◆com），让邮箱正则失效' },
     { key: 'zeroWidth', label: '零宽字符', title: '穿插肉眼不可见的 Unicode 字符（可能被平台过滤）' },
     { key: 'homoglyph', label: '同形字替换', title: '拉丁字母替换为视觉相同的西里尔/希腊字母' },
     // 变态层（人难读、AI 易解）
@@ -109,9 +110,9 @@ function renderObfuscator() {
     ]);
   }
 
-  const visibleSwitches = SWITCH_META.slice(0, 6).map(makeSwitch);
-  const invisibleSwitches = SWITCH_META.slice(6, 8).map(makeSwitch);
-  const insaneSwitches = SWITCH_META.slice(8).map(makeSwitch);
+  const visibleSwitches = SWITCH_META.slice(0, 7).map(makeSwitch);
+  const invisibleSwitches = SWITCH_META.slice(7, 9).map(makeSwitch);
+  const insaneSwitches = SWITCH_META.slice(9).map(makeSwitch);
 
   const visibleGrid = h('div', { class: 'grid grid-cols-2 gap-2 sm:grid-cols-3' }, visibleSwitches);
 

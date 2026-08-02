@@ -133,8 +133,8 @@ export function buildInlineRules(applied: string[]): string {
   if (applied.includes('敏感词伪装')) {
     rules.push('emoji/反写/夹码还原成电话/微信/邮箱/QQ等原词');
   }
-  if (applied.includes('邮箱@替换')) {
-    rules.push('邮箱里的emoji(📧✉️💌)还原成@');
+  if (applied.includes('邮箱混淆')) {
+    rules.push('邮箱@的emoji还原成@、域名里的符号还原成.');
   }
   // 清理干扰
   if (applied.includes('穿插汉字') || applied.includes('穿插表情') || applied.includes('穿插符号')) {
@@ -214,9 +214,11 @@ export function buildEncryptPrompt(input: string, opts: ObfuscateOptions): strin
   if (opts.base64Encode) {
     techniques.push('最后把整段文本做 Base64 编码');
   }
-  // 敏感词伪装 + 邮箱@替换都是强制层（始终生效），无论开关状态都告知 AI
+  // 敏感词伪装是强制层（始终生效），无论开关状态都告知 AI
   techniques.push('把「电话/微信/邮箱/QQ/手机」等敏感关键词百分百替换成相关 emoji（微信→💚 电话→📞 邮箱→✉️ QQ→🐧）或反写夹符号（电话→话◆电），绝对不能保留原始关键词');
-  techniques.push('把邮箱地址中的 @ 替换成邮箱 emoji（如 test📧x.com），让邮箱正则失效');
+  if (opts.emailObfuscate) {
+    techniques.push('把邮箱地址中的 @ 替换成邮箱 emoji（如 test📧x.com），并把域名里的点号替换成符号（如 x◆com），让邮箱正则失效');
+  }
 
   const techBlock = techniques.length > 0
     ? techniques.map((t, i) => `${i + 1}. ${t}`).join('\n')

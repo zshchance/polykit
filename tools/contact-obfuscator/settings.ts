@@ -26,6 +26,7 @@ const OPTION_KEYS: (keyof ObfuscateOptions)[] = [
   'insertEmoji',
   'insertSymbol',
   'visibleSeparator',
+  'emailObfuscate',
   'zeroWidth',
   'homoglyph',
   'leetReplace',
