@@ -11,7 +11,7 @@ import {
   type ObfuscateOptions,
   type ObfuscateResult,
 } from './obfuscate';
-import { buildDecodePrompt, buildInlineRules, HINT_SUFFIX } from './ai-prompt';
+import { buildEncryptPrompt, buildInlineRules, HINT_SUFFIX } from './ai-prompt';
 import { loadOptions, saveOptions, loadInput, saveInput } from './settings';
 import {
   loadHistory,
@@ -98,6 +98,7 @@ function renderObfuscator() {
         state[meta.key] = (e.target as HTMLInputElement).checked;
         saveOptions(state);
         refreshPresetHighlight();
+        updateGroupVisibility();
       },
     }) as HTMLInputElement;
     // 保存引用以便预设切换时同步勾选态
@@ -124,13 +125,38 @@ function renderObfuscator() {
     { class: 'grid grid-cols-2 gap-2 sm:grid-cols-3' },
     invisibleSwitches,
   );
+  /** 不可见变换组容器（激进档及以上才显示） */
+  const invisibleSection = h('div', { class: 'space-y-2' }, [
+    h('p', { class: 'text-sm font-medium', textContent: '不可见变换（激进，可能被平台过滤）' }),
+    invisibleWarning,
+    invisibleGrid,
+  ]);
 
   const insaneWarning = h('p', {
     class: 'text-xs leading-relaxed text-purple-600 dark:text-purple-400',
     textContent:
-      '⚡ 变态层：人几乎看不懂，但 AI 按附带的还原规则可精准解密。适合「只给 AI 看」的场景。',
+      '⚡ 变态层：人几乎看不懂，但 AI 按附带的解密规则可精准还原。适合「只给 AI 看」的场景。',
   });
   const insaneGrid = h('div', { class: 'grid grid-cols-2 gap-2 sm:grid-cols-3' }, insaneSwitches);
+  /** 变态变换组容器（变态档才显示） */
+  const insaneSection = h('div', { class: 'space-y-2' }, [
+    h('p', { class: 'text-sm font-medium', textContent: '变态变换（人难读、AI 可解）' }),
+    insaneWarning,
+    insaneGrid,
+  ]);
+
+  /**
+   * 按当前开关状态更新变换组的显隐（需求2）：
+   * - 不可见组：任一不可见开关开了（=激进及以上）才显示
+   * - 变态组：任一变态开关开了（=变态档）才显示
+   */
+  function updateGroupVisibility(): void {
+    const showInvisible = state.zeroWidth || state.homoglyph;
+    const showInsane =
+      state.leetReplace || state.digitToRoman || state.shuffleWords || state.base64Encode;
+    invisibleSection.classList.toggle('hidden', !showInvisible);
+    insaneSection.classList.toggle('hidden', !showInsane);
+  }
 
   // ════════════════════════════════════════════════════════════
   // 预设档位按钮
@@ -160,12 +186,13 @@ function renderObfuscator() {
     }),
   ]);
 
-  /** 应用一个预设到 state + 同步所有 checkbox + 刷新高亮 */
+  /** 应用一个预设到 state + 同步所有 checkbox + 刷新高亮 + 更新分组显隐 */
   function applyPreset(preset: { options: ObfuscateOptions }): void {
     Object.assign(state, preset.options);
     saveOptions(state);
     syncSwitchesFromState();
     refreshPresetHighlight();
+    updateGroupVisibility();
   }
 
   /** 把 state 同步到所有 checkbox 的勾选态 */
@@ -225,39 +252,30 @@ function renderObfuscator() {
     type: 'button',
     class:
       'w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-4 py-2 text-sm text-[var(--fg)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors',
-    textContent: '💡 生成 AI 还原提示词',
-    onclick: generateDecodePrompt,
+    textContent: '💡 生成 AI 加密提示词',
+    onclick: generateEncryptPrompt,
   });
 
-  /** 最近一次生成（第一条候选）的 applied 标签，供💡prompt 精确判断哪些变换实际生效 */
-  let lastApplied: string[] = [];
-
-  /** 根据当前开关 + 最近一次 applied 生成解密 prompt，展示在按钮下方 */
-  function generateDecodePrompt(): void {
-    const prompt = buildDecodePrompt(state, lastApplied);
-    if (!prompt) {
-      // 所有变换都关闭：无需还原
-      promptArea.value = '';
-      promptWrap.replaceChildren(
-        h('p', {
-          class: 'py-2 text-center text-sm text-[var(--fg-muted)]',
-          textContent: '当前未开启任何变换，原文无需还原提示词。',
-        }),
-      );
-    } else {
-      promptArea.value = prompt;
-      promptWrap.replaceChildren(
-        h('p', {
-          class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
-          textContent:
-            '把这段提示词 + 变换后的文字一起发给豆包 / DeepSeek / ChatGPT，AI 会按规则还原出原始联系方式。改了设置请重新生成。',
-        }),
-        promptArea,
-        h('div', { class: 'flex items-center justify-end' }, [
-          createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
-        ]),
-      );
-    }
+  /** 生成「让 AI 直接产出加密文本」的提示词，展示在按钮下方 */
+  function generateEncryptPrompt(): void {
+    const prompt = buildEncryptPrompt(inputArea.value, state);
+    promptArea.value = prompt;
+    promptWrap.replaceChildren(
+      h('p', {
+        class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
+        textContent:
+          '把这段提示词发给豆包 / DeepSeek / ChatGPT，AI 会直接返回 3 个加密版本供你挑选。改了设置或原文请重新生成。',
+      }),
+      h('p', {
+        class: 'text-xs leading-relaxed text-amber-600 dark:text-amber-400',
+        textContent:
+          '⚠ 这段提示词携带你的联系方式原文，发给 AI 意味着原文经第三方。敏感账号建议用上方本地生成（数据不出浏览器）。',
+      }),
+      promptArea,
+      h('div', { class: 'flex items-center justify-end' }, [
+        createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
+      ]),
+    );
     promptWrap.classList.remove('hidden');
     promptArea.scrollTop = 0;
   }
@@ -340,8 +358,6 @@ function renderObfuscator() {
     for (let i = 0; i < CANDIDATE_COUNT; i++) {
       results.push(obfuscate(input, state));
     }
-    // 记录第一条候选的 applied，供💡prompt 精确判断实际生效的变换
-    lastApplied = results[0]?.applied ?? [];
 
     candidatesWrap.replaceChildren(
       candidatesLabel,
@@ -487,24 +503,10 @@ function renderObfuscator() {
         }),
         visibleGrid,
       ]),
-      // 不可见变换
-      h('div', { class: 'space-y-2' }, [
-        h('p', {
-          class: 'text-sm font-medium',
-          textContent: '不可见变换（激进，可能被平台过滤）',
-        }),
-        invisibleWarning,
-        invisibleGrid,
-      ]),
-      // 变态变换
-      h('div', { class: 'space-y-2' }, [
-        h('p', {
-          class: 'text-sm font-medium',
-          textContent: '变态变换（人难读、AI 可解）',
-        }),
-        insaneWarning,
-        insaneGrid,
-      ]),
+      // 不可见变换（条件显示：激进档及以上）
+      invisibleSection,
+      // 变态变换（条件显示：变态档）
+      insaneSection,
       // 预设
       h('div', { class: 'space-y-2' }, [
         h('p', {
@@ -542,6 +544,7 @@ function renderObfuscator() {
     // onclick 已处理，这里仅占位确保事件流统一
   });
 
-  // 初始渲染历史
+  // 初始渲染历史 + 根据恢复的 state 设置分组显隐
   renderHistory();
+  updateGroupVisibility();
 }
