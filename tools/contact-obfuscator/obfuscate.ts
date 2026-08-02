@@ -537,7 +537,7 @@ export const PRESETS: Preset[] = [
       insertSymbol: false,
       visibleSeparator: false,
       emailObfuscate: true,
-      zeroWidth: false,
+      zeroWidth: true,
       homoglyph: false,
       leetReplace: false,
       digitToRoman: false,
