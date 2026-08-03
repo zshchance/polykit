@@ -75,39 +75,29 @@ export function textToLogoCells(cfg: LogoCfg): Rendered {
 
   for (const line of lines) {
     const chars = Array.from(line); // 正确处理中文/emoji（码点拆分）
-    // 同字元素 + 全角字：栅格阶段就横向压成半角宽（compressRatio = 半角/全角 advance），
-    // 这样 DOM 里全是半角 cell，无需 CSS transform:scaleX → 预览与导出（PNG/HTML）一致，
-    // 根治 html-to-image 对 per-cell transform 子像素渲染的累积漂移。
-    let compressRatio = 0;
-    if (selfChar) {
-      const half = ctx.measureText('M').width;
-      const full = ctx.measureText('中').width;
-      compressRatio = half > 0 && full > 0 ? half / full : 0.6;
-    }
     // 逐字取点阵：glyphs[i] 是第 i 个字的 boolean[][]（[行][列]）
-    // 全角字（selfChar）传 compressRatio → 输出半角宽点阵；其余不压缩
-    const glyphs: boolean[][][] = chars.map((ch) =>
-      rasterizeChar(ctx, canvas, ch, glyphH, selfChar && isFullWidthChar(ch) ? compressRatio : undefined),
-    );
+    const glyphs: boolean[][][] = chars.map((ch) => rasterizeChar(ctx, canvas, ch, glyphH));
     if (glyphs.length === 0) continue;
+    // 同字元素：每个字用它自身字符填充；全角字需标 w 让渲染层 scaleX 压回半角宽
+    const fillFor: { ch: string; w: boolean }[] = selfChar
+      ? chars.map((ch) => ({ ch, w: isFullWidthChar(ch) }))
+      : chars.map(() => ({ ch: fillChar, w: false }));
 
     const lastGlyph = glyphs[glyphs.length - 1];
-    // 每字大字目标列宽：按「栅格后点阵实际占的宽度类别」固定，消除 ink 列数抖动
-    // （如 即16 开/宝17-18 匣18-19）导致的宽度比例失真 + 拼接位置偏差单调累积。
-    //   非 selfChar：全角字 1 em = fontSize 列；半角 → 半宽。等宽列模型 2:1。
-    //   selfChar：全角字已在栅格阶段压成半角宽点阵 → 目标宽也用半宽（fontSize/2），
-    //   与压窄后的点阵匹配，DOM 全是半角 cell，无需 CSS transform。
+    // 每字大字目标列宽：按「被放大字符」自身类别固定（与填充物无关），
+    // 消除 rasterizeChar trim 后 ink 列数抖动（如 即16 开/宝17-18 匣18-19）
+    // 导致的宽度比例失真 + 拼接位置偏差单调累积（最末字走形最重）。
+    //   全角（CJK 等）→ 1 em = fontSize 列；半角 → 半宽。与等宽列模型 2:1 一致。
     //   ink 宽 > 目标宽（极端）时 pad=0，按 ink 保底、不裁字形。
-    const targetWidths = chars.map((ch) => {
-      if (selfChar && isFullWidthChar(ch)) return Math.max(1, Math.round(fontSize / 2));
-      return isFullWidthChar(ch) ? fontSize : Math.max(1, Math.round(fontSize / 2));
-    });
+    const targetWidths = chars.map((ch) =>
+      isFullWidthChar(ch) ? fontSize : Math.max(1, Math.round(fontSize / 2)),
+    );
     const blockRows: Cell[][] = [];
     for (let y = 0; y < glyphH; y++) {
       const row: Cell[] = [];
       for (let gi = 0; gi < glyphs.length; gi++) {
         const dot = glyphs[gi]!;
-        const fillCh = selfChar ? chars[gi]! : fillChar;
+        const fill = fillFor[gi]!;
         const w = dot[0]?.length ?? 0;
         // 固定列宽内居中（左右补空格列）
         const targetW = targetWidths[gi]!;
@@ -117,9 +107,8 @@ export function textToLogoCells(cfg: LogoCfg): Rendered {
         for (let x = 0; x < w; x++) {
           const lit = dot[y]?.[x] ?? false;
           // lit=该字笔画覆盖 → 填该字字符（同字元素）或 fillChar；暗像素=空格
-          // 全角字已在栅格阶段压成半角宽 → 不带 w（无需 CSS scaleX）
           if (lit) {
-            row.push({ ch: fillCh, fg });
+            row.push(fill.w ? { ch: fill.ch, fg, w: true } : { ch: fill.ch, fg });
           } else {
             row.push({ ch: ' ' });
           }
@@ -150,23 +139,19 @@ export function textToLogoCells(cfg: LogoCfg): Rendered {
  *
  * ctx/canvas 由调用方传入并复用（每次重设尺寸会清空 ctx 状态，本函数内部重设 font）。
  * 导出供 find-word 复用：把隐藏字栅格化成半角 █ 点阵再叠到字符画上。
- *
- * @param compressRatio 可选横向压缩比（如 0.6）：传入时用 ctx.scale(compressRatio,1)
- *   把字形横向压窄后栅格化，输出点阵宽度≈半角 advance。用于 Logo 同字元素全角字：
- *   栅格阶段就压成半角宽，避免导出时 CSS transform:scaleX 的子像素漂移累积。
  */
 export function rasterizeChar(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
   ch: string,
   targetH: number,
-  compressRatio?: number,
 ): boolean[][] {
   // 测量字符宽度
   const metrics = ctx.measureText(ch);
-  // metrics.width 是 advance width；压缩时按压缩后宽度定 canvas 宽
-  const rawW = Math.ceil(metrics.width);
-  const w = Math.max(1, compressRatio ? Math.ceil(rawW * compressRatio) : rawW);
+  // metrics.width 是 advance width；实际 ink 可能略宽，加点余量
+  const advW = Math.ceil(metrics.width);
+  // ink 宽度可能小于 advance（英文），也可能差不多（中文方块）
+  const w = Math.max(1, advW);
   const h = targetH;
 
   // 调整 canvas 尺寸（重设尺寸会清空 ctx 状态，需重设 font）
@@ -179,15 +164,7 @@ export function rasterizeChar(
   ctx.textAlign = 'left';
   ctx.fillStyle = '#ffffff';
   ctx.clearRect(0, 0, w, h);
-  if (compressRatio && compressRatio > 0 && compressRatio < 1) {
-    // 横向压缩字形：scale 不影响 fillText 的字号，仅压窄字形
-    ctx.save();
-    ctx.scale(compressRatio, 1);
-    ctx.fillText(ch, 0, 0);
-    ctx.restore();
-  } else {
-    ctx.fillText(ch, 0, 0);
-  }
+  ctx.fillText(ch, 0, 0);
 
   const { data } = ctx.getImageData(0, 0, w, h);
   const dot: boolean[][] = [];
