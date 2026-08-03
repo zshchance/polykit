@@ -23,6 +23,8 @@ export interface FilterState {
   tags: string[];
   /** 搜索关键词 */
   keyword: string;
+  /** 是否仅看「我的收藏」（星标）；独立于 category，可与类目/标签/关键词叠加 */
+  starredOnly: boolean;
 }
 
 interface FilterBlob {
@@ -30,10 +32,11 @@ interface FilterBlob {
   category: string;
   tags: string[];
   keyword: string;
+  starredOnly?: boolean; // 向后兼容：旧 blob 没有此字段，缺省当 false
 }
 
 export function defaultFilter(): FilterState {
-  return { category: 'all', tags: [], keyword: '' };
+  return { category: 'all', tags: [], keyword: '', starredOnly: false };
 }
 
 /** 读取检索态；损坏/字段非法时回退默认 */
@@ -61,7 +64,9 @@ export function loadFilter(): FilterState {
         ? parsed.keyword.slice(0, MAX_KEYWORD_LEN)
         : '';
 
-    return { category, tags, keyword };
+    const starredOnly = parsed.starredOnly === true;
+
+    return { category, tags, keyword, starredOnly };
   } catch {
     return def;
   }

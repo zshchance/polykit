@@ -7,6 +7,7 @@ import { CATEGORIES, categoryName, type Prompt } from './types';
 import { ALL_PROMPTS, FUN_PROMPTS_ONLY, FEATURED_PROMPTS, topTags } from './data';
 import { renderVariant, resolveVariables } from './template';
 import { loadFilter, saveFilter, type FilterState } from './settings';
+import { loadFavorites, saveFavorites, type FavoritesState } from './favorites';
 
 initTheme();
 
@@ -29,14 +30,51 @@ function renderPromptHub(): void {
   // —— 状态 ——
   const restored = loadFilter();
   const filter: FilterState = { ...restored };
+  const fav: FavoritesState = loadFavorites();
+  // 用 Set 加速 contains 判断（starred/pinned 列表本身仍用于持久化，保持顺序）
+  const starredSet = new Set(fav.starred);
+  const pinnedSet = new Set(fav.pinned);
 
   function persist(): void {
     saveFilter({ ...filter });
   }
 
-  /** 应用当前检索：类目 + 标签(OR 取并集) + 关键词(模糊) */
+  function persistFav(): void {
+    saveFavorites({ starred: fav.starred, pinned: fav.pinned });
+  }
+
+  /** 切换星标：加/移 id，持久化，刷新受影响的视图 */
+  function toggleStar(id: string): void {
+    if (starredSet.has(id)) {
+      starredSet.delete(id);
+      fav.starred = fav.starred.filter((x) => x !== id);
+    } else {
+      starredSet.add(id);
+      fav.starred = [...fav.starred, id];
+    }
+    persistFav();
+    renderCategoryRow(); // 收藏胶囊上的计数变化
+    renderGrid();        // 卡片星标状态 + （收藏筛选下）列表变化
+    renderFeatured();    // 今日推荐区的卡片星标图标也同步
+  }
+
+  /** 切换置顶：加/移 id，持久化，刷新列表（重排序） */
+  function togglePin(id: string): void {
+    if (pinnedSet.has(id)) {
+      pinnedSet.delete(id);
+      fav.pinned = fav.pinned.filter((x) => x !== id);
+    } else {
+      pinnedSet.add(id);
+      fav.pinned = [...fav.pinned, id];
+    }
+    persistFav();
+    renderGrid(); // 置顶影响排序
+  }
+
+  /** 应用当前检索：类目 + 标签(OR 取并集) + 关键词(模糊) + 收藏筛选 + 置顶排序 */
   function applyFilter(list: Prompt[]): Prompt[] {
     let r = list;
+    if (filter.starredOnly) r = r.filter((p) => starredSet.has(p.id));
     if (filter.category !== 'all') r = r.filter((p) => p.category === filter.category);
     if (filter.tags.length > 0) {
       // 多标签取并集（命中任一即入选），而非要求同时满足所有标签
@@ -47,6 +85,14 @@ function renderPromptHub(): void {
       r = r.filter((p) => {
         const hay = (p.title + ' ' + p.desc + ' ' + p.tags.join(' ') + ' ' + categoryName(p.category)).toLowerCase();
         return hay.includes(kw);
+      });
+    }
+    // 置顶项排最前（稳定排序：置顶项之间、非置顶项之间各自保持原序）
+    if (fav.pinned.length > 0) {
+      r = [...r].sort((a, b) => {
+        const pa = pinnedSet.has(a.id) ? 0 : 1;
+        const pb = pinnedSet.has(b.id) ? 0 : 1;
+        return pa - pb;
       });
     }
     return r;
@@ -88,9 +134,29 @@ function renderPromptHub(): void {
   // ────────── 2. 类目 + 标签胶囊 ──────────
   const categoryRow = h('div', { class: 'flex flex-wrap gap-2' }, []);
   function renderCategoryRow(): void {
+    const starredActive = filter.starredOnly;
+    const starredChip = h('button', {
+      type: 'button',
+      'aria-pressed': String(starredActive),
+      class: [
+        'rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-200 border',
+        starredActive
+          ? 'bg-amber-500 text-white border-amber-500'
+          : 'bg-[var(--bg-elevated)] text-[var(--fg-muted)] border-[var(--border)] hover:border-amber-500 hover:text-amber-500',
+      ].join(' '),
+      textContent: `⭐ 收藏${fav.starred.length > 0 ? `(${fav.starred.length})` : ''}`,
+      title: '只看我星标的提示词',
+      onclick: () => {
+        filter.starredOnly = !filter.starredOnly;
+        renderCategoryRow();
+        renderGrid();
+        persist();
+      },
+    });
     categoryRow.replaceChildren(
-      chip('✨ 全部', 'all', filter.category === 'all'),
-      ...CATEGORIES.map((c) => chip(`${c.icon} ${c.name}`, c.id, filter.category === c.id)),
+      chip('✨ 全部', 'all', filter.category === 'all' && !filter.starredOnly),
+      starredChip,
+      ...CATEGORIES.map((c) => chip(`${c.icon} ${c.name}`, c.id, filter.category === c.id && !filter.starredOnly)),
     );
   }
   function chip(label: string, value: string, isActive: boolean): HTMLButtonElement {
@@ -105,6 +171,8 @@ function renderPromptHub(): void {
       textContent: label,
       onclick: () => {
         filter.category = value;
+        // 选类目时退出"收藏"筛选（两者是并列的主筛选维度）
+        if (filter.starredOnly) filter.starredOnly = false;
         renderCategoryRow();
         renderGrid();
         persist();
@@ -143,7 +211,7 @@ function renderPromptHub(): void {
   const featuredArea = h('div', { class: 'space-y-2' });
   function renderFeatured(): void {
     // 有检索条件时隐藏推荐区（避免干扰筛选结果）
-    const hasFilter = filter.category !== 'all' || filter.tags.length > 0 || filter.keyword.trim() !== '';
+    const hasFilter = filter.starredOnly || filter.category !== 'all' || filter.tags.length > 0 || filter.keyword.trim() !== '';
     featuredArea.style.display = hasFilter ? 'none' : '';
     if (hasFilter) return;
     featuredArea.replaceChildren(
@@ -177,22 +245,79 @@ function renderPromptHub(): void {
     renderFeatured();
   }
 
-  /** 单张卡片 */
+  /** 单张卡片（外层用 div[role=button]，因为内部要嵌星标/置顶按钮，button 内嵌 button 非法） */
   function promptCard(p: Prompt): HTMLElement {
-    return h('button', {
+    const isStarred = starredSet.has(p.id);
+    const isPinned = pinnedSet.has(p.id);
+
+    // 星标按钮：已星标=实心金黄常驻；未星标=半透明，hover 卡片才显形
+    const starBtn = h('button', {
       type: 'button',
+      'aria-label': isStarred ? '取消星标' : '星标',
+      'aria-pressed': String(isStarred),
+      title: isStarred ? '取消星标' : '星标',
+      class: [
+        'rounded-full p-1 text-sm leading-none transition-all duration-150',
+        isStarred
+          ? 'text-amber-500 opacity-100'
+          : 'text-[var(--fg-muted)] opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:text-amber-500',
+      ].join(' '),
+      textContent: isStarred ? '⭐' : '☆',
+      onclick: (e: MouseEvent) => {
+        e.stopPropagation();
+        toggleStar(p.id);
+      },
+    });
+
+    // 置顶按钮：已置顶=实心高亮常驻；未置顶=半透明，hover 卡片才显形
+    const pinBtn = h('button', {
+      type: 'button',
+      'aria-label': isPinned ? '取消置顶' : '置顶',
+      'aria-pressed': String(isPinned),
+      title: isPinned ? '取消置顶' : '置顶（排到最前）',
+      class: [
+        'rounded-full p-1 text-sm leading-none transition-all duration-150',
+        isPinned
+          ? 'text-[var(--accent)] opacity-100'
+          : 'text-[var(--fg-muted)] opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:text-[var(--accent)]',
+      ].join(' '),
+      textContent: isPinned ? '📌' : '📍',
+      onclick: (e: MouseEvent) => {
+        e.stopPropagation();
+        togglePin(p.id);
+      },
+    });
+
+    return h('div', {
+      role: 'button',
+      tabindex: '0',
+      'aria-label': p.title,
       class:
-        'group relative text-left rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-[var(--accent)]',
+        'group relative cursor-pointer text-left rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-[var(--accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
       onclick: () => openDetail(p),
+      onkeydown: (e: KeyboardEvent) => {
+        // 键盘可达性：Enter/Space 触发详情（保留默认行为，Space 防页面滚动）
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          openDetail(p);
+        } else if (e.key === ' ') {
+          e.preventDefault();
+          openDetail(p);
+        }
+      },
     }, [
-      // 彩蛋徽章
-      p.fun
-        ? (h('span', {
-            class:
-              'absolute right-3 top-3 rounded-full bg-[var(--accent)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--accent)]',
-            textContent: '✨ 彩蛋',
-          }) as HTMLElement)
-        : (h('span') as HTMLElement),
+      // 右上角动作区：📌 置顶 + ⭐ 星标 + ✨ 彩蛋徽章（横向排列）
+      h('div', { class: 'absolute right-2.5 top-2.5 flex items-center gap-0.5' }, [
+        pinBtn,
+        starBtn,
+        ...(p.fun
+          ? [h('span', {
+              class:
+                'ml-1 rounded-full bg-[var(--accent)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--accent)]',
+              textContent: '✨ 彩蛋',
+            })]
+          : []),
+      ]),
       h('div', { class: 'flex items-start gap-2.5' }, [
         h('span', { class: 'text-2xl leading-none', textContent: p.icon }),
         h('div', { class: 'min-w-0 flex-1' }, [
