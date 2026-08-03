@@ -13,6 +13,8 @@ export interface Cell {
   fg?: string;
   /** 背景色：半块模式=下半像素色；缺省=透明（透出终端背景） */
   bg?: string;
+  /** wide：占 2 字符宽的全角字标记，渲染层 scaleX(半角/全角 advance 比 ≈0.6) 压回半角列宽。find-word 非点阵模式植入时置 true。现有渲染管线（▀/█/charset）从不置此位 → 不会被误压。 */
+  w?: boolean;
 }
 
 /** 渲染结果：行 × 列 的 Cell 网格。 */

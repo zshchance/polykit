@@ -34,6 +34,7 @@ import {
   isCustomStyleId, toStylePreset, buildStylePrompt, parseStyleAIOutput,
   type StyleAppearance,
 } from './custom-styles';
+import { applyFindWord, randomSeed } from './find-word';
 import { createCopyButton } from '@/core/components/CopyButton';
 
 // —— 字体声明（工具作用域，不污染全站）——
@@ -61,6 +62,8 @@ function render() {
   // 操作按钮里的「复制彩色 HTML」按钮引用，需在 buildControls（引用它做显隐）
   // 之前声明，避免 TDZ（let 在函数体内整段提升，但初始化前不可访问）。
   let htmlCopyBtn: HTMLElement;
+  // 纯文本错位提示引用（非点阵找字 + 含全角字时显示），buildActions 赋值。
+  let plainTextHint: HTMLElement;
 
   // —— state ——
   // provider 注入必须在 loadCfg 前：自定义风格通过 provider 注入 getEffectivePresets
@@ -72,6 +75,8 @@ function render() {
     text: restored.text,
     textLogo: restored.textLogo,
     logoSize: restored.logoSize,
+    textLogoSelfChar: restored.textLogoSelfChar,
+    findWord: restored.findWord,
   };
   // 首次访问（无保存配置）时，图片模式默认关闭辉光（默认复古预设带辉光，用户反馈过亮）
   // 有保存配置则尊重用户之前的选择，不覆盖
@@ -107,6 +112,57 @@ function render() {
     class: 'w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6',
     style: 'min-height:300px;display:flex;align-items:center;justify-content:center;',
   }, [frameWrap]);
+
+  // —— 预览缩放 + 拖动（仅视觉层，transform 在 frameWrap 上，不影响导出：导出取 frame 本体）——
+  // zoom 1=100%，范围 0.5~5，步进 1.25；panX/panY 为 translate 偏移（px）。
+  // 仅 zoom>1 可拖（zoom=1 居中无偏移，避免误拖）；鼠标优先，触摸后续。
+  let zoom = 1;
+  let panX = 0;
+  let panY = 0;
+  let zoomLabel: HTMLElement | null = null; // 工具栏百分比文本引用（buildPreviewToolbar 赋值）
+
+  function applyZoomTransform(): void {
+    frameWrap.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    frameWrap.style.transformOrigin = 'center center';
+    frameWrap.style.cursor = zoom > 1 ? 'grab' : 'default';
+    if (zoomLabel) zoomLabel.textContent = `${Math.round(zoom * 100)}%`;
+  }
+  function setZoom(next: number): void {
+    zoom = Math.max(0.5, Math.min(5, next));
+    // 缩回 1 时复位偏移
+    if (zoom <= 1) { panX = 0; panY = 0; }
+    applyZoomTransform();
+  }
+  // 拖动：mousedown 记起点，document mousemove 更新偏移，mouseup 结束
+  let dragging = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let dragStartPanX = 0;
+  let dragStartPanY = 0;
+  frameWrap.addEventListener('mousedown', (e: MouseEvent) => {
+    if (zoom <= 1) return; // 仅放大态可拖
+    e.preventDefault();
+    dragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    dragStartPanX = panX;
+    dragStartPanY = panY;
+    document.body.style.userSelect = 'none';
+    frameWrap.style.cursor = 'grabbing';
+  });
+  document.addEventListener('mousemove', (e: MouseEvent) => {
+    if (!dragging) return;
+    // 除 zoom 让拖动手感在不同缩放下一致
+    panX = dragStartPanX + (e.clientX - dragStartX) / zoom;
+    panY = dragStartPanY + (e.clientY - dragStartY) / zoom;
+    applyZoomTransform();
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.style.userSelect = '';
+    frameWrap.style.cursor = zoom > 1 ? 'grab' : 'default';
+  });
 
   /**
    * 字号自适应：
@@ -175,7 +231,7 @@ function render() {
 
     const token = ++renderToken;
     try {
-      const cells = imageToCells(loadedImage.bitmap, {
+      let cells = imageToCells(loadedImage.bitmap, {
         width: state.cfg.width,
         halfBlock: state.cfg.halfBlock,
         charset: state.cfg.charset,
@@ -188,8 +244,9 @@ function render() {
         bg: state.cfg.bg,
       });
       if (token !== renderToken) return; // 被新的渲染抢占
+      cells = maybeApplyFindWord(cells);
       currentCells = cells;
-      currentGridWidth = cells[0]?.length ?? 0;
+      currentGridWidth = gridMaxWidth(cells);
       fitFontSize();
       renderCellsToPre(cells);
       replaceFrame();
@@ -212,16 +269,18 @@ function render() {
         return;
       }
       try {
-        const cells = textToLogoCells({
+        let cells = textToLogoCells({
           text: state.text,
           glyphHeight: state.logoSize,
           fillChar: '█',
           charGap: 2,
           fg: state.cfg.fg,
           bg: state.cfg.bg,
+          selfChar: state.textLogoSelfChar,
         });
+        cells = maybeApplyFindWord(cells);
         currentCells = cells;
-        currentGridWidth = cells[0]?.length ?? 0;
+        currentGridWidth = gridMaxWidth(cells);
         pre.style.opacity = '1';
         fitFontSize();
         renderCellsToPre(cells);
@@ -242,34 +301,94 @@ function render() {
     replaceFrame();
   }
 
-  /** 把 Cell 网格渲染进 <pre>（彩色模式每 Cell 一个 span，单色直接拼接文本）。 */
+  /**
+   * 若开启找字游戏且有隐藏文字，把隐藏字点阵叠到 cells 上（返回新网格）。
+   * 在 renderCellsToPre 前调用，下游（复制/HTML/PNG）透明带隐藏字。
+   */
+  function maybeApplyFindWord(cells: Rendered): Rendered {
+    const fw = state.findWord;
+    if (!fw.enabled) return cells;
+    if (!fw.text.trim()) return cells;
+    return applyFindWord(cells, fw, state.cfg.fg);
+  }
+
+  /** 非点阵找字 + 隐藏字含全角时，「复制纯文本」会错位（CSS 压缩只对预览/HTML/PNG）→ 显示提示。 */
+  function updatePlainTextHint(): void {
+    if (!plainTextHint) return;
+    const fw = state.findWord;
+    const show = fw.enabled && !fw.dotMatrix && hasFullWidthChar(fw.text);
+    plainTextHint.style.display = show ? '' : 'none';
+  }
+
+  /** 字符串里是否含全角字符（CJK/全角符号）。 */
+  function hasFullWidthChar(s: string): boolean {
+    for (const ch of Array.from(s)) {
+      const cp = ch.codePointAt(0) ?? 0;
+      if (
+        (cp >= 0x1100 && cp <= 0x115f) ||
+        (cp >= 0x2e80 && cp <= 0x9fff) ||
+        (cp >= 0xac00 && cp <= 0xd7a3) ||
+        (cp >= 0xf900 && cp <= 0xfaff) ||
+        (cp >= 0xff00 && cp <= 0xff60) ||
+        (cp >= 0xffe0 && cp <= 0xffe6)
+      ) return true;
+    }
+    return false;
+  }
+
+  /**
+   * 把 Cell 网格渲染进 <pre>。
+   * - 彩色模式（colorMode）：每 Cell 一个 span（带 fg/bg）。
+   * - 单色模式：带 fg/bg 的 Cell 产 span（find-word 高亮凸显），无色 Cell 拼文本（性能：多数 cell 不产 span）。
+   * - 全角标记 Cell（c.w）：产 span + inline-block + scaleX(ratio) + width:ratio em，压回半角列宽。
+   *   ratio = 半角 advance / 全角 advance（等宽字体 ≈0.6，运行时测量）。
+   *   仅 find-word 非点阵模式植入的全角字置 c.w，半块 ▀/点阵 █ 不带 → 绝不误压。
+   */
   function renderCellsToPre(cells: Rendered): void {
     pre.replaceChildren();
-    if (state.cfg.colorMode) {
-      // 彩色：每 Cell 一个 span（DOM 节点可能上万，但预览够用）
-      const frag = document.createDocumentFragment();
-      for (let y = 0; y < cells.length; y++) {
-        const row = cells[y]!;
+    const frag = document.createDocumentFragment();
+    for (let y = 0; y < cells.length; y++) {
+      const row = cells[y]!;
+      if (state.cfg.colorMode) {
+        // 彩色：每 Cell 一个 span
+        for (let x = 0; x < row.length; x++) {
+          frag.append(makeCellSpan(row[x]!));
+        }
+      } else {
+        // 单色：带色 Cell 产 span，无色拼文本
         for (let x = 0; x < row.length; x++) {
           const c = row[x]!;
-          const span = document.createElement('span');
-          if (c.fg) span.style.color = c.fg;
-          if (c.bg) span.style.backgroundColor = c.bg;
-          span.textContent = c.ch;
-          frag.append(span);
+          if (c.fg || c.bg || c.w) {
+            frag.append(makeCellSpan(c));
+          } else {
+            frag.append(document.createTextNode(c.ch));
+          }
         }
-        frag.append(document.createTextNode('\n'));
       }
-      pre.append(frag);
-    } else {
-      // 单色：直接拼接文本（color 由 pre 继承）
-      const lines: string[] = [];
-      for (const row of cells) {
-        lines.push(row.map((c) => c.ch).join(''));
-      }
-      pre.textContent = lines.join('\n');
-      pre.style.color = state.cfg.fg;
+      frag.append(document.createTextNode('\n'));
     }
+    pre.append(frag);
+    if (!state.cfg.colorMode) pre.style.color = state.cfg.fg;
+  }
+
+  /** 造一个 Cell 的 span：带 fg/bg + 全角压缩（c.w）。 */
+  function makeCellSpan(c: { ch: string; fg?: string; bg?: string; w?: boolean }): HTMLSpanElement {
+    const span = document.createElement('span');
+    if (c.fg) span.style.color = c.fg;
+    if (c.bg) span.style.backgroundColor = c.bg;
+    if (c.w) {
+      // 全角字压回半角列宽：inline-block + scaleX(ratio) + 固定宽度（行高 1，纵向不拉）。
+      // ratio = 半角/全角 advance 比（JBM 等宽字体半角为 0.6em，中文全角 1em → ≈0.6）。
+      // 关键：普通列（空格/█）宽 = 半角 advance，压缩字列必须同宽，否则每列宽不一致 →
+      // 网格位置随字数单调累积、字形内部横向扭曲（同字元素走形的结构性根因）。
+      const ratio = getFullToHalfRatio();
+      span.style.display = 'inline-block';
+      span.style.transform = `scaleX(${ratio})`;
+      span.style.width = `${ratio}em`;
+      span.style.transformOrigin = 'left center';
+    }
+    span.textContent = c.ch;
+    return span;
   }
 
   /** 重建终端外框（包住 pre），替换 frameWrap 子节点。 */
@@ -296,7 +415,7 @@ function render() {
   const previewCol = h('div', {
     class: 'space-y-3 min-w-0 order-first lg:order-none sticky top-0 lg:top-6 z-10 bg-[var(--bg)] py-2 max-h-[50vh] lg:max-h-none overflow-auto lg:overflow-visible',
   }, [
-    h('div', { class: 'text-sm font-medium text-[var(--fg)]' }, ['预览']),
+    buildPreviewToolbar(),
     stage,
   ]);
   const layout = h('div', {
@@ -313,10 +432,57 @@ function render() {
   requestAnimationFrame(firstRender);
   setTimeout(firstRender, 60);
 
+  // —— 预览工具栏：标题 + 缩放按钮（放大/缩小/100%）+ 当前百分比 ——
+  function buildPreviewToolbar(): HTMLElement {
+    zoomLabel = h('span', {
+      class: 'text-xs tabular-nums text-[var(--fg-muted)] w-9 text-center',
+      textContent: '100%',
+    });
+    const btnBase = 'inline-flex items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] w-7 h-7 text-xs text-[var(--fg-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors';
+    const zoomInBtn = h('button', {
+      type: 'button',
+      title: '放大（拖动查看细节）',
+      'aria-label': '放大预览',
+      class: btnBase,
+      textContent: '➕',
+      onclick: () => setZoom(zoom * 1.25),
+    });
+    const zoomOutBtn = h('button', {
+      type: 'button',
+      title: '缩小',
+      'aria-label': '缩小预览',
+      class: btnBase,
+      textContent: '➖',
+      onclick: () => setZoom(zoom / 1.25),
+    });
+    const resetBtn = h('button', {
+      type: 'button',
+      title: '恢复 100%',
+      'aria-label': '恢复 100%',
+      class: btnBase,
+      textContent: '🎯',
+      onclick: () => { setZoom(1); },
+    });
+    return h('div', { class: 'flex items-center justify-between' }, [
+      h('span', { class: 'text-sm font-medium text-[var(--fg)]', textContent: '预览' }),
+      h('div', { class: 'flex items-center gap-1' }, [
+        zoomOutBtn,
+        zoomLabel,
+        zoomInBtn,
+        resetBtn,
+      ]),
+    ]);
+  }
+
   // —— 控制面板 ——
   function buildControls(): HTMLElement {
     // 控制面板根元素引用（updateModeVisibility 通过它查 details 做显隐，下方 return 时赋值）
     let controlsEl: HTMLElement;
+    // 找字游戏分组引用（updateModeVisibility / updateFindWordDisabled 在下方赋值前
+    // 可能被首次同步调用，需提前声明避免 TDZ）
+    let findWordDetails: HTMLElement;
+    let findWordContent: HTMLElement;
+    let findWordHint: HTMLElement;
     // Tab：图片 / 文字流
     const tabImage = h('button', {
       type: 'button',
@@ -423,6 +589,13 @@ function render() {
     // Logo 大小滑动条（仅文字流 + logo 开启时用）
     const logoSizeSlider = rangeSlider('Logo 大小', state.logoSize, 8, 40, (v) => {
       state.logoSize = v;
+      persist();
+      if (state.mode === 'text' && state.textLogo) rerenderPreview();
+    });
+
+    // Logo 同字元素开关：每个字用它自身字符填充（用 p 组成大的 p，用「即」组成大的「即」）
+    const logoSelfChk = checkbox('同字元素（每个字用它自身字符组成，而非 █）', state.textLogoSelfChar, (v) => {
+      state.textLogoSelfChar = v;
       persist();
       if (state.mode === 'text' && state.textLogo) rerenderPreview();
     });
@@ -568,6 +741,8 @@ function render() {
       halfBlockChk.input.disabled = !state.cfg.colorMode;
       colorModeChk.input.checked = state.cfg.colorMode;
       invertChk.input.checked = state.cfg.invert;
+      // halfBlock 变化会影响找字游戏提示行显隐（灰度可真隐藏，半块为显式彩蛋）
+      updateFindWordDisabled();
     }
 
     function applyPreset(preset: StyleConfig): void {
@@ -633,14 +808,19 @@ function render() {
       dropzone.style.display = imgShow ? '' : 'none';
       textArea.style.display = textShow ? '' : 'none';
       logoChk.row.style.display = textShow ? '' : 'none'; // Logo 开关仅文字流
-      // Logo 大小滑动条：仅文字流 + logo 勾选时显示
-      logoSizeSlider.row.style.display = textShow && state.textLogo ? '' : 'none';
+      // Logo 大小滑动条 + 同字元素开关：仅文字流 + logo 勾选时显示
+      const logoOptsShow = textShow && state.textLogo;
+      logoSizeSlider.row.style.display = logoOptsShow ? '' : 'none';
+      logoSelfChk.row.style.display = logoOptsShow ? '' : 'none';
       // 字符画参数整区：仅图片模式显示（文字流模式下完全隐藏）
       // controlsEl 在 return 时赋值，初次调用可能尚未赋值，需守护
       if (controlsEl) {
         const charParamsDetails = controlsEl.querySelector('details');
         if (charParamsDetails) charParamsDetails.style.display = imgShow ? '' : 'none';
       }
+      // 找字游戏分组：仅图片模式 或 文字流 Logo 模式（有字符画网格）显示
+      // findWordDetails 在下方声明，首次调用时尚未赋值，需守护
+      if (findWordDetails) findWordDetails.style.display = (imgShow || state.textLogo) ? '' : 'none';
       // 图片专属参数
       widthSlider.row.style.display = imgShow ? '' : 'none';
       halfBlockChk.row.style.display = imgShow ? '' : 'none';
@@ -834,6 +1014,134 @@ function render() {
       setTimeout(focusDesc, 60);
     }
 
+    // —— 找字游戏分组（独立 details，默认折叠）——
+    // 开关 off 时，分组内其余控件整体禁用（opacity + pointer-events）。
+    // 半块真彩模式下隐藏字为显式彩蛋 → 提示行可见。
+    findWordHint = h('p', {
+      class: 'text-[11px] text-[var(--fg-muted)]',
+      textContent: '💡 半块真彩模式下隐藏字为显式彩蛋，关闭「彩色」切灰度可真隐藏',
+    });
+    findWordContent = h('div', { class: 'mt-3 space-y-3' });
+
+    const fwEnabledChk = checkbox('开启找字游戏（把一句话藏进字符画）', state.findWord.enabled, (v) => {
+      state.findWord.enabled = v;
+      persist();
+      updateFindWordDisabled();
+      rerenderPreview();
+    });
+    const fwText = h('textarea', {
+      rows: 2,
+      class: 'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      placeholder: '一句话，每个字按顺序藏进画面（如：我爱字符画）',
+      oninput: () => {
+        state.findWord.text = fwText.value;
+        persist();
+        updatePlainTextHint();
+        rerenderPreview();
+      },
+    });
+    fwText.value = state.findWord.text;
+    const fwSeedInput = h('input', {
+      type: 'text',
+      class: 'w-20 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs font-mono text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      value: state.findWord.seed,
+      onchange: () => {
+        const v = fwSeedInput.value.trim();
+        state.findWord.seed = v || randomSeed();
+        fwSeedInput.value = state.findWord.seed;
+        persist();
+        rerenderPreview();
+      },
+    });
+    const fwDice = h('button', {
+      type: 'button',
+      title: '随机一个种子（同种子→同位置）',
+      'aria-label': '随机种子',
+      class: 'inline-flex items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors',
+      textContent: '🎲',
+      onclick: () => {
+        state.findWord.seed = randomSeed();
+        fwSeedInput.value = state.findWord.seed;
+        persist();
+        rerenderPreview();
+      },
+    });
+    // 点阵字符开关：true=每字栅格化成 █ 点阵；false=每字作为单个字符（全角压缩）。
+    const fwDotMatrixChk = checkbox('点阵字符（关闭则每字单个字符植入）', state.findWord.dotMatrix, (v) => {
+      state.findWord.dotMatrix = v;
+      persist();
+      updateFindWordDisabled();
+      rerenderPreview();
+    });
+    const fwGlyphSlider = rangeSlider('字符大小', state.findWord.glyphSize, 4, 16, (v) => {
+      state.findWord.glyphSize = v;
+      persist();
+      rerenderPreview();
+    });
+    fwGlyphSlider.row.querySelector('label')?.append(
+      document.createTextNode('（行数，显示时纵向拉长）'),
+    );
+    const fwSpreadSlider = rangeSlider('分布程度', state.findWord.spread, 0, 100, (v) => {
+      state.findWord.spread = v;
+      persist();
+      rerenderPreview();
+    });
+    fwSpreadSlider.row.querySelector('label')?.append(
+      document.createTextNode('（0 紧挨 / 100 分散）'),
+    );
+    const fwColorSlider = rangeSlider('杂色', state.findWord.colorContrast, 0, 100, (v) => {
+      state.findWord.colorContrast = v;
+      persist();
+      rerenderPreview();
+    });
+    fwColorSlider.row.querySelector('label')?.append(
+      document.createTextNode('（0 融入 / 100 对比）'),
+    );
+
+    findWordContent.append(
+      // 注意：开启开关不放这里——开关须始终可点击（disabled 状态用 opacity+pointer-events
+      // 遮住 findWordContent，开关在外层才不会被挡）
+      h('div', { class: 'space-y-1' }, [
+        h('label', { class: 'text-xs text-[var(--fg-muted)]', textContent: '隐藏文字' }),
+        fwText,
+      ]),
+      h('div', { class: 'space-y-1' }, [
+        h('label', { class: 'text-xs text-[var(--fg-muted)]', textContent: '随机种子' }),
+        h('div', { class: 'flex items-center gap-2' }, [fwSeedInput, fwDice]),
+      ]),
+      fwDotMatrixChk.row,
+      fwGlyphSlider.row,
+      fwSpreadSlider.row,
+      fwColorSlider.row,
+      findWordHint,
+    );
+
+    /** 开关 off → 分组内其余控件禁用；点阵关 → 隐藏字符大小；提示行按半块模式显隐。 */
+    function updateFindWordDisabled(): void {
+      // 首次同步调用时 findWordContent/Hint 尚未赋值（let undefined），需守护
+      if (!findWordContent || !findWordHint) return;
+      const disabled = !state.findWord.enabled;
+      findWordContent.style.opacity = disabled ? '0.5' : '';
+      findWordContent.style.pointerEvents = disabled ? 'none' : '';
+      // 字符大小仅点阵模式有意义（非点阵每字单字符，无大小概念）→ 关点阵时隐藏
+      fwGlyphSlider.row.style.display = state.findWord.dotMatrix ? '' : 'none';
+      // 提示行：仅半块真彩模式显示（灰度模式可真隐藏，无需提示）
+      findWordHint.style.display = state.cfg.halfBlock ? '' : 'none';
+      // 纯文本错位提示（非点阵 + 含全角时显示）
+      updatePlainTextHint();
+    }
+    updateFindWordDisabled();
+
+    findWordDetails = h('details', { class: 'group' }, [
+      h('summary', {
+        class: 'cursor-pointer select-none text-sm font-medium text-[var(--fg)] marker:text-[var(--fg-muted)] marker:no-underline',
+        textContent: '🔍 找字游戏',
+      }),
+      // 开关放在 findWordContent 外层，始终可点击（disabled 仅遮 content 区）
+      h('div', { class: 'mt-3' }, [fwEnabledChk.row]),
+      findWordContent,
+    ]);
+
     controlsEl = h('div', { class: 'space-y-5' }, [
       tabBar,
       // 图片输入
@@ -844,6 +1152,7 @@ function render() {
         textArea,
         logoChk.row,
         logoSizeSlider.row,
+        logoSelfChk.row,
       ]),
       // 风格预设
       h('div', { class: 'space-y-2' }, [
@@ -876,6 +1185,8 @@ function render() {
           invertChk.row,
         ]),
       ]),
+      // 找字游戏（默认折叠；纯文字流模式整组隐藏）
+      findWordDetails,
       // 终端外观（默认折叠）
       h('details', { class: 'group' }, [
         h('summary', {
@@ -901,6 +1212,12 @@ function render() {
 
   // —— 操作按钮 ——
   function buildActions(): HTMLElement {
+    // 纯文本错位提示：非点阵找字 + 含全角字时显示（CSS 压缩只对预览/HTML/PNG，纯文本仍错位）
+    plainTextHint = h('span', {
+      class: 'text-[11px] text-[var(--fg-muted)]',
+      title: '全角字符在纯文本中占 2 字符宽，无法对齐',
+      textContent: '⚠ 全角字符在纯文本中无法对齐',
+    });
     const textBtn = h('button', {
       type: 'button',
       class: 'inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg)] hover:opacity-80 transition-opacity',
@@ -943,7 +1260,12 @@ function render() {
       onclick: async () => {
         const frame = frameWrap.firstElementChild as HTMLElement | null;
         if (!frame) return;
-        flash(pngBtn, '生成中…');
+        // 导出全程禁用按钮 + 显示「生成中…」（downloadPng 可能数秒，不走 flash 的 1.5s 自动恢复，
+        // 否则按钮会在导出途中提前恢复可点 → 用户重复点击触发并发导出）
+        const b = pngBtn as HTMLButtonElement;
+        if (!b.dataset.label) b.dataset.label = b.textContent ?? '';
+        b.textContent = '生成中…';
+        b.disabled = true;
         // 图片模式：W=cfg.width；文字流 Logo 模式：W=currentGridWidth；纯文字流：0（用预览原样字号）
         const W = state.mode === 'image'
           ? state.cfg.width
@@ -954,20 +1276,38 @@ function render() {
             ? ((state.text.split('\n')[0] ?? 'logo') + '-logo')
             : (state.text.split('\n')[0] ?? '文字流');
         const result = await downloadPng(frame, W, safeFilename(name));
+        // 导出完成：用 flash 显示结果（1.5s 后恢复「下载 PNG」）
         flash(pngBtn, result.ok ? '已下载 ✓' : `失败：${result.reason}`);
       },
     });
 
-    return h('div', { class: 'flex flex-wrap gap-2' }, [textBtn, htmlCopyBtn, pngBtn]);
+    updatePlainTextHint();
+    return h('div', { class: 'flex flex-wrap items-center gap-2' }, [textBtn, plainTextHint, htmlCopyBtn, pngBtn]);
   }
 
+  /**
+   * 临时把按钮文案改成 text，1500ms 后恢复原样；并发安全。
+   *
+   * 关键：用 per-button 自增 token 防止「生成中…」和「已下载 ✓」两次 flash 叠加出错——
+   * 旧实现捕获 orig=按钮当前文案，但若两次 flash 间隔 < 1500ms，第二次的 orig 会是中间态
+   * （如「生成中…」），恢复时把按钮永久卡在中间态。
+   * 现在：每次 flash 拿一个新 token，setTimeout 回调只在自己仍是最新 token 时才恢复；
+   * 按钮的「真实文案」固定记在 dataset，恢复永远回到它。
+   */
   function flash(btn: HTMLElement, text: string): void {
-    const orig = btn.textContent;
-    btn.textContent = text;
-    (btn as HTMLButtonElement).disabled = true;
+    const b = btn as HTMLButtonElement;
+    // 首次记录按钮的真实文案（data-label），后续永远恢复到它
+    if (!b.dataset.label) b.dataset.label = b.textContent ?? '';
+    b.textContent = text;
+    b.disabled = true;
+    const token = (Number(b.dataset.flashToken ?? '0') + 1) % 1e9;
+    b.dataset.flashToken = String(token);
     setTimeout(() => {
-      btn.textContent = orig;
-      (btn as HTMLButtonElement).disabled = false;
+      // 只有最新的 flash 才恢复（被更新的 flash 抢占则不动）
+      if (b.dataset.flashToken === String(token)) {
+        b.textContent = b.dataset.label!;
+        b.disabled = false;
+      }
     }, 1500);
   }
 
@@ -1102,6 +1442,40 @@ function select(label: string, options: { value: string; label: string }[], valu
     row,
     set: (v: string) => { sel.value = v; },
   };
+}
+
+/**
+ * 网格最大行宽（列数）。
+ * 图片模式各行恒等宽（max 无副作用）；多行 Logo 各行宽可能不同（短行左侧留白），
+ * 取 max 保证 fitFontSize 按最宽行算字号，避免宽行横向溢出。
+ */
+function gridMaxWidth(cells: Rendered): number {
+  let max = 0;
+  for (const row of cells) {
+    if (row.length > max) max = row.length;
+  }
+  return max;
+}
+
+/**
+ * 全角字 → 半角列的 scaleX 系数（半角 advance / 全角 advance）。
+ * 等宽字体（JetBrains Mono / Menlo / Consolas）半角 advance ≈ 0.6em，中文全角 = 1em → 系数 ≈ 0.6。
+ * 运行时测量一次并缓存，适配任何字体 fallback；测量失败回退 0.6。
+ */
+let fullToHalfRatio: number | null = null;
+function getFullToHalfRatio(): number {
+  if (fullToHalfRatio !== null) return fullToHalfRatio;
+  try {
+    const ctx = document.createElement('canvas').getContext('2d');
+    if (!ctx) return (fullToHalfRatio = 0.6);
+    ctx.font = '32px "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace';
+    const half = ctx.measureText('M').width;
+    const full = ctx.measureText('中').width;
+    fullToHalfRatio = half > 0 && full > 0 ? half / full : 0.6;
+  } catch {
+    fullToHalfRatio = 0.6;
+  }
+  return fullToHalfRatio;
 }
 
 render();

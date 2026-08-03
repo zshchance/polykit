@@ -21,7 +21,7 @@ export interface LogoCfg {
   text: string;
   /** 每个字的目标点阵高度（行数）。决定 logo 大小。默认 16。 */
   glyphHeight: number;
-  /** 亮像素填充字符。默认 '█'。 */
+  /** 亮像素填充字符。默认 '█'。selfChar=true 时此项被忽略。 */
   fillChar: string;
   /** 字符之间的空列数。默认 2。 */
   charGap: number;
@@ -29,10 +29,15 @@ export interface LogoCfg {
   fg: string;
   /** 终端背景色（仅用于裁剪判断，不写进 Cell）。 */
   bg: string;
+  /**
+   * 同字元素（默认 false）：true=每个字用它自身字符填充（用 p 组成大的 p，用「即」组成大的「即」）；
+   * false=用 fillChar（如 █）填充所有字。全角字符填充时自动标 Cell.w=true，渲染层 scaleX 压回半角宽。
+   */
+  selfChar?: boolean;
 }
 
-/** Canvas 字体栈：等宽优先，中文回退（保证中文能渲染）。 */
-const LOGO_FONT_STACK = '"JetBrains Mono", ui-monospace, Menlo, Consolas, "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif';
+/** Canvas 字体栈：等宽优先，中文回退（保证中文能渲染）。导出供 find-word 复用。 */
+export const LOGO_FONT_STACK = '"JetBrains Mono", ui-monospace, Menlo, Consolas, "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif';
 
 /** 亮像素 alpha 阈值。 */
 const ALPHA_THRESHOLD = 128;
@@ -47,6 +52,7 @@ export function textToLogoCells(cfg: LogoCfg): Rendered {
 
   const glyphH = Math.max(6, Math.round(cfg.glyphHeight));
   const fillChar = cfg.fillChar || '█';
+  const selfChar = cfg.selfChar === true;
   const gap = Math.max(0, Math.round(cfg.charGap));
   const fg = cfg.fg;
 
@@ -72,17 +78,42 @@ export function textToLogoCells(cfg: LogoCfg): Rendered {
     // 逐字取点阵：glyphs[i] 是第 i 个字的 boolean[][]（[行][列]）
     const glyphs: boolean[][][] = chars.map((ch) => rasterizeChar(ctx, canvas, ch, glyphH));
     if (glyphs.length === 0) continue;
+    // 同字元素：每个字用它自身字符填充；全角字需标 w 让渲染层 scaleX 压回半角宽
+    const fillFor: { ch: string; w: boolean }[] = selfChar
+      ? chars.map((ch) => ({ ch, w: isFullWidthChar(ch) }))
+      : chars.map(() => ({ ch: fillChar, w: false }));
 
     const lastGlyph = glyphs[glyphs.length - 1];
+    // 每字大字目标列宽：按「被放大字符」自身类别固定（与填充物无关），
+    // 消除 rasterizeChar trim 后 ink 列数抖动（如 即16 开/宝17-18 匣18-19）
+    // 导致的宽度比例失真 + 拼接位置偏差单调累积（最末字走形最重）。
+    //   全角（CJK 等）→ 1 em = fontSize 列；半角 → 半宽。与等宽列模型 2:1 一致。
+    //   ink 宽 > 目标宽（极端）时 pad=0，按 ink 保底、不裁字形。
+    const targetWidths = chars.map((ch) =>
+      isFullWidthChar(ch) ? fontSize : Math.max(1, Math.round(fontSize / 2)),
+    );
     const blockRows: Cell[][] = [];
     for (let y = 0; y < glyphH; y++) {
       const row: Cell[] = [];
-      for (const dot of glyphs) {
+      for (let gi = 0; gi < glyphs.length; gi++) {
+        const dot = glyphs[gi]!;
+        const fill = fillFor[gi]!;
         const w = dot[0]?.length ?? 0;
+        // 固定列宽内居中（左右补空格列）
+        const targetW = targetWidths[gi]!;
+        const leftPad = Math.max(0, Math.floor((targetW - w) / 2));
+        const rightPad = Math.max(0, targetW - w - leftPad);
+        for (let p = 0; p < leftPad; p++) row.push({ ch: ' ' });
         for (let x = 0; x < w; x++) {
           const lit = dot[y]?.[x] ?? false;
-          row.push(lit ? { ch: fillChar, fg } : { ch: ' ' });
+          // lit=该字笔画覆盖 → 填该字字符（同字元素）或 fillChar；暗像素=空格
+          if (lit) {
+            row.push(fill.w ? { ch: fill.ch, fg, w: true } : { ch: fill.ch, fg });
+          } else {
+            row.push({ ch: ' ' });
+          }
         }
+        for (let p = 0; p < rightPad; p++) row.push({ ch: ' ' });
         // 字间距（最后一个字不加）
         if (dot !== lastGlyph) {
           for (let g = 0; g < gap; g++) row.push({ ch: ' ' });
@@ -105,8 +136,11 @@ export function textToLogoCells(cfg: LogoCfg): Rendered {
 /**
  * 把单个字符栅格化成点阵 [行][列] 的 boolean（true=亮）。
  * 高度统一为 targetH 行（裁剪/填充到目标高度）。
+ *
+ * ctx/canvas 由调用方传入并复用（每次重设尺寸会清空 ctx 状态，本函数内部重设 font）。
+ * 导出供 find-word 复用：把隐藏字栅格化成半角 █ 点阵再叠到字符画上。
  */
-function rasterizeChar(
+export function rasterizeChar(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
   ch: string,
@@ -158,4 +192,26 @@ function trimEmptyColumns(dot: boolean[][]): boolean[][] {
   if (lastLit === -1) return [[false]]; // 全空字符（如空格），保留 1 列
   if (lastLit === w - 1) return dot;
   return dot.map((row) => row.slice(0, lastLit + 1));
+}
+
+/**
+ * 判断字符是否占 2 字符宽（全角/CJK）。同字元素模式下用于给全角填充字标 Cell.w，
+ * 让渲染层 scaleX(0.5) 压回半角宽，保证等宽网格不崩。半角 ASCII / 块字符（█）返回 false。
+ */
+function isFullWidthChar(ch: string): boolean {
+  const cp = ch.codePointAt(0);
+  if (cp === undefined) return false;
+  return (
+    (cp >= 0x1100 && cp <= 0x115f) ||
+    (cp >= 0x2e80 && cp <= 0x303e) ||
+    (cp >= 0x3040 && cp <= 0x33ff) ||
+    (cp >= 0x3400 && cp <= 0x4dbf) ||
+    (cp >= 0x4e00 && cp <= 0x9fff) ||
+    (cp >= 0xa000 && cp <= 0xa4cf) ||
+    (cp >= 0xac00 && cp <= 0xd7a3) ||
+    (cp >= 0xf900 && cp <= 0xfaff) ||
+    (cp >= 0xfe30 && cp <= 0xfe4f) ||
+    (cp >= 0xff00 && cp <= 0xff60) ||
+    (cp >= 0xffe0 && cp <= 0xffe6)
+  );
 }

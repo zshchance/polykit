@@ -159,7 +159,10 @@ function buildText(px: number[], W: number, H: number, charset: string, cfg: Ima
       const idx = (y * W + x) * 3;
       const lum = rec709(px[idx]!, px[idx + 1]!, px[idx + 2]!);
       const ch = lumToChar(lum, charset);
-      line.push(cfg.colorMode ? { ch, fg: cfg.fg } : { ch, fg: cfg.fg });
+      // 单色模式（!colorMode）产裸字符 Cell（不带 fg）——渲染层整 pre 继承 fg，
+      // 避免 8000+ Cell 全产 span 的性能退化，也保证 find-word 高亮 cell 能凸显。
+      // 彩色模式（colorMode，理论被钳制关掉半块后仍可能为 true）带 fg 保留原语义。
+      line.push(cfg.colorMode ? { ch, fg: cfg.fg } : { ch });
     }
     cells.push(line);
   }

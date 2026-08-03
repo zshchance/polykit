@@ -9,9 +9,10 @@
 import type { StyleConfig, TerminalType, CursorStyle, InputMode } from './types';
 import { DEFAULT_PRESET, ASPECT_HALF_BLOCK, ASPECT_TEXT } from './presets';
 import { DEFAULT_CHARSET } from './charsets';
+import { FIND_WORD_DEFAULTS, randomSeed, type FindWordCfg } from './find-word';
 
 const STORAGE_KEY = 'ascii-art:cfg';
-const CURRENT_VERSION = 1;
+const CURRENT_VERSION = 2;
 
 interface Blob {
   version: number;
@@ -22,11 +23,28 @@ interface Blob {
   textLogo: boolean;
   /** Logo 字符大小（每个字的点阵高度行数）。 */
   logoSize: number;
+  /** Logo 同字元素（每个字用它自身字符填充，而非 █）。v2+ 缺省 false。 */
+  textLogoSelfChar?: boolean;
+  /** 找字游戏配置（v2+）。v1 旧数据缺省 → 归一化补默认。 */
+  findWord?: Partial<FindWordCfg>;
 }
 
 /** 默认配置（基于复古终端预设，可被 settings 覆盖）。 */
 function defaultCfg(): StyleConfig {
   return { ...DEFAULT_PRESET.config };
+}
+
+/** 默认 state（首次访问 / 解析失败回退）。seed 随机生成。 */
+function defaultState(): PersistedState {
+  return {
+    cfg: defaultCfg(),
+    mode: 'image',
+    text: '',
+    textLogo: false,
+    logoSize: DEFAULT_LOGO_SIZE,
+    textLogoSelfChar: false,
+    findWord: { ...FIND_WORD_DEFAULTS, seed: randomSeed() },
+  };
 }
 
 /** 把任意输入归一化为合法 StyleConfig（钳制 + 缺省）。 */
@@ -78,6 +96,21 @@ function isValidCursor(v: unknown): v is CursorStyle {
   return v === 'none' || v === '▋' || v === '_' || v === '█';
 }
 
+/** 把任意输入归一化为合法 FindWordCfg。seed 空时随机生成（首次访问）。 */
+function normalizeFindWord(partial: Partial<FindWordCfg> | undefined): FindWordCfg {
+  const d = FIND_WORD_DEFAULTS;
+  if (!partial) return { ...d, seed: randomSeed() };
+  return {
+    enabled: typeof partial.enabled === 'boolean' ? partial.enabled : d.enabled,
+    text: typeof partial.text === 'string' ? partial.text : d.text,
+    seed: typeof partial.seed === 'string' && partial.seed ? partial.seed : randomSeed(),
+    dotMatrix: typeof partial.dotMatrix === 'boolean' ? partial.dotMatrix : d.dotMatrix,
+    glyphSize: clampInt(partial.glyphSize, 4, 16, d.glyphSize),
+    spread: clampInt(partial.spread, 0, 100, d.spread),
+    colorContrast: clampInt(partial.colorContrast, 0, 100, d.colorContrast),
+  };
+}
+
 export interface PersistedState {
   cfg: StyleConfig;
   mode: InputMode;
@@ -86,27 +119,34 @@ export interface PersistedState {
   textLogo: boolean;
   /** Logo 字符大小（每个字的点阵高度行数，8~40）。 */
   logoSize: number;
+  /** Logo 同字元素（每个字用它自身字符填充，而非 █）。 */
+  textLogoSelfChar: boolean;
+  /** 找字游戏配置。 */
+  findWord: FindWordCfg;
 }
 
 /** Logo 字符大小默认值（点阵高度行数）。 */
 export const DEFAULT_LOGO_SIZE = 16;
 
-/** 读取并归一化。任何错误静默回退默认（不阻塞 UI）。 */
+/** 读取并归一化。任何错误静默回退默认（不阻塞 UI）。v1 旧数据迁移补 findWord 默认。 */
 export function loadCfg(): PersistedState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { cfg: defaultCfg(), mode: 'image', text: '', textLogo: false, logoSize: DEFAULT_LOGO_SIZE };
+    if (!raw) return defaultState();
     const parsed = JSON.parse(raw) as Blob;
-    if (!parsed || parsed.version !== CURRENT_VERSION) return { cfg: defaultCfg(), mode: 'image', text: '', textLogo: false, logoSize: DEFAULT_LOGO_SIZE };
+    if (!parsed) return defaultState();
+    // v1（无 findWord）和 v2 都走归一化：v1 的 findWord 为 undefined → normalizeFindWord 补默认
     return {
       cfg: normalize(parsed.cfg),
       mode: parsed.mode === 'text' ? 'text' : 'image',
       text: typeof parsed.text === 'string' ? parsed.text : '',
       textLogo: parsed.textLogo === true,
       logoSize: clampInt(parsed.logoSize, 8, 40, DEFAULT_LOGO_SIZE),
+      textLogoSelfChar: parsed.textLogoSelfChar === true,
+      findWord: normalizeFindWord(parsed.findWord),
     };
   } catch {
-    return { cfg: defaultCfg(), mode: 'image', text: '', textLogo: false, logoSize: DEFAULT_LOGO_SIZE };
+    return defaultState();
   }
 }
 
@@ -120,6 +160,8 @@ export function saveCfg(state: PersistedState): void {
       text: state.text,
       textLogo: state.textLogo,
       logoSize: clampInt(state.logoSize, 8, 40, DEFAULT_LOGO_SIZE),
+      textLogoSelfChar: state.textLogoSelfChar,
+      findWord: state.findWord,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
   } catch {
