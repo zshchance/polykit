@@ -35,6 +35,7 @@ import {
   type StyleAppearance,
 } from './custom-styles';
 import { applyFindWord, randomSeed } from './find-word';
+import { downloadPngCanvas, getFullToHalfRatio } from './render/canvas-export';
 import { createCopyButton } from '@/core/components/CopyButton';
 
 // —— 字体声明（工具作用域，不污染全站）——
@@ -1275,7 +1276,12 @@ function render() {
           : state.textLogo
             ? ((state.text.split('\n')[0] ?? 'logo') + '-logo')
             : (state.text.split('\n')[0] ?? '文字流');
-        const result = await downloadPng(frame, W, safeFilename(name));
+        // Cell 模式（图片 / Logo）用 Canvas 自绘导出（所见即所得，无 html-to-image 的
+        // SVG foreignObject 子像素漂移）；纯文字流 / 无网格时回退 DOM 截图。
+        const hasCells = currentCells.length > 0;
+        const result = (state.mode === 'text' && !state.textLogo) || !hasCells
+          ? await downloadPng(frame, W, safeFilename(name))
+          : await downloadPngCanvas(currentCells, state.cfg, W, safeFilename(name));
         // 导出完成：用 flash 显示结果（1.5s 后恢复「下载 PNG」）
         flash(pngBtn, result.ok ? '已下载 ✓' : `失败：${result.reason}`);
       },
@@ -1455,27 +1461,6 @@ function gridMaxWidth(cells: Rendered): number {
     if (row.length > max) max = row.length;
   }
   return max;
-}
-
-/**
- * 全角字 → 半角列的 scaleX 系数（半角 advance / 全角 advance）。
- * 等宽字体（JetBrains Mono / Menlo / Consolas）半角 advance ≈ 0.6em，中文全角 = 1em → 系数 ≈ 0.6。
- * 运行时测量一次并缓存，适配任何字体 fallback；测量失败回退 0.6。
- */
-let fullToHalfRatio: number | null = null;
-function getFullToHalfRatio(): number {
-  if (fullToHalfRatio !== null) return fullToHalfRatio;
-  try {
-    const ctx = document.createElement('canvas').getContext('2d');
-    if (!ctx) return (fullToHalfRatio = 0.6);
-    ctx.font = '32px "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace';
-    const half = ctx.measureText('M').width;
-    const full = ctx.measureText('中').width;
-    fullToHalfRatio = half > 0 && full > 0 ? half / full : 0.6;
-  } catch {
-    fullToHalfRatio = 0.6;
-  }
-  return fullToHalfRatio;
 }
 
 render();
