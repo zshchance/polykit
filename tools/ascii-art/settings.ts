@@ -108,6 +108,7 @@ function normalizeFindWord(partial: Partial<FindWordCfg> | undefined): FindWordC
     glyphSize: clampInt(partial.glyphSize, 4, 16, d.glyphSize),
     spread: clampInt(partial.spread, 0, 100, d.spread),
     colorContrast: clampInt(partial.colorContrast, 0, 100, d.colorContrast),
+    nonBlankOnly: typeof partial.nonBlankOnly === 'boolean' ? partial.nonBlankOnly : d.nonBlankOnly,
   };
 }
 

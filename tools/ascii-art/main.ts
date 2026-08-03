@@ -1099,6 +1099,13 @@ function render() {
       document.createTextNode('（0 融入 / 100 对比）'),
     );
 
+    // 仅替换非空白字符：隐藏字只盖到原 Cell 非空的格子，融入图片实际内容
+    const fwNonBlankChk = checkbox('仅替换非空白（隐藏字只盖到画面已有的字符上）', state.findWord.nonBlankOnly === true, (v) => {
+      state.findWord.nonBlankOnly = v;
+      persist();
+      rerenderPreview();
+    });
+
     findWordContent.append(
       // 注意：开启开关不放这里——开关须始终可点击（disabled 状态用 opacity+pointer-events
       // 遮住 findWordContent，开关在外层才不会被挡）
@@ -1114,6 +1121,7 @@ function render() {
       fwGlyphSlider.row,
       fwSpreadSlider.row,
       fwColorSlider.row,
+      fwNonBlankChk.row,
       findWordHint,
     );
 

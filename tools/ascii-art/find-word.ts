@@ -30,6 +30,9 @@ export interface FindWordCfg {
   spread: number;
   /** 杂色 0~100：0=与终端前景色 fg 相同（融入）；100=与 fg 反色（最大对比）；中间线性插值。 */
   colorContrast: number;
+  /** 仅替换非空白字符（默认 false）：true=隐藏字只盖到原 Cell 非空的格子（ch!==' '），
+   * 让隐藏字融入图片实际内容而非空旷区；false=任意格子都可盖。 */
+  nonBlankOnly?: boolean;
 }
 
 export const FIND_WORD_DEFAULTS: FindWordCfg = {
@@ -40,6 +43,7 @@ export const FIND_WORD_DEFAULTS: FindWordCfg = {
   glyphSize: 10,
   spread: 30,
   colorContrast: 70,
+  nonBlankOnly: false,
 };
 
 /** 生成 4 位十六进制种子。 */
@@ -107,7 +111,7 @@ function applyDotMatrix(cells: Rendered, chars: string[], cfg: FindWordCfg, fg: 
   });
 
   const targetColor = highlightColor(cfg, fg);
-  return stampGlyphs(cells, anchors, glyphs, targetColor, H);
+  return stampGlyphs(cells, anchors, glyphs, targetColor, H, cfg.nonBlankOnly === true);
 }
 
 /** 非点阵模式：每字作为单个字符植入（全角标 w:true，渲染层 scaleX 压回半角宽）。 */
@@ -130,7 +134,7 @@ function applySingleChar(cells: Rendered, chars: string[], cfg: FindWordCfg, fg:
   const anchors: { x: number; y: number; ch: string }[] = rawAnchors.map((a, i) =>
     a.x < 0 ? { x: -1, y: -1, ch: '' } : { x: a.x, y: a.y, ch: chars[i]! },
   );
-  return stampChars(cells, anchors, targetColor, H);
+  return stampChars(cells, anchors, targetColor, H, cfg.nonBlankOnly === true);
 }
 
 /**
@@ -223,63 +227,187 @@ function planAnchors(opts: PlanOpts): PlanAnchor[] {
   return anchors;
 }
 
-/** 把点阵锚点盖到 cells（逐像素越界防御 + 浅拷贝）。 */
+/**
+ * 把点阵锚点盖到 cells（逐像素越界防御 + 浅拷贝）。
+ *
+ * nonBlankOnly：隐藏字只盖到原 Cell 非空的格子。关键修正——整字原子放置 +
+ * 后推找位：每个字从首选锚点起，按「从左到右、从上到下」扫描后续位置，找到第一个
+ * 「该字所有亮像素都落在非空白 cell」的位置才整体放入；找不到则整字跳过（绝不出现
+ * 半个字，如 'kit' 遇空白不会被吞成 'ki'）。这样隐藏字完整显形、顺序保持。
+ */
 function stampGlyphs(
   cells: Rendered,
   anchors: { x: number; y: number }[],
   glyphs: boolean[][][],
   targetColor: string,
   H: number,
+  nonBlankOnly: boolean,
 ): Rendered {
   const out: Cell[][] = cells.map((row) => row);
   const rowCloned: boolean[] = new Array(H).fill(false);
+  // nonBlankOnly 后推找位时，已放过字占据的列范围（避免后推覆盖前字）。每行一个 [minX,maxX]。
+  const occupied: { min: number; max: number }[] | null = nonBlankOnly
+    ? Array.from({ length: H }, () => ({ min: Infinity, max: -Infinity }))
+    : null;
+
   for (let i = 0; i < anchors.length; i++) {
     const a = anchors[i]!;
     if (a.x < 0) continue; // 跳过
     const glyph = glyphs[i]!;
+    const gw = glyph[0]?.length ?? 0;
+
+    // 定最终锚点：nonBlankOnly 时后推找位，否则用首选
+    let placeX = a.x;
+    let placeY = a.y;
+    if (nonBlankOnly) {
+      const found = scanFitNonBlank(cells, out, glyph, gw, a.x, a.y, H, occupied!);
+      if (!found) continue; // 整字找不到完整位置 → 跳过（不出现半个字）
+      placeX = found.x;
+      placeY = found.y;
+    }
+
+    // 整体盖入（所有亮像素一次性写）
     for (let dy = 0; dy < glyph.length; dy++) {
-      const ty = a.y + dy;
-      if (ty >= H) break; // 越界：目标行不存在
+      const ty = placeY + dy;
+      if (ty >= H) break;
       const srcRow = glyph[dy]!;
-      const gw = srcRow.length;
-      for (let dx = 0; dx < gw; dx++) {
-        if (!srcRow[dx]) continue; // 暗像素不动
-        const tx = a.x + dx;
+      for (let dx = 0; dx < srcRow.length; dx++) {
+        if (!srcRow[dx]) continue;
+        const tx = placeX + dx;
         const targetRow = out[ty]!;
-        if (tx >= targetRow.length) break; // 越界：该行长度不足（Logo 多行模式各行宽可能不同）
+        if (tx >= targetRow.length) break;
         if (!rowCloned[ty]) {
           out[ty] = targetRow.slice();
           rowCloned[ty] = true;
         }
-        // ch='█' + 杂色 fg，清 bg（半块模式避免下半像素色压住高亮；灰度模式本就无 bg）
         out[ty]![tx] = { ch: '█', fg: targetColor };
+      }
+    }
+    // 标记占据范围（仅 nonBlankOnly 后推用）
+    if (occupied) {
+      for (let dy = 0; dy < glyph.length; dy++) {
+        const ty = placeY + dy;
+        if (ty >= 0 && ty < H) {
+          occupied[ty]!.min = Math.min(occupied[ty]!.min, placeX);
+          occupied[ty]!.max = Math.max(occupied[ty]!.max, placeX + gw - 1);
+        }
       }
     }
   }
   return out;
 }
 
-/** 把单字符锚点盖到 cells（逐字越界防御 + 浅拷贝 + 全角标 w）。 */
+/**
+ * nonBlankOnly 后推找位：从 (startX, startY) 起按「从左到右、从上到下」扫描，
+ * 找第一个该 glyph 所有亮像素都落在非空白 cell、且不与已放字重叠的位置。
+ * @returns 找到的锚点；找不到返回 null（整字跳过）。
+ */
+function scanFitNonBlank(
+  _cells: Rendered,
+  out: Cell[][],
+  glyph: boolean[][],
+  gw: number,
+  startX: number,
+  startY: number,
+  H: number,
+  occupied: { min: number; max: number }[],
+): { x: number; y: number } | null {
+  const gh = glyph.length;
+  // 扫描起点：首选锚点；按行优先推进。为限制扫描量，最多扫整张网格一轮。
+  const W = out[0]?.length ?? 0;
+  if (W === 0) return null;
+  for (let y = startY; y + gh <= H; y++) {
+    const rowStartX = y === startY ? startX : 0;
+    for (let x = rowStartX; x + gw <= W; x++) {
+      if (fitsNonBlank(out, glyph, gw, gh, x, y, occupied)) return { x, y };
+    }
+  }
+  // 起点之前（同起始行的左侧）也扫一遍（种子起点可能偏右）
+  if (startY < H) {
+    const row = out[startY]!;
+    for (let x = 0; x < startX && x + gw <= row.length; x++) {
+      if (fitsNonBlank(out, glyph, gw, gh, x, startY, occupied)) return { x, y: startY };
+    }
+  }
+  return null;
+}
+
+/** 检查 glyph 放在 (ax,ay) 时，所有亮像素是否都落在非空白 cell 且不与已放字重叠。 */
+function fitsNonBlank(
+  out: Cell[][],
+  glyph: boolean[][],
+  gw: number,
+  gh: number,
+  ax: number,
+  ay: number,
+  occupied: { min: number; max: number }[],
+): boolean {
+  for (let dy = 0; dy < gh; dy++) {
+    const ty = ay + dy;
+    const row = out[ty];
+    if (!row) return false;
+    // 占据范围检查（避免后推覆盖前字）
+    const occ = occupied[ty]!;
+    if (occ.max >= 0 && !(ax + gw - 1 < occ.min || ax > occ.max)) return false;
+    const srcRow = glyph[dy]!;
+    for (let dx = 0; dx < gw; dx++) {
+      if (!srcRow[dx]) continue;
+      const tx = ax + dx;
+      if (tx >= row.length) return false;
+      if (row[tx]!.ch === ' ') return false; // 亮像素落在空白 → 不通过
+    }
+  }
+  return true;
+}
+
+/**
+ * 把单字符锚点盖到 cells（逐字越界防御 + 浅拷贝 + 全角标 w）。
+ * nonBlankOnly：与 stampGlyphs 同——整字（单字符=1 cell）原子放置 + 后推找位，
+ * 从首选锚点起按行优先扫描，找第一个非空白 cell 才放入；找不到整字跳过（绝不丢半个字）。
+ */
 function stampChars(
   cells: Rendered,
   anchors: { x: number; y: number; ch: string }[],
   targetColor: string,
   H: number,
+  nonBlankOnly: boolean,
 ): Rendered {
   const out: Cell[][] = cells.map((row) => row);
   const rowCloned: boolean[] = new Array(H).fill(false);
+  const W = out[0]?.length ?? 0;
+  // 已放字占据的坐标集合（后推避免覆盖前字）
+  const placed = nonBlankOnly ? new Set<number>() : null; // key = y*W+x
+
   for (const a of anchors) {
     if (a.x < 0) continue; // 跳过标记（planAnchors 放不下的字）
-    if (a.y >= H) continue;
-    const targetRow = out[a.y]!;
-    if (a.x >= targetRow.length) continue; // 越界：该行长度不足
-    if (!rowCloned[a.y]) {
-      out[a.y] = targetRow.slice();
-      rowCloned[a.y] = true;
+    let px = a.x;
+    let py = a.y;
+    if (nonBlankOnly) {
+      // 后推找位：从首选锚点起按行优先找第一个非空白、未被占的 cell
+      let found = false;
+      for (let y = a.y; y < H && !found; y++) {
+        const row = out[y]!;
+        const xStart = y === a.y ? a.x : 0;
+        for (let x = xStart; x < row.length; x++) {
+          if (row[x]!.ch !== ' ' && !placed!.has(y * W + x)) {
+            px = x; py = y; found = true; break;
+          }
+        }
+      }
+      if (!found) continue; // 找不到 → 整字跳过
+    } else {
+      if (py >= H) continue;
+      const targetRow = out[py]!;
+      if (px >= targetRow.length) continue;
+    }
+    if (!rowCloned[py]) {
+      out[py] = out[py]!.slice();
+      rowCloned[py] = true;
     }
     // 全角字标 w:true → 渲染层 scaleX(测量 ratio≈0.6) 压回半角列宽（半块 ▀/点阵 █ 不带 w 绝不触发）
     // 清 bg（半块模式避免下半像素色压住高亮，高亮字干净显形）
-    out[a.y]![a.x] = { ch: a.ch, fg: targetColor, w: isFullWidthChar(a.ch) };
+    out[py]![px] = { ch: a.ch, fg: targetColor, w: isFullWidthChar(a.ch) };
+    if (placed) placed.add(py * W + px);
   }
   return out;
 }
