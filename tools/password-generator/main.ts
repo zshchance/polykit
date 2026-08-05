@@ -3,6 +3,7 @@ import { h } from '@/core/components/element';
 import { renderToolLayout } from '@/core/components/ToolLayout';
 import { initTheme } from '@/core/components/ThemeToggle';
 import { createCopyButton } from '@/core/components/CopyButton';
+import { copyText } from '@/core/utils/clipboard';
 import { on } from '@/core/utils/dom';
 import { secureRandomInt } from '@/core/utils/random';
 import {
@@ -45,6 +46,8 @@ function renderPasswordGenerator() {
   // 启动时恢复上次记忆的选项（长度/字符类型等），无记忆则用默认值
   const state: PasswordOptions = loadOptions();
   let currentPassword = '';
+  // 当前密码生成时的强度（用于复制时写入历史，避免复制时 state 已变化导致强度算错）
+  let currentStrengthBits = 0;
   // 动画相关定时器（统一管理，便于取消重入）
   let scrambleTimers: number[] = [];
 
@@ -85,6 +88,7 @@ function renderPasswordGenerator() {
 
   // —— 控件引用（先声明，generate / 动画在它们初始化后才会被调用）——
   let copyBtn: HTMLButtonElement;
+  let refreshBtn: HTMLButtonElement;
   let generateBtn: HTMLButtonElement;
   const historyListWrap = h('div', { class: 'space-y-2' }, []);
 
@@ -96,6 +100,7 @@ function renderPasswordGenerator() {
   /** 动画期间禁用/恢复主要操作按钮 */
   function setControlsDisabled(disabled: boolean): void {
     if (copyBtn) copyBtn.disabled = disabled;
+    if (refreshBtn) refreshBtn.disabled = disabled;
     if (generateBtn) generateBtn.disabled = disabled;
   }
 
@@ -159,20 +164,20 @@ function renderPasswordGenerator() {
       output.textContent = (e as Error).message;
       output.classList.add('text-[var(--fg-muted)]');
       currentPassword = '';
+      currentStrengthBits = 0;
       refreshStrength(0);
       return;
     }
     currentPassword = final;
+    // 记录生成时的强度，供「复制时才保存历史」使用——
+    // 避免用户先调整选项再复制，导致写入历史的强度与实际密码不符。
+    currentStrengthBits = estimateStrengthBits(state);
     output.classList.remove('text-[var(--fg-muted)]');
-    refreshStrength();
+    refreshStrength(currentStrengthBits);
     playScrambleAnimation(final);
-    // 写入历史（用同步算出的强度，避免动画期间 state 变化）
-    const items = addPassword({
-      value: final,
-      length: final.length,
-      strengthBits: estimateStrengthBits(state),
-    });
-    renderHistory(items);
+    // 注意：这里不再立即写入历史。
+    // 历史只在用户点击「复制」按钮时才写入（addPassword 会按 value 去重），
+    // 避免用户随手生成却没采用的密码污染历史。
   }
 
   // —— 复选框配置 ——
@@ -308,7 +313,55 @@ function renderPasswordGenerator() {
   });
 
   // —— 按钮 ——
-  copyBtn = createCopyButton(() => currentPassword);
+  // 主「复制」按钮：与通用 CopyButton 视觉一致，但点击成功后才会把当前密码
+  // 写入历史（addPassword 按 value 去重，已存在则不重复保存、仅置顶）。
+  // 这样「生成记录」只收录用户真正采用（复制走）的密码，避免随手生成却没用的密码污染历史。
+  copyBtn = h(
+    'button',
+    {
+      type: 'button',
+      class:
+        'inline-flex items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+      textContent: '复制',
+      onclick: async () => {
+        const value = currentPassword;
+        if (!value) return; // 当前无有效密码（如生成失败态），不复制也不保存
+        const ok = await copyText(value);
+        copyBtn.textContent = ok ? '已复制 ✓' : '复制失败';
+        copyBtn.disabled = true;
+        setTimeout(() => {
+          copyBtn.textContent = '复制';
+          copyBtn.disabled = false;
+        }, 1500);
+        // 仅在复制成功、且该密码尚未保存时才写入历史。
+        // addPassword 自带 value 去重：已存在则移到最前并刷新元数据，不会产生重复条目。
+        if (ok) {
+          const items = addPassword({
+            value,
+            length: value.length,
+            strengthBits: currentStrengthBits,
+          });
+          renderHistory(items);
+        }
+      },
+    },
+    [],
+  );
+  // 刷新按钮：在结果区与「复制」并排，点一下按当前设置重新生成一个密码。
+  // 视觉用次要边框样式，区别于主操作色的「复制」；只重新生成，不写历史（沿用 generate 的约定）。
+  refreshBtn = h(
+    'button',
+    {
+      type: 'button',
+      title: '重新生成一个密码',
+      'aria-label': '重新生成密码',
+      class:
+        'inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+      textContent: '↻ 换一个',
+      onclick: generate,
+    },
+    [],
+  );
   generateBtn = h(
     'button',
     {
@@ -662,7 +715,10 @@ function renderPasswordGenerator() {
         textContent: '生成结果',
       }),
       output,
-      h('div', { class: 'flex items-center justify-between gap-2' }, [strengthLabel, copyBtn]),
+      h('div', { class: 'flex items-center justify-between gap-2' }, [
+        strengthLabel,
+        h('div', { class: 'flex items-center gap-2' }, [copyBtn, refreshBtn]),
+      ]),
     ]),
     // 长度
     h('div', { class: 'space-y-1' }, [
