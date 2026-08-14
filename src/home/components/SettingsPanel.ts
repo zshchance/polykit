@@ -2,6 +2,7 @@ import { h } from '@/core/components/element';
 import type { HomePrefs } from '../prefs';
 import { exportPrefsJSON, importPrefsJSON, prefsExportFilename, emptyPrefs } from '../prefs';
 import { downloadBlob } from '@/core/utils/clipboard';
+import { confirmDialog } from '@/core/components/Dialog';
 import { showToast } from './toast';
 
 /**
@@ -101,10 +102,17 @@ export function createSettingsPanel(
       class:
         'flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--fg-muted)] transition-colors hover:border-[var(--holiday-legal)] hover:text-[var(--holiday-legal)]',
       onclick: () => {
-        if (!window.confirm('确定重置全部个人设置（置顶 / 星标 / 排序）？此操作不可撤销。')) return;
-        const cleared = emptyPrefs();
-        onChange(cleared);
-        showToast('已重置全部设置');
+        // 统一确认框替代原生 confirm（全站约定不弹原生弹窗）
+        void confirmDialog('确定重置全部个人设置（置顶 / 星标 / 排序）？此操作不可撤销。', {
+          title: '重置设置',
+          danger: true,
+          confirmText: '重置',
+        }).then((okDel) => {
+          if (!okDel) return;
+          const cleared = emptyPrefs();
+          onChange(cleared);
+          showToast('已重置全部设置');
+        });
       },
     },
     ['🗑 重置'],

@@ -41,5 +41,11 @@ reasonix.toml
 # 规划评审草稿（工作区过程文档，不入库）
 docs/ascii-art-plan-review.md
 
+# 代码质量优化报告（工作区过程文档，不入库）
+docs/optimization-report.md
+
 # 数据更新临时导入文件（批量录入入口，用完即删）
 _tmp-*-add.json
+
+# 临时 GUI 冒烟脚本（用完即删）
+_smoke*.mjs

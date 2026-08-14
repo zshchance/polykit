@@ -8,7 +8,8 @@ import type { ToolConfig } from '@/core/types';
 export default {
   slug: 'color-prompt',
   name: 'AI配色提示词',
-  description: '精选色系 + 配色预览，一键生成中英文 AI 配色提示词，美化幻灯片与网站。',
+  description:
+    '精选高级色系与情绪筛选，实时预览配色效果，一键生成中英文 AI 配色提示词，可直接用于幻灯片、网站与界面设计，数据不出本地。',
   category: '自媒体',
   icon: '🎨',
   keywords: [

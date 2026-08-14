@@ -9,7 +9,7 @@ export default {
   slug: 'ascii-art',
   name: '终端字符画',
   description:
-    '把图片或文字渲染成复古终端风格的字符画：图片转 ASCII（半块高细节真彩模式）、文字流排版进终端外框、Logo 字符大字 banner，6 套风格预设（复古绿屏 / 琥珀 / 白纸 / 赛博朋克 / 蓝屏 / 极简）+ AI 自定义风格，CRT 扫描线辉光，一键复制纯文本或彩色 HTML、下载 PNG。数据全程本地处理。',
+    '把图片或文字渲染成复古终端风字符画：图片转 ASCII（半块真彩模式）、文字流排版、Logo 大字，6 套风格预设 + AI 自定义风格，CRT 扫描线辉光，可复制文本或下载 PNG，全程本地处理。',
   category: '自媒体',
   icon: '🖥️',
   keywords: [

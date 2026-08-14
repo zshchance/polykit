@@ -4,6 +4,7 @@ import { renderToolLayout } from '@/core/components/ToolLayout';
 import { initTheme } from '@/core/components/ThemeToggle';
 import { createCopyButton } from '@/core/components/CopyButton';
 import { copyText } from '@/core/utils/clipboard';
+import { confirmDialog } from '@/core/components/Dialog';
 import { on } from '@/core/utils/dom';
 import { secureRandomInt } from '@/core/utils/random';
 import {
@@ -676,10 +677,17 @@ function renderPasswordGenerator() {
               'text-xs text-[var(--fg-muted)] hover:text-red-500 transition-colors underline-offset-2 hover:underline',
             textContent: '全部清除',
             onclick: () => {
-              if (confirm('确定清除全部历史记录吗？此操作不可撤销。')) {
-                clearHistory();
-                renderHistory([]);
-              }
+              // 统一确认框替代原生 confirm（全站约定不弹原生弹窗）
+              void confirmDialog('确定清除全部历史记录吗？此操作不可撤销。', {
+                title: '清除历史',
+                danger: true,
+                confirmText: '清除',
+              }).then((okDel) => {
+                if (okDel) {
+                  clearHistory();
+                  renderHistory([]);
+                }
+              });
             },
           },
           [],

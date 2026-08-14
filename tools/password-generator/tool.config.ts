@@ -8,7 +8,7 @@ export default {
   slug: 'password-generator',
   name: '密码生成器',
   description:
-    '生成可定制长度、字符集的强密码（本地密码学随机，不上传）；并可一键生成 AI 提示词，用 AI 取得好记口令。',
+    '生成可定制长度与字符集的强密码，本地密码学随机、绝不上传；附带强度熵估算与历史记录，并可一键生成 AI 提示词，让 AI 帮你取一个好记又安全的口令。',
   category: '安全',
   icon: '🔐',
   keywords: [

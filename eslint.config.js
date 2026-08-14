@@ -10,7 +10,13 @@ import globals from 'globals';
  */
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'gui-test-screenshots/**'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'coverage/**',
+      'gui-test-screenshots/**',
+      '_smoke*.mjs',
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
