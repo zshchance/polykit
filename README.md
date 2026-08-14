@@ -7,14 +7,15 @@
 
 ## 技术栈
 
-| 维度 | 选型 |
-|------|------|
-| 构建 | Vite + TypeScript（零额外运行时依赖） |
-| 架构 | 多页面 MPA（每个工具一个独立 HTML 页） |
-| 样式 | Tailwind CSS v4 |
-| 模块注册 | `import.meta.glob` 自动发现 + 每模块 `tool.config.ts` 自描述 |
-| SEO | 构建期 Vite 插件注入 meta / JSON-LD，产出 sitemap + robots |
-| 部署 | Cloudflare Pages 或 GitHub Pages（`BASE_PATH` 自适应根/子路径） |
+| 维度     | 选型                                                                     |
+| -------- | ------------------------------------------------------------------------ |
+| 构建     | Vite + TypeScript（零额外运行时依赖）                                    |
+| 架构     | 多页面 MPA（每个工具一个独立 HTML 页）                                   |
+| 样式     | Tailwind CSS v4                                                          |
+| 模块注册 | `import.meta.glob` 自动发现 + 每模块 `tool.config.ts` 自描述             |
+| 质量     | Vitest 单测（纯函数核心）+ ESLint + Prettier + CI 验证（push/PR 自动跑） |
+| SEO      | 构建期 Vite 插件注入 meta / JSON-LD，产出 sitemap + robots               |
+| 部署     | Cloudflare Pages 或 GitHub Pages（`BASE_PATH` 自适应根/子路径）          |
 
 ## 目录结构
 
@@ -44,21 +45,29 @@
 │       ├── generator.ts           # 核心逻辑（与 UI 解耦）
 │       └── assets/                # 可选：icon.svg / cover.svg（就地存放）
 ├── scripts/new-tool.mjs           # 脚手架：npm run new -- <slug>
+│   （scripts/ 另有 holidays-add / quotes-add 数据维护脚本，见下方章节）
 ├── index.html                     # 首页（Vite 根入口）
 ├── vite.config.ts                 # 自动扫描 tools/*/index.html + 接入 SEO 插件
+├── vitest.config.ts               # 单测配置（纯函数核心，DOM 交互由 GUI 冒烟覆盖）
+├── eslint.config.js / .prettierrc.json / .editorconfig  # 代码风格基线
 └── tsconfig.json
 ```
+
+> 上图为代表性结构，个别子目录（如 `src/home/components/`）未逐一展开，以实际文件为准。
 
 ## 快速开始
 
 ```bash
-npm install      # 安装依赖
-npm run dev      # 本地开发（http://localhost:5173）
-npm run build    # 生产构建（产物在 dist/，含 sitemap.xml / robots.txt）
-npm run preview  # 预览构建产物
+npm install        # 安装依赖
+npm run dev        # 本地开发（http://localhost:5173）
+npm run build      # 生产构建（产物在 dist/，含 sitemap.xml / robots.txt）
+npm run preview    # 预览构建产物
+npm test           # 单元测试（Vitest，纯函数核心：生成器/提取器/解析器等）
+npm run lint       # ESLint 检查
+npm run format     # Prettier 格式化（format:check 只检查不写入）
 ```
 
-> 注：本机需 Node 18+。若用 nvm，先 `nvm use`。
+> 注：本机需 Node 22+（见 `.nvmrc`）。若用 nvm，先 `nvm use`。
 
 ## 新增一个工具（零配置自发现）
 
@@ -73,6 +82,7 @@ npm run dev
 ```
 
 脚手架会创建：
+
 - `tools/<slug>/index.html`、`tool.config.ts`、`main.ts`、空 `assets/` 目录
 
 首页会**自动发现**该工具并展示——无需编辑任何注册表。这是 v2 的核心改进：
@@ -80,25 +90,26 @@ npm run dev
 SEO 插件在构建期读取同一份配置注入 meta/JSON-LD。
 
 > 想调整顺序或临时隐藏某工具？编辑 `src/home/registry-config.ts` 的 `modules` 字段：
->   `'fancy-text': { order: 10, enabled: false }`
+> `'fancy-text': { order: 10, enabled: false }`
 
 slug 规则：全小写、kebab-case，字母开头（如 `quote-card`、`fancy-text`）。
 
 ### tool.config.ts 字段
 
-| 字段 | 必填 | 说明 |
-|------|------|------|
-| `slug` | 是 | 路径片段，须与目录名一致 |
-| `name` | 是 | 展示名称 |
-| `description` | 是 | 卡片一句话描述（同时作为页面 meta description） |
-| `category` | 是 | 分类（首页胶囊筛选 + 分组） |
-| `icon` | 否 | emoji 兜底图标（无 assets/icon.* 时用） |
-| `keywords` | 否 | SEO 关键词（见下方"关键词可见性"） |
-| `card.accent` | 否 | 卡片强调色（无首图时用于渐变头） |
+| 字段          | 必填 | 说明                                            |
+| ------------- | ---- | ----------------------------------------------- |
+| `slug`        | 是   | 路径片段，须与目录名一致                        |
+| `name`        | 是   | 展示名称                                        |
+| `description` | 是   | 卡片一句话描述（同时作为页面 meta description） |
+| `category`    | 是   | 分类（首页胶囊筛选 + 分组）                     |
+| `icon`        | 否   | emoji 兜底图标（无 assets/icon.* 时用）         |
+| `keywords`    | 否   | SEO 关键词（见下方"关键词可见性"）              |
+| `card.accent` | 否   | 卡片强调色（无首图时用于渐变头）                |
 
 ### 美化素材（可选，就地存放）
 
 把图标/首图放在 `tools/<slug>/assets/` 下，**文件名固定**（扩展名不限）：
+
 - `icon.svg` / `icon.png` —— 工具图标
 - `cover.svg` / `cover.png` —— 卡片首图（顶部带状图）
 
@@ -112,10 +123,10 @@ slug 规则：全小写、kebab-case，字母开头（如 `quote-card`、`fancy-
 
 ### 工作原理
 
-| 平台 | 路径 | BASE_PATH | SITE_URL（canonical） | 来源 |
-|------|------|-----------|------|------|
-| Cloudflare Pages（主） | 根路径 `xxx.pages.dev/` | 不设（默认 `/`） | `https://zshchance.github.io/polykit` | Dashboard 连 Git 自动构建 |
-| GitHub Pages（镜像） | 子路径 `user.github.io/polykit/` | `/polykit/` | `https://zshchance.github.io/polykit` | `.github/workflows/deploy.yml` 注入 |
+| 平台                   | 路径                             | BASE_PATH        | SITE_URL（canonical）                 | 来源                                |
+| ---------------------- | -------------------------------- | ---------------- | ------------------------------------- | ----------------------------------- |
+| Cloudflare Pages（主） | 根路径 `xxx.pages.dev/`          | 不设（默认 `/`） | `https://zshchance.github.io/polykit` | Dashboard 连 Git 自动构建           |
+| GitHub Pages（镜像）   | 子路径 `user.github.io/polykit/` | `/polykit/`      | `https://zshchance.github.io/polykit` | `.github/workflows/deploy.yml` 注入 |
 
 - `BASE_PATH`：决定**部署后的资源/链接前缀**（Cloudflare 根路径 vs GitHub 子路径）。`vite.config.ts` 的 `resolveBase()` 读取它，应用代码用 `import.meta.env.BASE_URL` 自动跟随。
 - `SITE_URL`：决定 **canonical / sitemap / og:url**（与部署路径解耦）。两平台都指向同一 canonical，使 `dist/sitemap.xml`、各页 `<link rel="canonical">` 与 `og:url` 一致。
@@ -157,11 +168,13 @@ npm run build                       # 不设则按根路径构建
 ## SEO 与关键词可见性
 
 构建期 SEO 插件（`src/core/seo/seo-plugin.ts`）自动为每个页面注入：
+
 - 工具页：`<meta description>` / `<meta keywords>` + `SoftwareApplication` JSON-LD
 - 首页：站点 meta + `ItemList` 结构化数据 + Open Graph
 - 构建产出 `dist/sitemap.xml` 与 `dist/robots.txt`（路径随 `BASE_PATH` 自适应）
 
 **关键词可见性**（满足"默认对用户不可见，但始终可被 AI/搜索引擎读取"）：
+
 - 关键词**始终**写入 `<meta keywords>` 与 JSON-LD → 爬虫 / AI 永远可读。
 - 默认 `seo.showKeywordsInline = false`（在 `src/home/registry-config.ts` 配置）：
   关键词不渲染到卡片 UI，用户不可见。
@@ -232,7 +245,7 @@ npm run quotes:add -- --file _tmp-quotes-add.json
 
 ## 联系 / 关于
 
-由个人开发者维护的开源项目，纯浏览器运行、数据不出本地。
+由个人开发者维护的开源项目，纯浏览器运行、数据不出本地。代码以 [MIT License](./LICENSE) 发布。
 
 - **邮件**：[978107204@qq.com](mailto:978107204@qq.com)（联系 / 合作 / 技术支持）
 - **GitHub**：[zshchance/polykit](https://github.com/zshchance/polykit)（欢迎 Issue / PR）

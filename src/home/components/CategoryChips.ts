@@ -3,6 +3,10 @@ import { h } from '@/core/components/element';
 /**
  * 分类筛选胶囊 —— "全部" + 各分类。
  * 点击切换激活态，触发回调。激活态有背景色过渡。
+ *
+ * 语义：这是一组单选按钮（非 tab——tablist 需要配套 tabpanel 与方向键导航，
+ * 此前只有 role 声明没有对应行为，反而误导辅助技术）。改用 group +
+ * aria-pressed 的切换按钮组，语义自洽。
  */
 export interface CategoryChips {
   el: HTMLElement;
@@ -16,7 +20,7 @@ export function createCategoryChips(categories: string[]): CategoryChips {
 
   const container = h('div', {
     class: 'flex flex-wrap gap-2',
-    role: 'tablist',
+    role: 'group',
     'aria-label': '按分类筛选工具',
   });
 
@@ -30,8 +34,7 @@ export function createCategoryChips(categories: string[]): CategoryChips {
   function chip(label: string, value: string, isActive: boolean): HTMLButtonElement {
     return h('button', {
       type: 'button',
-      role: 'tab',
-      'aria-selected': isActive ? 'true' : 'false',
+      'aria-pressed': isActive ? 'true' : 'false',
       class: [
         'category-chip',
         'px-3.5',

@@ -1,6 +1,7 @@
 import { h } from '@/core/components/element';
 import type { HomePrefs } from '../prefs';
 import { exportPrefsJSON, importPrefsJSON, prefsExportFilename, emptyPrefs } from '../prefs';
+import { downloadBlob } from '@/core/utils/clipboard';
 import { showToast } from './toast';
 
 /**
@@ -45,15 +46,9 @@ export function createSettingsPanel(
         'flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
       onclick: () => {
         const json = exportPrefsJSON(prefs);
-        const blob = new Blob([json], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = prefsExportFilename();
-        document.body.append(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
+        // 复用 core 的 downloadBlob：它对 revoke 做了 1s 延迟，
+        // 立即 revoke 在部分浏览器（如 Firefox）会导致下载文件为空
+        downloadBlob(new Blob([json], { type: 'application/json' }), prefsExportFilename());
         showToast('已导出我的设置');
       },
     },
@@ -131,8 +126,7 @@ export function createSettingsPanel(
       h('div', { class: 'flex gap-2' }, [exportBtn, restoreBtn, resetBtn]),
       h('p', {
         class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
-        textContent:
-          '导出置顶 / 星标 / 排序为 JSON，可在其它设备或浏览器恢复。数据仅保存在本地。',
+        textContent: '导出置顶 / 星标 / 排序为 JSON，可在其它设备或浏览器恢复。数据仅保存在本地。',
       }),
       fileInput,
     ],

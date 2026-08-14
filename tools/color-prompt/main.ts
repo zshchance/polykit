@@ -91,37 +91,49 @@ function renderColorPrompt(): void {
 
   function paletteCard(p: Palette, isSelected: boolean): HTMLElement {
     // 横条色块预览：6 色等宽
-    const swatch = h('div', { class: 'flex h-8 overflow-hidden rounded-md' },
+    const swatch = h(
+      'div',
+      { class: 'flex h-8 overflow-hidden rounded-md' },
       p.colors.map((c) =>
         h('div', { style: `flex:1;background:${c.hex};`, title: `${c.name} ${c.hex}` }),
       ),
     );
 
-    return h('button', {
-      type: 'button',
-      class: [
-        'text-left rounded-xl border bg-[var(--bg-elevated)] p-3 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md',
-        isSelected
-          ? 'border-[var(--accent)] ring-2 ring-[var(--accent)]/40'
-          : 'border-[var(--border)] hover:border-[var(--accent)]',
-      ].join(' '),
-      'aria-pressed': String(isSelected),
-      onclick: () => select(p.id),
-    }, [
-      swatch,
-      h('div', { class: 'mt-2 flex items-center justify-between gap-2' }, [
-        h('span', { class: 'font-medium text-[var(--fg)]', textContent: p.name }),
-        h('div', { class: 'flex flex-wrap justify-end gap-1' },
-          p.moods.slice(0, 2).map((m) =>
-            h('span', {
-              class: 'rounded-full border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)]',
-              textContent: m,
-            }),
+    return h(
+      'button',
+      {
+        type: 'button',
+        class: [
+          'text-left rounded-xl border bg-[var(--bg-elevated)] p-3 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md',
+          isSelected
+            ? 'border-[var(--accent)] ring-2 ring-[var(--accent)]/40'
+            : 'border-[var(--border)] hover:border-[var(--accent)]',
+        ].join(' '),
+        'aria-pressed': String(isSelected),
+        onclick: () => select(p.id),
+      },
+      [
+        swatch,
+        h('div', { class: 'mt-2 flex items-center justify-between gap-2' }, [
+          h('span', { class: 'font-medium text-[var(--fg)]', textContent: p.name }),
+          h(
+            'div',
+            { class: 'flex flex-wrap justify-end gap-1' },
+            p.moods.slice(0, 2).map((m) =>
+              h('span', {
+                class:
+                  'rounded-full border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)]',
+                textContent: m,
+              }),
+            ),
           ),
-        ),
-      ]),
-      h('p', { class: 'mt-1 text-xs leading-snug text-[var(--fg-muted)] line-clamp-2', textContent: p.desc }),
-    ]);
+        ]),
+        h('p', {
+          class: 'mt-1 text-xs leading-snug text-[var(--fg-muted)] line-clamp-2',
+          textContent: p.desc,
+        }),
+      ],
+    );
   }
 
   // ────────── 3 & 4. 预览 + 色值 + 提示词（随选中刷新） ──────────
@@ -134,29 +146,67 @@ function renderColorPrompt(): void {
     const previewBlock = h('div', { class: 'space-y-3' }, [
       previewHeader('配色预览 · 网站首屏 / 幻灯片'),
       h('div', { class: 'grid gap-4 lg:grid-cols-2' }, [
-        h('div', { class: 'overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3' }, [
-          h('div', { class: 'mb-2 text-xs font-medium text-[var(--fg-muted)]', textContent: '网站首屏' }),
-          renderWebsitePreview(p),
-        ]),
-        h('div', { class: 'overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3' }, [
-          h('div', { class: 'mb-2 text-xs font-medium text-[var(--fg-muted)]', textContent: '幻灯片' }),
-          renderSlidePreview(p),
-        ]),
+        h(
+          'div',
+          {
+            class:
+              'overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3',
+          },
+          [
+            h('div', {
+              class: 'mb-2 text-xs font-medium text-[var(--fg-muted)]',
+              textContent: '网站首屏',
+            }),
+            renderWebsitePreview(p),
+          ],
+        ),
+        h(
+          'div',
+          {
+            class:
+              'overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3',
+          },
+          [
+            h('div', {
+              class: 'mb-2 text-xs font-medium text-[var(--fg-muted)]',
+              textContent: '幻灯片',
+            }),
+            renderSlidePreview(p),
+          ],
+        ),
       ]),
     ]);
 
     // 色值清单（便于用户直接取用 hex）
     const colorList = h('div', { class: 'space-y-3' }, [
       previewHeader('色值清单'),
-      h('div', { class: 'grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6' },
+      h(
+        'div',
+        { class: 'grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6' },
         p.colors.map((c) =>
-          h('div', { class: 'flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-2' }, [
-            h('span', { class: 'h-5 w-5 shrink-0 rounded border border-[var(--border)]', style: `background:${c.hex};` }),
-            h('div', { class: 'min-w-0' }, [
-              h('div', { class: 'truncate text-xs font-medium text-[var(--fg)]', textContent: c.name }),
-              h('div', { class: 'truncate text-[11px] text-[var(--fg-muted)]', textContent: c.hex.toUpperCase() }),
-            ]),
-          ]),
+          h(
+            'div',
+            {
+              class:
+                'flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-2',
+            },
+            [
+              h('span', {
+                class: 'h-5 w-5 shrink-0 rounded border border-[var(--border)]',
+                style: `background:${c.hex};`,
+              }),
+              h('div', { class: 'min-w-0' }, [
+                h('div', {
+                  class: 'truncate text-xs font-medium text-[var(--fg)]',
+                  textContent: c.name,
+                }),
+                h('div', {
+                  class: 'truncate text-[11px] text-[var(--fg-muted)]',
+                  textContent: c.hex.toUpperCase(),
+                }),
+              ]),
+            ],
+          ),
         ),
       ),
     ]);
@@ -182,13 +232,17 @@ function renderColorPrompt(): void {
       readonly: true,
     }) as HTMLTextAreaElement;
     ta.value = text;
-    return h('div', { class: 'rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4' }, [
-      h('div', { class: 'mb-2 flex items-center justify-between gap-2' }, [
-        h('span', { class: 'text-sm font-medium text-[var(--fg)]', textContent: title }),
-        createCopyButton(getter, '复制', '已复制 ✓'),
-      ]),
-      ta,
-    ]);
+    return h(
+      'div',
+      { class: 'rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4' },
+      [
+        h('div', { class: 'mb-2 flex items-center justify-between gap-2' }, [
+          h('span', { class: 'text-sm font-medium text-[var(--fg)]', textContent: title }),
+          createCopyButton(getter, '复制', '已复制 ✓'),
+        ]),
+        ta,
+      ],
+    );
   }
 
   /** 选中某色系：更新状态 + 刷新网格选中态 + 刷新结果区 + 落库 */
@@ -207,9 +261,15 @@ function renderColorPrompt(): void {
       class: 'mb-5 text-sm text-[var(--fg-muted)]',
       textContent: '选择色系，实时预览网站与幻灯片配色效果，一键复制中英文 AI 提示词。',
     }),
-    h('div', { class: 'mb-3 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '按情绪筛选' }),
+    h('div', {
+      class: 'mb-3 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+      textContent: '按情绪筛选',
+    }),
     moodChips,
-    h('div', { class: 'mb-3 mt-5 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '选择色系' }),
+    h('div', {
+      class: 'mb-3 mt-5 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+      textContent: '选择色系',
+    }),
     paletteGrid,
     h('div', { class: 'mt-8' }, [resultArea]),
   );

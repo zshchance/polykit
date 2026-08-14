@@ -15,8 +15,20 @@ export const PRODUCTIVITY_PROMPTS: Prompt[] = [
     fun: false,
     desc: '把长文章/会议记录压成结构化要点，3 秒抓住核心。',
     variables: [
-      { key: 'text', label: '原文', placeholder: '粘贴长文/纪要', required: true, multiline: true, default: '（在此粘贴需要总结的长文）' },
-      { key: 'focus', label: '关注重点', placeholder: '如：决策项、待办、风险', default: '核心观点和结论' },
+      {
+        key: 'text',
+        label: '原文',
+        placeholder: '粘贴长文/纪要',
+        required: true,
+        multiline: true,
+        default: '（在此粘贴需要总结的长文）',
+      },
+      {
+        key: 'focus',
+        label: '关注重点',
+        placeholder: '如：决策项、待办、风险',
+        default: '核心观点和结论',
+      },
     ],
     template: `请帮我总结下面这段内容。
 
@@ -43,7 +55,14 @@ export const PRODUCTIVITY_PROMPTS: Prompt[] = [
     fun: false,
     desc: '不是机翻味，是符合目标语言表达习惯的流畅翻译。',
     variables: [
-      { key: 'source', label: '原文', placeholder: '粘贴要翻译的文本', required: true, multiline: true, default: '（在此粘贴原文）' },
+      {
+        key: 'source',
+        label: '原文',
+        placeholder: '粘贴要翻译的文本',
+        required: true,
+        multiline: true,
+        default: '（在此粘贴原文）',
+      },
       { key: 'target', label: '目标语言', placeholder: '中文/English', default: '中文' },
       { key: 'style', label: '风格', placeholder: '正式/口语/学术', default: '自然流畅' },
     ],
@@ -69,7 +88,14 @@ export const PRODUCTIVITY_PROMPTS: Prompt[] = [
     fun: false,
     desc: '把啰嗦含糊的文字改成简洁有力的表达，逻辑更清晰。',
     variables: [
-      { key: 'text', label: '原文', placeholder: '粘贴要改写的文字', required: true, multiline: true, default: '（在此粘贴要改写的文字）' },
+      {
+        key: 'text',
+        label: '原文',
+        placeholder: '粘贴要改写的文字',
+        required: true,
+        multiline: true,
+        default: '（在此粘贴要改写的文字）',
+      },
     ],
     template: `请帮我把下面这段文字改得更简洁清晰。
 
@@ -94,8 +120,19 @@ export const PRODUCTIVITY_PROMPTS: Prompt[] = [
     fun: false,
     desc: '把复杂概念讲给小白听懂，用比喻不用术语。',
     variables: [
-      { key: 'concept', label: '概念', placeholder: '区块链/复利/量子纠缠', required: true, default: '区块链' },
-      { key: 'audience', label: '讲给谁', placeholder: '完全不懂的小白', default: '完全不懂的小白' },
+      {
+        key: 'concept',
+        label: '概念',
+        placeholder: '区块链/复利/量子纠缠',
+        required: true,
+        default: '区块链',
+      },
+      {
+        key: 'audience',
+        label: '讲给谁',
+        placeholder: '完全不懂的小白',
+        default: '完全不懂的小白',
+      },
     ],
     template: `请用费曼学习法的方式，把「{{concept}}」讲给{{audience}}听懂。
 
@@ -117,8 +154,19 @@ export const PRODUCTIVITY_PROMPTS: Prompt[] = [
     fun: false,
     desc: '给任意技能定制分阶段学习路线，含资源和建议。',
     variables: [
-      { key: 'skill', label: '想学的', placeholder: '从零学 Python 数据分析', required: true, default: '从零学 Python 数据分析' },
-      { key: 'time', label: '可用时间', placeholder: '每天1小时，共3个月', default: '每天1小时，共3个月' },
+      {
+        key: 'skill',
+        label: '想学的',
+        placeholder: '从零学 Python 数据分析',
+        required: true,
+        default: '从零学 Python 数据分析',
+      },
+      {
+        key: 'time',
+        label: '可用时间',
+        placeholder: '每天1小时，共3个月',
+        default: '每天1小时，共3个月',
+      },
     ],
     template: `请帮我规划一条学习路径：{{skill}}。
 
@@ -142,8 +190,21 @@ export const PRODUCTIVITY_PROMPTS: Prompt[] = [
     fun: false,
     desc: '让 AI 审查你的代码，找 bug、提优化、讲清原理。',
     variables: [
-      { key: 'lang', label: '语言/框架', placeholder: 'TypeScript + React', required: true, default: 'JavaScript' },
-      { key: 'code', label: '代码', placeholder: '粘贴代码', required: true, multiline: true, default: '（在此粘贴代码）' },
+      {
+        key: 'lang',
+        label: '语言/框架',
+        placeholder: 'TypeScript + React',
+        required: true,
+        default: 'JavaScript',
+      },
+      {
+        key: 'code',
+        label: '代码',
+        placeholder: '粘贴代码',
+        required: true,
+        multiline: true,
+        default: '（在此粘贴代码）',
+      },
     ],
     template: `请审查下面这段{{lang}}代码。
 
@@ -169,7 +230,14 @@ export const PRODUCTIVITY_PROMPTS: Prompt[] = [
     desc: '逐行讲清一段代码在干什么，新手友好。',
     variables: [
       { key: 'lang', label: '语言', placeholder: 'Python', required: true, default: 'Python' },
-      { key: 'code', label: '代码', placeholder: '粘贴看不懂的代码', required: true, multiline: true, default: '（在此粘贴代码）' },
+      {
+        key: 'code',
+        label: '代码',
+        placeholder: '粘贴看不懂的代码',
+        required: true,
+        multiline: true,
+        default: '（在此粘贴代码）',
+      },
     ],
     template: `请帮我逐行讲清楚这段{{lang}}代码在做什么。
 
@@ -194,8 +262,20 @@ export const PRODUCTIVITY_PROMPTS: Prompt[] = [
     fun: false,
     desc: '给一份数据/问题，AI 帮你梳理分析框架和切入点。',
     variables: [
-      { key: 'question', label: '分析目的', placeholder: '找出用户流失的原因', required: true, default: '找出用户流失的原因' },
-      { key: 'data', label: '现有数据', placeholder: '有用户行为日志、注册信息、订单数据', multiline: true, default: '有用户行为日志和订单数据' },
+      {
+        key: 'question',
+        label: '分析目的',
+        placeholder: '找出用户流失的原因',
+        required: true,
+        default: '找出用户流失的原因',
+      },
+      {
+        key: 'data',
+        label: '现有数据',
+        placeholder: '有用户行为日志、注册信息、订单数据',
+        multiline: true,
+        default: '有用户行为日志和订单数据',
+      },
     ],
     template: `请帮我梳理一个数据分析思路。
 
@@ -220,7 +300,14 @@ export const PRODUCTIVITY_PROMPTS: Prompt[] = [
     fun: false,
     desc: '描述需求，AI 给出对应的 Excel/Sheets 公式并解释。',
     variables: [
-      { key: 'need', label: '我想实现', placeholder: 'A列大于60的B列求和', required: true, multiline: true, default: 'A列大于60时，对B列求和' },
+      {
+        key: 'need',
+        label: '我想实现',
+        placeholder: 'A列大于60的B列求和',
+        required: true,
+        multiline: true,
+        default: 'A列大于60时，对B列求和',
+      },
     ],
     template: `请帮我写一个 Excel/Google Sheets 公式来实现：{{need}}
 
@@ -242,8 +329,20 @@ export const PRODUCTIVITY_PROMPTS: Prompt[] = [
     fun: false,
     desc: '开会前让 AI 帮你列议程、预判问题、准备材料。',
     variables: [
-      { key: 'meeting', label: '会议主题', placeholder: '和设计团队评审新版本方案', required: true, default: '和设计团队评审新版本方案' },
-      { key: 'goal', label: '我的目标', placeholder: '拿到设计确认，定下排期', multiline: true, default: '拿到设计确认，定下排期' },
+      {
+        key: 'meeting',
+        label: '会议主题',
+        placeholder: '和设计团队评审新版本方案',
+        required: true,
+        default: '和设计团队评审新版本方案',
+      },
+      {
+        key: 'goal',
+        label: '我的目标',
+        placeholder: '拿到设计确认，定下排期',
+        multiline: true,
+        default: '拿到设计确认，定下排期',
+      },
     ],
     template: `请帮我准备这场会议：「{{meeting}}」
 
@@ -267,7 +366,14 @@ export const PRODUCTIVITY_PROMPTS: Prompt[] = [
     fun: false,
     desc: '谈薪资、谈合作、争取资源，AI 帮你制定策略和话术。',
     variables: [
-      { key: 'scenario', label: '场景', placeholder: '想跟老板谈加薪', required: true, multiline: true, default: '想跟老板谈加薪' },
+      {
+        key: 'scenario',
+        label: '场景',
+        placeholder: '想跟老板谈加薪',
+        required: true,
+        multiline: true,
+        default: '想跟老板谈加薪',
+      },
     ],
     template: `请帮我制定「{{scenario}}」的沟通/谈判策略。
 
@@ -290,8 +396,20 @@ export const PRODUCTIVITY_PROMPTS: Prompt[] = [
     fun: false,
     desc: '想养成一个习惯？AI 给你一套能坚持的落地系统。',
     variables: [
-      { key: 'habit', label: '想养成的习惯', placeholder: '每天早起跑步', required: true, default: '每天早起跑步' },
-      { key: 'obstacle', label: '过去的障碍', placeholder: '总起不来、容易放弃', multiline: true, default: '总起不来、坚持三五天就放弃' },
+      {
+        key: 'habit',
+        label: '想养成的习惯',
+        placeholder: '每天早起跑步',
+        required: true,
+        default: '每天早起跑步',
+      },
+      {
+        key: 'obstacle',
+        label: '过去的障碍',
+        placeholder: '总起不来、容易放弃',
+        multiline: true,
+        default: '总起不来、坚持三五天就放弃',
+      },
     ],
     template: `请帮我设计一套养成「{{habit}}」的可行方案。
 
@@ -316,7 +434,13 @@ export const PRODUCTIVITY_PROMPTS: Prompt[] = [
     fun: false,
     desc: '给任意主题，AI 推荐由浅入深的书单和阅读顺序。',
     variables: [
-      { key: 'topic', label: '主题', placeholder: '理解经济学思维', required: true, default: '理解经济学思维' },
+      {
+        key: 'topic',
+        label: '主题',
+        placeholder: '理解经济学思维',
+        required: true,
+        default: '理解经济学思维',
+      },
       { key: 'level', label: '我的基础', placeholder: '零基础', default: '零基础' },
     ],
     template: `请为「{{topic}}」定制一份书单，我的基础是：{{level}}。

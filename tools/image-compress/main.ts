@@ -69,18 +69,32 @@ function renderImageCompress(): void {
   }
 
   // ────────── 1. 拖拽/选择区 ──────────
-  const dropzone = h('div', {
-    role: 'button',
-    tabindex: '0',
-    'aria-label': '选择或拖入图片',
-    class:
-      'flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--bg-elevated)] px-6 py-12 text-center cursor-pointer transition-colors hover:border-[var(--accent)] focus:outline-none focus-visible:border-[var(--accent)]',
-  }, [
-    h('div', { class: 'text-3xl', textContent: '🗜️' }),
-    h('div', { class: 'text-sm font-medium text-[var(--fg)]', textContent: '点击选择图片，或拖拽到此处' }),
-    h('div', { class: 'text-xs text-[var(--fg-muted)]', textContent: '支持 PNG / JPG / WebP / GIF，可输出 ICO。图片仅在本地处理，不会上传' }),
-  ]);
-  const fileInput = h('input', { type: 'file', accept: 'image/*', class: 'hidden' }) as HTMLInputElement;
+  const dropzone = h(
+    'div',
+    {
+      role: 'button',
+      tabindex: '0',
+      'aria-label': '选择或拖入图片',
+      class:
+        'flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--bg-elevated)] px-6 py-12 text-center cursor-pointer transition-colors hover:border-[var(--accent)] focus:outline-none focus-visible:border-[var(--accent)]',
+    },
+    [
+      h('div', { class: 'text-3xl', textContent: '🗜️' }),
+      h('div', {
+        class: 'text-sm font-medium text-[var(--fg)]',
+        textContent: '点击选择图片，或拖拽到此处',
+      }),
+      h('div', {
+        class: 'text-xs text-[var(--fg-muted)]',
+        textContent: '支持 PNG / JPG / WebP / GIF，可输出 ICO。图片仅在本地处理，不会上传',
+      }),
+    ],
+  );
+  const fileInput = h('input', {
+    type: 'file',
+    accept: 'image/*',
+    class: 'hidden',
+  }) as HTMLInputElement;
   dropzone.addEventListener('click', () => fileInput.click());
   dropzone.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -148,7 +162,10 @@ function renderImageCompress(): void {
   }
 
   // 2b. 画质滑块（仅 lossy 可调；PNG/ICO 无损，禁用并提示）
-  const qualityValue = h('span', { class: 'text-sm font-medium text-[var(--fg)]', textContent: `${cfg.quality}` });
+  const qualityValue = h('span', {
+    class: 'text-sm font-medium text-[var(--fg)]',
+    textContent: `${cfg.quality}`,
+  });
   const qualitySlider = h('input', {
     type: 'range',
     min: String(MIN_QUALITY),
@@ -169,7 +186,10 @@ function renderImageCompress(): void {
   const qualityHint = h('div', { class: 'text-xs text-[var(--fg-muted)]' });
   const qualityWrap = h('div', { class: 'space-y-1.5' }, [
     h('div', { class: 'mb-1 flex items-center justify-between' }, [
-      h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '压缩强度' }),
+      h('span', {
+        class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+        textContent: '压缩强度',
+      }),
       qualityValue,
     ]),
     qualitySlider,
@@ -241,7 +261,10 @@ function renderImageCompress(): void {
     );
   }
   const icoSizesWrap = h('div', { class: 'space-y-1.5' }, [
-    h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: 'ICO 尺寸（可多选）' }),
+    h('span', {
+      class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+      textContent: 'ICO 尺寸（可多选）',
+    }),
     icoSizesContainer,
   ]);
 
@@ -312,8 +335,7 @@ function renderImageCompress(): void {
       outBlob.size < image.bytes
         ? `↓ ${pct.toFixed(1)}%（省 ${formatBytes(Math.max(0, saved))}）`
         : `↑ ${Math.abs(pct).toFixed(1)}%（输出比原图大 ${formatBytes(-saved)}）`;
-    statsLine.textContent =
-      `${formatBytes(image.bytes)} → ${formatBytes(outBlob.size)} · ${savedTxt} · 输出 ${outWidth}×${outHeight}`;
+    statsLine.textContent = `${formatBytes(image.bytes)} → ${formatBytes(outBlob.size)} · ${savedTxt} · 输出 ${outWidth}×${outHeight}`;
   }
 
   // ────────── 核心流程 ──────────
@@ -424,7 +446,9 @@ function renderImageCompress(): void {
       viewer.setImages(image.url, outUrl);
       downloadBtn.disabled = false;
       updateStats();
-      showStatus(`已生成 ${currentFormatOpt().name}${cfg.format === 'ico' ? `（${cfg.icoSizes.join('/')}px）` : ''}`);
+      showStatus(
+        `已生成 ${currentFormatOpt().name}${cfg.format === 'ico' ? `（${cfg.icoSizes.join('/')}px）` : ''}`,
+      );
     } catch (err) {
       if (token !== encodeToken) return;
       outBlob = null;
@@ -478,7 +502,8 @@ function renderImageCompress(): void {
     class:
       'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
     rows: 3,
-    placeholder: '描述你的用途，例如：给淘宝主图用，要清晰、保留商品细节；或：做微信文章里的配图，体积尽量小…',
+    placeholder:
+      '描述你的用途，例如：给淘宝主图用，要清晰、保留商品细节；或：做微信文章里的配图，体积尽量小…',
     'aria-label': '用途描述',
   }) as HTMLTextAreaElement;
 
@@ -554,13 +579,17 @@ function renderImageCompress(): void {
     takeoverArea.replaceChildren(
       h('div', { class: 'rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4' }, [
         h('div', { class: 'flex items-center justify-between gap-2 mb-2' }, [
-          h('span', { class: 'text-sm font-medium text-[var(--fg)]', textContent: '🤖 AI 浏览器接管提示词' }),
+          h('span', {
+            class: 'text-sm font-medium text-[var(--fg)]',
+            textContent: '🤖 AI 浏览器接管提示词',
+          }),
           createCopyButton(() => preview.value, '复制提示词', '已复制 ✓'),
         ]),
         preview,
         h('p', {
           class: 'mt-2 text-[11px] text-[var(--fg-muted)]',
-          textContent: '复制后粘贴给 Tabbit 等 AI 浏览器，它会按提示词自动设置好上面的压缩参数（全程本地，图片不会上传）。',
+          textContent:
+            '复制后粘贴给 Tabbit 等 AI 浏览器，它会按提示词自动设置好上面的压缩参数（全程本地，图片不会上传）。',
         }),
       ]),
     );
@@ -630,11 +659,20 @@ function renderImageCompress(): void {
       }
       const obj = parsed as Record<string, unknown>;
       // 字段校验 + 兜底（缺失/类型错用当前值）
-      const fmt = typeof obj.format === 'string' && (obj.format === 'webp' || obj.format === 'jpeg' || obj.format === 'png' || obj.format === 'ico')
-        ? (obj.format as OutputFormat)
-        : cfg.format;
-      const q = typeof obj.quality === 'number' && Number.isFinite(obj.quality) ? obj.quality : cfg.quality;
-      const le = typeof obj.maxLongEdge === 'number' && Number.isFinite(obj.maxLongEdge) ? obj.maxLongEdge : cfg.maxLongEdge;
+      const fmt =
+        typeof obj.format === 'string' &&
+        (obj.format === 'webp' ||
+          obj.format === 'jpeg' ||
+          obj.format === 'png' ||
+          obj.format === 'ico')
+          ? (obj.format as OutputFormat)
+          : cfg.format;
+      const q =
+        typeof obj.quality === 'number' && Number.isFinite(obj.quality) ? obj.quality : cfg.quality;
+      const le =
+        typeof obj.maxLongEdge === 'number' && Number.isFinite(obj.maxLongEdge)
+          ? obj.maxLongEdge
+          : cfg.maxLongEdge;
       let ico: number[] | undefined;
       if (Array.isArray(obj.icoSizes) && obj.icoSizes.every((v) => typeof v === 'number')) {
         ico = (obj.icoSizes as number[]).filter((v) => ICO_SIZE_OPTIONS.includes(v));
@@ -643,7 +681,9 @@ function renderImageCompress(): void {
 
       applyParams(fmt, q, le, ico);
       closeJsonDialog();
-      showStatus(`已按 JSON 设参：${displayFormatName(fmt)} / 画质 ${Math.round(q)} / 最长边 ${le === 0 ? '不缩放' : '≤' + le + 'px'}`);
+      showStatus(
+        `已按 JSON 设参：${displayFormatName(fmt)} / 画质 ${Math.round(q)} / 最长边 ${le === 0 ? '不缩放' : '≤' + le + 'px'}`,
+      );
     }
 
     // Enter 提交 / Shift+Enter 换行 / Esc 关闭
@@ -657,38 +697,51 @@ function renderImageCompress(): void {
       }
     });
 
-    const card = h('div', {
-      role: 'dialog',
-      'aria-modal': 'true',
-      'aria-label': '参数 JSON 快捷输入',
-      class:
-        'w-[min(92vw,34rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
-    }, [
-      h('div', { class: 'mb-1 flex items-center justify-between gap-2' }, [
-        h('span', { class: 'text-sm font-semibold text-[var(--fg)]', textContent: '⌨ 参数 JSON 快捷输入' }),
-        h('span', { class: 'text-[11px] text-[var(--fg-muted)]', textContent: '回车提交 · Shift+回车换行 · Esc 关闭' }),
-      ]),
-      h('p', {
-        class: 'mb-2 text-xs text-[var(--fg-muted)]',
-        textContent: '合法字段：format(webp/jpeg/png/ico) · quality(1-100) · maxLongEdge(0=不缩放) · icoSizes(可选)。缺失字段沿用当前值。',
-      }),
-      ta,
-      statusRow,
-      h('div', { class: 'mt-3 flex items-center justify-end gap-2' }, [
-        h('button', {
-          type: 'button',
-          class: 'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors',
-          textContent: '取消',
-          onclick: () => closeJsonDialog(),
+    const card = h(
+      'div',
+      {
+        role: 'dialog',
+        'aria-modal': 'true',
+        'aria-label': '参数 JSON 快捷输入',
+        class:
+          'w-[min(92vw,34rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
+      },
+      [
+        h('div', { class: 'mb-1 flex items-center justify-between gap-2' }, [
+          h('span', {
+            class: 'text-sm font-semibold text-[var(--fg)]',
+            textContent: '⌨ 参数 JSON 快捷输入',
+          }),
+          h('span', {
+            class: 'text-[11px] text-[var(--fg-muted)]',
+            textContent: '回车提交 · Shift+回车换行 · Esc 关闭',
+          }),
+        ]),
+        h('p', {
+          class: 'mb-2 text-xs text-[var(--fg-muted)]',
+          textContent:
+            '合法字段：format(webp/jpeg/png/ico) · quality(1-100) · maxLongEdge(0=不缩放) · icoSizes(可选)。缺失字段沿用当前值。',
         }),
-        h('button', {
-          type: 'button',
-          class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
-          textContent: '应用参数',
-          onclick: submitJson,
-        }),
-      ]),
-    ]);
+        ta,
+        statusRow,
+        h('div', { class: 'mt-3 flex items-center justify-end gap-2' }, [
+          h('button', {
+            type: 'button',
+            class:
+              'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors',
+            textContent: '取消',
+            onclick: () => closeJsonDialog(),
+          }),
+          h('button', {
+            type: 'button',
+            class:
+              'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+            textContent: '应用参数',
+            onclick: submitJson,
+          }),
+        ]),
+      ],
+    );
 
     // 遮罩：点击空白关闭
     const overlay = h('div', {
@@ -724,7 +777,6 @@ function renderImageCompress(): void {
     }
   });
 
-
   // ICO 尺寸行只在选 ICO 时显示
   function syncFormatSensitiveWraps(): void {
     icoSizesWrap.style.display = cfg.format === 'ico' ? '' : 'none';
@@ -743,7 +795,8 @@ function renderImageCompress(): void {
   content.append(
     h('p', {
       class: 'mb-5 text-sm text-[var(--fg-muted)]',
-      textContent: '上传图片，自定义压缩强度与输出格式（支持转 ICO 图标）。左右滑动鼠标对比压缩前后效果，全部在浏览器本地完成。',
+      textContent:
+        '上传图片，自定义压缩强度与输出格式（支持转 ICO 图标）。左右滑动鼠标对比压缩前后效果，全部在浏览器本地完成。',
     }),
     dropzone,
     fileInput,
@@ -752,7 +805,10 @@ function renderImageCompress(): void {
     h('div', { class: 'mt-6 space-y-5' }, [
       // 用途预设行（参数区最前方）
       h('div', { class: 'space-y-1.5' }, [
-        h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '用途（一键预设参数）' }),
+        h('span', {
+          class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+          textContent: '用途（一键预设参数）',
+        }),
         // chips（或窄屏 select）与快捷输入按钮同一行：左侧伸缩、按钮靠最右
         // ≥sm：显示 chips 行、隐藏小屏 select
         // <sm：隐藏 chips 行、显示 select（适配窄屏）；快捷输入按钮始终可见
@@ -772,12 +828,18 @@ function renderImageCompress(): void {
         customWrap,
       ]),
       h('div', { class: 'space-y-1.5' }, [
-        h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '输出格式' }),
+        h('span', {
+          class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+          textContent: '输出格式',
+        }),
         formatContainer,
       ]),
       qualityWrap,
       h('div', { class: 'space-y-1.5' }, [
-        h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '最长边（缩放上限）' }),
+        h('span', {
+          class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+          textContent: '最长边（缩放上限）',
+        }),
         longEdgeSelect,
       ]),
       icoSizesWrap,
@@ -785,7 +847,10 @@ function renderImageCompress(): void {
     // 预览器 + 模式切换（未上传图时整块隐藏）
     (previewWrap = h('div', { class: 'mt-8 space-y-3' }, [
       h('div', { class: 'flex items-center justify-between gap-3 flex-wrap' }, [
-        h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '预览' }),
+        h('span', {
+          class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+          textContent: '预览',
+        }),
         modeContainer,
       ]),
       viewer.el,
@@ -802,8 +867,12 @@ function renderImageCompress(): void {
   // 配合页面 aria-label 形成双通道（脚本优先，ARIA 备选）。仅本工具页面存在。
   (window as unknown as { __IMG_COMPRESS__: unknown }).__IMG_COMPRESS__ = {
     /** 一步设好 format/quality/maxLongEdge（可选 icoSizes）并触发重编码 */
-    applyPreset: (format: OutputFormat, quality: number, maxLongEdge: number, icoSizes?: number[]) =>
-      applyParams(format, quality, maxLongEdge, icoSizes),
+    applyPreset: (
+      format: OutputFormat,
+      quality: number,
+      maxLongEdge: number,
+      icoSizes?: number[],
+    ) => applyParams(format, quality, maxLongEdge, icoSizes),
     /** 读取当前参数快照（供 AI 校验设置是否生效） */
     getParams: () => snapshotParams(),
   };

@@ -5,8 +5,10 @@
  * **不记**用户在详情弹层里填写的变量值（保护隐私，且变量值往往是一次性的）。
  *
  * 与项目其它 settings 模块一致：版本化 JSON blob，逐字段校验，
- * 损坏/隐私模式静默回退默认。
+ * 读写经 core/utils/storage 统一容错，损坏/隐私模式静默回退默认。
  */
+
+import { readJSON, writeJSON } from '@/core/utils/storage';
 
 import { CATEGORY_IDS } from './types';
 import { ALL_TAGS } from './data';
@@ -42,42 +44,31 @@ export function defaultFilter(): FilterState {
 /** 读取检索态；损坏/字段非法时回退默认 */
 export function loadFilter(): FilterState {
   const def = defaultFilter();
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return def;
-    const parsed = JSON.parse(raw) as Partial<FilterBlob>;
-    if (!parsed || typeof parsed !== 'object') return def;
+  const parsed = readJSON(STORAGE_KEY) as Partial<FilterBlob> | null;
+  if (!parsed) return def;
 
-    const category =
-      typeof parsed.category === 'string' && (CATEGORY_IDS as readonly string[]).includes(parsed.category)
-        ? parsed.category
-        : def.category;
+  const category =
+    typeof parsed.category === 'string' &&
+    (CATEGORY_IDS as readonly string[]).includes(parsed.category)
+      ? parsed.category
+      : def.category;
 
-    const tags = Array.isArray(parsed.tags)
-      ? parsed.tags
-          .filter((t) => typeof t === 'string' && (ALL_TAGS as readonly string[]).includes(t))
-          .slice(0, MAX_TAGS)
-      : [];
+  const tags = Array.isArray(parsed.tags)
+    ? parsed.tags
+        .filter((t) => typeof t === 'string' && (ALL_TAGS as readonly string[]).includes(t))
+        .slice(0, MAX_TAGS)
+    : [];
 
-    const keyword =
-      typeof parsed.keyword === 'string'
-        ? parsed.keyword.slice(0, MAX_KEYWORD_LEN)
-        : '';
+  const keyword =
+    typeof parsed.keyword === 'string' ? parsed.keyword.slice(0, MAX_KEYWORD_LEN) : '';
 
-    const starredOnly = parsed.starredOnly === true;
+  const starredOnly = parsed.starredOnly === true;
 
-    return { category, tags, keyword, starredOnly };
-  } catch {
-    return def;
-  }
+  return { category, tags, keyword, starredOnly };
 }
 
 /** 持久化检索态（隐私模式 / 配额满时静默忽略） */
 export function saveFilter(state: FilterState): void {
-  try {
-    const blob: FilterBlob = { version: CURRENT_VERSION, ...state };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
-  } catch {
-    // 静默忽略
-  }
+  const blob: FilterBlob = { version: CURRENT_VERSION, ...state };
+  writeJSON(STORAGE_KEY, blob);
 }

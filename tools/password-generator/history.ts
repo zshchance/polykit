@@ -6,8 +6,10 @@
  *
  * 存储形态（JSON）：
  *   { "version": 1, "items": StoredPassword[] }
- * 顶层带 version 便于日后字段变更时做迁移。
+ * 顶层带 version 便于日后字段变更时做迁移；读写经 core/utils/storage 统一容错。
  */
+
+import { readJSON, writeJSON } from '@/core/utils/storage';
 
 const STORAGE_KEY = 'password-generator:history';
 const MAX_ITEMS = 50;
@@ -33,32 +35,22 @@ interface HistoryBlob {
 
 /** 读取全部历史；存储损坏或为空时安全回退为空数组 */
 export function loadHistory(): StoredPassword[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Partial<HistoryBlob>;
-    if (!parsed || !Array.isArray(parsed.items)) return [];
-    // 只保留合法字段，过滤脏数据
-    return parsed.items.filter(
-      (it): it is StoredPassword =>
-        typeof it?.id === 'string' &&
-        typeof it?.value === 'string' &&
-        typeof it?.length === 'number' &&
-        typeof it?.createdAt === 'number',
-    );
-  } catch {
-    return [];
-  }
+  const parsed = readJSON(STORAGE_KEY) as Partial<HistoryBlob> | null;
+  if (!parsed || !Array.isArray(parsed.items)) return [];
+  // 只保留合法字段，过滤脏数据
+  return parsed.items.filter(
+    (it): it is StoredPassword =>
+      typeof it?.id === 'string' &&
+      typeof it?.value === 'string' &&
+      typeof it?.length === 'number' &&
+      typeof it?.createdAt === 'number',
+  );
 }
 
 /** 持久化全部历史 */
 export function saveHistory(items: StoredPassword[]): void {
-  try {
-    const blob: HistoryBlob = { version: 1, items };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
-  } catch {
-    // 容量满 / 隐私模式禁用 localStorage：静默忽略，不影响功能
-  }
+  const blob: HistoryBlob = { version: 1, items };
+  writeJSON(STORAGE_KEY, blob);
 }
 
 /**

@@ -55,7 +55,8 @@ function validateEntry(raw) {
   if (!text) throw new Error('名言正文不能为空');
   const author = String(raw.author ?? '').trim();
   if (!author) throw new Error('作者不能为空');
-  const source = raw.source == null || String(raw.source).trim() === '' ? null : String(raw.source).trim();
+  const source =
+    raw.source == null || String(raw.source).trim() === '' ? null : String(raw.source).trim();
   const category = String(raw.category ?? '').trim();
   if (!category) throw new Error('分类不能为空');
   const lang = String(raw.lang ?? 'zh').trim() || 'zh';
@@ -77,7 +78,7 @@ function parseBatchFile(/** @type {any} */ arr) {
     try {
       entries.push(validateEntry(v || {}));
     } catch (e) {
-      console.error(`✗ 第 ${idx + 1} 条: ${(/** @type {Error} */ (e)).message}`);
+      console.error(`✗ 第 ${idx + 1} 条: ${/** @type {Error} */ (e).message}`);
       process.exit(1);
     }
   });
@@ -89,14 +90,16 @@ async function interactiveCollect() {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   // 展示现有分类供参考
   const existing = JSON.parse(await readFile(TARGET, 'utf8'));
-  const cats = [...new Set((existing.quotes || []).map((/** @type {any} */ q) => q.category).filter(Boolean))];
+  const cats = [
+    ...new Set((existing.quotes || []).map((/** @type {any} */ q) => q.category).filter(Boolean)),
+  ];
   console.log('逐条录入名言（空正文回车结束）：');
   console.log(`  现有分类：${cats.join(' / ')}（可直接输入新的）`);
   console.log(`  lang 可选：${VALID_LANGS.join(' / ')}（默认 zh）`);
 
   /** @type {{text:string,author:string,source:string|null,category:string,lang:string}[]} */
   const entries = [];
-  // eslint-disable-next-line no-constant-condition
+
   while (true) {
     const text = (await rl.question('\n名言正文（空=结束）: ')).trim();
     if (!text) break;
@@ -104,11 +107,12 @@ async function interactiveCollect() {
       const author = (await rl.question('作者（必填）: ')).trim();
       const source = (await rl.question('出处（选填，回车跳过）: ')).trim();
       const category = (await rl.question('分类（如 哲理/励志/文学/科技）: ')).trim();
-      const lang = (await rl.question(`lang [${VALID_LANGS.join('/')}]（默认 zh）: `)).trim() || 'zh';
+      const lang =
+        (await rl.question(`lang [${VALID_LANGS.join('/')}]（默认 zh）: `)).trim() || 'zh';
       entries.push(validateEntry({ text, author, source, category, lang }));
       console.log('  ✓ 已加入');
     } catch (e) {
-      console.error(`  ✗ 录入无效：${(/** @type {Error} */ (e)).message}，请重输该条。`);
+      console.error(`  ✗ 录入无效：${/** @type {Error} */ (e).message}，请重输该条。`);
     }
   }
   rl.close();
@@ -195,9 +199,13 @@ ${lines.join(',\n')}
 }
 
 // —— 输出 diff ——
-console.log(`\n本次将新增 ${toAdd.length} 条${skipped > 0 ? `（跳过已存在 ${skipped} 条）` : ''}：`);
+console.log(
+  `\n本次将新增 ${toAdd.length} 条${skipped > 0 ? `（跳过已存在 ${skipped} 条）` : ''}：`,
+);
 for (const q of toAdd) {
-  console.log(`  ${q.id}  ${q.text.slice(0, 24)}${q.text.length > 24 ? '…' : ''} — ${q.author} [${q.category}/${q.lang}]`);
+  console.log(
+    `  ${q.id}  ${q.text.slice(0, 24)}${q.text.length > 24 ? '…' : ''} — ${q.author} [${q.category}/${q.lang}]`,
+  );
 }
 console.log(`  目标文件: tools/quote-card/data/quotes.json`);
 

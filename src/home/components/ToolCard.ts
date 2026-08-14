@@ -26,19 +26,18 @@ export interface ToolCardOptions {
  *   - 主体：图标（无首图时）/ 名称 / 描述
  *   - 可选：关键词胶囊（仅 __SEO_SHOW_KEYWORDS__ 为 true 时渲染，默认隐藏）
  *
+ * 结构：返回 relative wrapper（.tool-card-wrap），内含卡片 <a> 与置顶/星标按钮。
+ * 按钮必须是 <a> 的兄弟节点而非后代——HTML 规范禁止锚点内嵌套交互式内容，
+ * 否则辅助技术语义混乱。wrapper 同时是拖拽手柄（.tool-card-handle）的挂载点。
+ *
  * 用户偏好交互（头部右上角绝对定位按钮）：
  *   - 📌 置顶：激活态填充，置顶卡片额外加 .tool-card--pinned 绿色细边框
  *   - ⭐ 星标：激活态金色
- *   按钮位于 <a> 之外不可行（卡片根是 <a>，不能嵌套交互按钮），
- *   故以绝对定位浮层覆盖，事件内 stopPropagation + preventDefault 避免触发卡片跳转。
  *
  * 交互：hover 时抬升 + 阴影 + 强调描边 + 头部图标微缩放。
  * 入场动画由 stagger.ts 统一加 .stagger-item 控制，本组件不重复实现。
  */
-export function createToolCard(
-  tool: RegisteredTool,
-  opts: ToolCardOptions,
-): HTMLAnchorElement {
+export function createToolCard(tool: RegisteredTool, opts: ToolCardOptions): HTMLElement {
   const base = import.meta.env.BASE_URL;
   const href = `${base}tools/${tool.slug}/`;
   const accent = tool.card?.accent ?? 'var(--accent)';
@@ -73,15 +72,18 @@ export function createToolCard(
       h('div', {
         class: 'absolute -right-6 -top-6 h-20 w-20 rounded-full bg-white/10',
       }),
-      h('div', {
-        class:
-          'absolute inset-0 flex items-center justify-center transition-transform duration-500 group-hover:scale-110',
-      }, [centerIcon]),
+      h(
+        'div',
+        {
+          class:
+            'absolute inset-0 flex items-center justify-center transition-transform duration-500 group-hover:scale-110',
+        },
+        [centerIcon],
+      ),
     );
   }
 
-  // —— 置顶 / 星标 按钮（头部右上角浮层）——
-  // 不能放进 <a> 内（交互按钮不可嵌套于锚点），故绝对定位、事件拦截跳转。
+  // —— 置顶 / 星标按钮（挂在 wrapper 上、<a> 之外，绝对定位覆盖头部右上角）——
   const pinBtn = h('button', {
     type: 'button',
     class: `tool-card-act tool-card-pin-btn${opts.pinned ? ' is-active' : ''}`,
@@ -89,11 +91,7 @@ export function createToolCard(
     'aria-label': opts.pinned ? '取消置顶' : '置顶',
     'aria-pressed': String(opts.pinned),
     textContent: '📌',
-    onclick: (e: Event) => {
-      e.preventDefault();
-      e.stopPropagation();
-      opts.onTogglePin();
-    },
+    onclick: () => opts.onTogglePin(),
   });
   const starBtn = h('button', {
     type: 'button',
@@ -102,13 +100,8 @@ export function createToolCard(
     'aria-label': opts.starred ? '取消星标' : '加星标',
     'aria-pressed': String(opts.starred),
     textContent: '⭐',
-    onclick: (e: Event) => {
-      e.preventDefault();
-      e.stopPropagation();
-      opts.onToggleStar();
-    },
+    onclick: () => opts.onToggleStar(),
   });
-  header.append(pinBtn, starBtn);
 
   // —— 主体 ——
   const titleRow = h('div', { class: 'flex items-center gap-2' }, [
@@ -127,8 +120,7 @@ export function createToolCard(
       ? [h('span', { class: 'text-lg', textContent: tool.icon })]
       : []),
     h('h3', {
-      class:
-        'font-semibold text-[var(--fg)] group-hover:text-[var(--accent)] transition-colors',
+      class: 'font-semibold text-[var(--fg)] group-hover:text-[var(--accent)] transition-colors',
       textContent: tool.name,
     }),
   ]);
@@ -158,18 +150,21 @@ export function createToolCard(
     );
   }
 
-  return h(
+  const anchor = h(
     'a',
     {
       href,
-      // tool-card--pinned：置顶绿边框修饰类；relative 让头部按钮浮层定位锚定到卡片。
+      // tool-card--pinned：置顶绿边框修饰类。
       // h-full + flex flex-col：撑满网格行高，body flex-1 占据剩余空间，
       // 使同一行卡片（描述行数不同）高度对齐。
-      class: `tool-card group stagger-item flex h-full flex-col overflow-hidden rounded-2xl border bg-[var(--bg-elevated)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-[var(--accent)]${opts.pinned ? ' relative tool-card--pinned' : ' border-[var(--border)]'}`,
+      class: `tool-card group stagger-item flex h-full flex-col overflow-hidden rounded-2xl border bg-[var(--bg-elevated)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-[var(--accent)]${opts.pinned ? ' tool-card--pinned' : ' border-[var(--border)]'}`,
       // stagger 入场延迟（索引越大越晚），最多 600ms 封顶
       style: `--stagger-index:${opts.index}`,
       draggable: false, // 卡片整体不作为拖拽源；拖拽由外层 wrapper 手柄驱动
     },
     [header, body],
   );
+
+  // wrapper：relative 供按钮/拖拽手柄定位；h-full 撑满网格行
+  return h('div', { class: 'tool-card-wrap relative h-full' }, [anchor, pinBtn, starBtn]);
 }

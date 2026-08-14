@@ -46,18 +46,22 @@ const DRAG_THRESHOLD = 4;
  * @param grid 网格容器（其直接子元素为 CardWrapper）
  * @param slugs 当前可见顺序的 slug 数组（与 DOM 顺序一致）
  * @param onReorder 拖拽完成，传入新的 slug 顺序
+ * @param groupOf 可选的分组函数（如置顶/非置顶）。排序规则里「置顶组永远整体在前」，
+ *   跨组拖拽即使落库也会被重渲染"抹平"——视觉上操作无效还无提示。故提供分组时
+ *   只允许组内拖拽：跨组落点不高亮、不生效。
  */
 export function enableDragReorder(
   grid: HTMLElement,
   slugs: string[],
   onReorder: (newSlugs: string[]) => void,
+  groupOf?: (slug: string) => string,
 ): void {
   grid.classList.add('tool-grid-can-drag');
   const wrappers = Array.from(grid.children) as CardWrapper[];
   wrappers.forEach((w, i) => {
     w._slug = slugs[i];
     w._index = i;
-    attachHandle(w, grid, onReorder);
+    attachHandle(w, grid, onReorder, groupOf);
   });
 }
 
@@ -66,6 +70,7 @@ function attachHandle(
   wrapper: CardWrapper,
   grid: HTMLElement,
   onReorder: (newSlugs: string[]) => void,
+  groupOf?: (slug: string) => string,
 ): void {
   const handle = h('div', {
     class: 'tool-card-handle',
@@ -74,7 +79,6 @@ function attachHandle(
     textContent: '⠿',
   });
   wrapper.classList.add('relative');
-  wrapper.style.position = 'relative';
   // 手柄置于 wrapper 最前（DOM 顺序），确保浮在卡片之上
   wrapper.prepend(handle);
 
@@ -82,6 +86,9 @@ function attachHandle(
 
   handle.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return; // 仅左键
+    // 多指防抖：本手柄已有拖拽会话进行中时，忽略后续手指（否则共享 state 被覆盖，
+    // 第一根手指抬起时会用错误的 state 结束拖拽）
+    if (state) return;
     e.preventDefault();
     const startX = e.clientX;
     const startY = e.clientY;
@@ -100,7 +107,7 @@ function attachHandle(
     };
 
     const onMove = (ev: PointerEvent) => {
-      if (!state) return;
+      if (!state || ev.pointerId !== state.pointerId) return;
       // 首次移动过阈值才真正进入拖拽
       if (!state.started) {
         const dx = ev.clientX - startX;
@@ -112,11 +119,13 @@ function attachHandle(
       }
       if (state.active) {
         ev.preventDefault();
-        updateDrag(state, ev);
+        updateDrag(state, ev, groupOf);
       }
     };
 
-    const onUp = () => {
+    const onUp = (ev: PointerEvent) => {
+      // 只响应发起拖拽的那根指针；其它指针的抬起要保留监听器等正主
+      if (ev.pointerId !== state?.pointerId) return;
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
@@ -152,8 +161,8 @@ function startDrag(state: DragState): void {
   src.classList.add('tool-card-dragging');
 }
 
-/** 移动：跟随指针 + 计算落点 */
-function updateDrag(state: DragState, e: PointerEvent): void {
+/** 移动：跟随指针 + 计算落点（groupOf 提供时仅同组落点有效） */
+function updateDrag(state: DragState, e: PointerEvent, groupOf?: (slug: string) => string): void {
   if (!state.ghost) return;
   const rect = state.ghost.getBoundingClientRect();
   state.ghost.style.left = `${e.clientX - rect.width / 2}px`;
@@ -171,7 +180,12 @@ function updateDrag(state: DragState, e: PointerEvent): void {
     ?.querySelectorAll('.tool-card-drop-target')
     .forEach((el) => el.classList.remove('tool-card-drop-target'));
 
-  if (under && under !== state.source) {
+  // 跨组落点无效（置顶组整体在前，跨组拖拽会被排序规则抹平）；
+  // 不高亮、目标索引保持源索引，即"松手等于没拖"。
+  const sameGroup =
+    under && (!groupOf || groupOf(under._slug ?? '') === groupOf(state.source._slug ?? ''));
+
+  if (under && under !== state.source && sameGroup) {
     under.classList.add('tool-card-drop-target');
     state.targetIndex = under._index ?? state.targetIndex;
   } else {
@@ -187,7 +201,9 @@ function finishDrag(
 ): void {
   state.source.classList.remove('tool-card-dragging');
   state.ghost?.remove();
-  grid.querySelectorAll('.tool-card-drop-target').forEach((el) => el.classList.remove('tool-card-drop-target'));
+  grid
+    .querySelectorAll('.tool-card-drop-target')
+    .forEach((el) => el.classList.remove('tool-card-drop-target'));
 
   const fromIndex = state.source._index ?? 0;
   const toIndex = state.targetIndex;

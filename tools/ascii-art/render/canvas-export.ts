@@ -192,7 +192,14 @@ function drawCell(
 }
 
 /** 圆角矩形路径（arcTo 实现，兼容无 ctx.roundRect 的环境）。 */
-function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+function roundRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
   const rr = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
   ctx.moveTo(x + rr, y);
@@ -222,7 +229,12 @@ function readableBarFg(bg: string): string {
  * @param W 网格列数（导出字号基准）
  * @param filename 下载文件名
  */
-export async function downloadPngCanvas(cells: Rendered, cfg: StyleConfig, W: number, filename: string): Promise<ExportResult> {
+export async function downloadPngCanvas(
+  cells: Rendered,
+  cfg: StyleConfig,
+  W: number,
+  filename: string,
+): Promise<ExportResult> {
   try {
     // 等 webfont（fillText 用 "JetBrains Mono"，未就绪会 fallback → 导出与预览不一致）
     if (document.fonts && document.fonts.ready) {

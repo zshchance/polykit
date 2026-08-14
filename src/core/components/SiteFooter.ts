@@ -20,7 +20,8 @@ export function createSiteFooter(): HTMLElement {
     'a',
     {
       href: `mailto:${CONTACT_EMAIL}`,
-      class: 'text-[var(--fg-muted)] underline-offset-4 transition-colors hover:text-[var(--accent)] hover:underline',
+      class:
+        'text-[var(--fg-muted)] underline-offset-4 transition-colors hover:text-[var(--accent)] hover:underline',
     },
     [CONTACT_EMAIL],
   );
@@ -31,18 +32,17 @@ export function createSiteFooter(): HTMLElement {
       href: GITHUB_URL,
       target: '_blank',
       rel: 'noopener noreferrer',
-      class: 'text-[var(--fg-muted)] underline-offset-4 transition-colors hover:text-[var(--accent)] hover:underline',
+      class:
+        'text-[var(--fg-muted)] underline-offset-4 transition-colors hover:text-[var(--accent)] hover:underline',
     },
     ['GitHub 开源项目'],
   );
 
   return h('footer', { class: 'mt-16 border-t border-[var(--border)] pt-6 pb-2' }, [
     h('div', { class: 'flex flex-col items-center gap-2 text-center' }, [
-      h(
-        'p',
-        { class: 'text-sm text-[var(--fg-muted)]' },
-        ['由 欧亚成电子科技 开发维护 · 纯浏览器运行，数据不出本地'],
-      ),
+      h('p', { class: 'text-sm text-[var(--fg-muted)]' }, [
+        '由 欧亚成电子科技 开发维护 · 纯浏览器运行，数据不出本地',
+      ]),
       h('nav', { class: 'flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm' }, [
         h('span', {}, ['联系与合作：', mailLink]),
         h('span', { class: 'text-[var(--border)]' }, ['·']),

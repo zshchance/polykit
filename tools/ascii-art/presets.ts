@@ -36,10 +36,31 @@ export interface TerminalMeta {
 }
 
 export const TERMINAL_METAS: TerminalMeta[] = [
-  { id: 'macos', name: 'macOS 终端', dots: ['#ff5f56', '#ffbd2e', '#27c93f'], barBg: 'rgba(0,0,0,0.25)', bordered: true, radius: 10 },
-  { id: 'iterm2', name: 'iTerm2', dots: ['#ff5f56', '#ffbd2e', '#27c93f'], barBg: 'rgba(0,0,0,0.18)', bordered: true, radius: 8 },
+  {
+    id: 'macos',
+    name: 'macOS 终端',
+    dots: ['#ff5f56', '#ffbd2e', '#27c93f'],
+    barBg: 'rgba(0,0,0,0.25)',
+    bordered: true,
+    radius: 10,
+  },
+  {
+    id: 'iterm2',
+    name: 'iTerm2',
+    dots: ['#ff5f56', '#ffbd2e', '#27c93f'],
+    barBg: 'rgba(0,0,0,0.18)',
+    bordered: true,
+    radius: 8,
+  },
   { id: 'cmd', name: 'Windows CMD', dots: null, barBg: '#c0c0c0', bordered: true, radius: 2 },
-  { id: 'bash', name: 'Linux bash', dots: null, barBg: 'rgba(0,0,0,0.3)', bordered: true, radius: 6 },
+  {
+    id: 'bash',
+    name: 'Linux bash',
+    dots: null,
+    barBg: 'rgba(0,0,0,0.3)',
+    bordered: true,
+    radius: 6,
+  },
 ];
 
 export function getTerminalMeta(id: TerminalType): TerminalMeta {

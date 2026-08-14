@@ -13,13 +13,7 @@ import {
 } from './obfuscate';
 import { buildEncryptPrompt, buildInlineRules, HINT_SUFFIX } from './ai-prompt';
 import { loadOptions, saveOptions, loadInput, saveInput } from './settings';
-import {
-  loadHistory,
-  addResult,
-  removeResult,
-  clearHistory,
-  type StoredResult,
-} from './history';
+import { loadHistory, addResult, removeResult, clearHistory, type StoredResult } from './history';
 
 initTheme();
 
@@ -79,14 +73,38 @@ function renderObfuscator() {
     { key: 'insertEmoji', label: '穿插表情', title: '随机穿插 emoji' },
     { key: 'insertSymbol', label: '穿插符号', title: '随机穿插 ★◆※ 等可见符号' },
     { key: 'visibleSeparator', label: '可见分隔符', title: '用全角空格/制表符打断连续数字串' },
-    { key: 'emailObfuscate', label: '邮箱混淆', title: '@ 替换成 emoji + 域名点号打断（x.com→x◆com），让邮箱正则失效' },
-    { key: 'zeroWidth', label: '零宽字符', title: '穿插肉眼不可见的 Unicode 字符（可能被平台过滤）' },
+    {
+      key: 'emailObfuscate',
+      label: '邮箱混淆',
+      title: '@ 替换成 emoji + 域名点号打断（x.com→x◆com），让邮箱正则失效',
+    },
+    {
+      key: 'zeroWidth',
+      label: '零宽字符',
+      title: '穿插肉眼不可见的 Unicode 字符（可能被平台过滤）',
+    },
     { key: 'homoglyph', label: '同形字替换', title: '拉丁字母替换为视觉相同的西里尔/希腊字母' },
     // 变态层（人难读、AI 易解）
-    { key: 'leetReplace', label: 'leet 替换', title: '字母转形近符号（a→@ e→3 o→0 等，AI 易还原）' },
-    { key: 'digitToRoman', label: '数字转罗马/二进制', title: '数字串转罗马数字或二进制（138→CXXXVIII/10001010）' },
-    { key: 'shuffleWords', label: '段序打乱+密集零宽', title: '段落顺序打乱、字符间密集插入零宽字符' },
-    { key: 'base64Encode', label: 'Base64 编码', title: '整段 Base64 编码（终态变换，人完全看不懂）' },
+    {
+      key: 'leetReplace',
+      label: 'leet 替换',
+      title: '字母转形近符号（a→@ e→3 o→0 等，AI 易还原）',
+    },
+    {
+      key: 'digitToRoman',
+      label: '数字转罗马/二进制',
+      title: '数字串转罗马数字或二进制（138→CXXXVIII/10001010）',
+    },
+    {
+      key: 'shuffleWords',
+      label: '段序打乱+密集零宽',
+      title: '段落顺序打乱、字符间密集插入零宽字符',
+    },
+    {
+      key: 'base64Encode',
+      label: 'Base64 编码',
+      title: '整段 Base64 编码（终态变换，人完全看不懂）',
+    },
   ];
 
   /** 创建一个 checkbox + label，绑定到 state */
@@ -104,10 +122,11 @@ function renderObfuscator() {
     }) as HTMLInputElement;
     // 保存引用以便预设切换时同步勾选态
     cb.dataset.switchKey = meta.key;
-    return h('label', { class: 'flex items-center gap-2 text-sm cursor-pointer', title: meta.title }, [
-      cb,
-      meta.label,
-    ]);
+    return h(
+      'label',
+      { class: 'flex items-center gap-2 text-sm cursor-pointer', title: meta.title },
+      [cb, meta.label],
+    );
   }
 
   const visibleSwitches = SWITCH_META.slice(0, 7).map(makeSwitch);
@@ -154,10 +173,7 @@ function renderObfuscator() {
   // 不可见变换：可收起面板（默认收起，不再随预设显隐）
   let invisibleOpen = false;
   const invisibleToggleIndicator = h('span', { class: 'text-xs', textContent: '▶' });
-  const invisibleBody = h('div', { class: 'space-y-2 hidden' }, [
-    invisibleWarning,
-    invisibleGrid,
-  ]);
+  const invisibleBody = h('div', { class: 'space-y-2 hidden' }, [invisibleWarning, invisibleGrid]);
   const invisibleHeader = h(
     'button',
     {
@@ -177,10 +193,7 @@ function renderObfuscator() {
       invisibleToggleIndicator,
     ],
   );
-  const invisibleSection = h('div', { class: 'space-y-1' }, [
-    invisibleHeader,
-    invisibleBody,
-  ]);
+  const invisibleSection = h('div', { class: 'space-y-1' }, [invisibleHeader, invisibleBody]);
 
   const insaneWarning = h('p', {
     class: 'text-xs leading-relaxed text-purple-600 dark:text-purple-400',
@@ -202,10 +215,7 @@ function renderObfuscator() {
    */
   function updateGroupVisibility(): void {
     const showInsane =
-      state.leetReplace ||
-      state.digitToRoman ||
-      state.shuffleWords ||
-      state.base64Encode;
+      state.leetReplace || state.digitToRoman || state.shuffleWords || state.base64Encode;
     insaneSection.classList.toggle('hidden', !showInsane);
   }
 
@@ -365,8 +375,7 @@ function renderObfuscator() {
     return h(
       'div',
       {
-        class:
-          'rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2 space-y-1',
+        class: 'rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2 space-y-1',
       },
       [
         h('div', { class: 'flex items-center gap-2' }, [
@@ -376,15 +385,19 @@ function renderObfuscator() {
           }),
           textCode,
           // 复制即入历史（存完整文本，与复制一致）
-          createCopyButton(() => {
-            const items = addResult({
-              input: inputArea.value,
-              output: fullText,
-              note: result.note,
-            });
-            renderHistory(items);
-            return fullText;
-          }, '复制', '已复制 ✓'),
+          createCopyButton(
+            () => {
+              const items = addResult({
+                input: inputArea.value,
+                output: fullText,
+                note: result.note,
+              });
+              renderHistory(items);
+              return fullText;
+            },
+            '复制',
+            '已复制 ✓',
+          ),
         ]),
         ...(noteEl ? [noteEl] : []),
         hintTip,
@@ -488,8 +501,7 @@ function renderObfuscator() {
         h(
           'div',
           {
-            class:
-              'rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2 space-y-0.5',
+            class: 'rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2 space-y-0.5',
           },
           [
             h('div', { class: 'flex items-center gap-2' }, [

@@ -17,15 +17,14 @@
  */
 
 import { toCanvas } from 'html-to-image';
-import { downloadBlob } from '@/core/utils/clipboard';
+import { downloadBlob, sanitizeFilePart } from '@/core/utils/download';
 import type { Aspect } from './aspect';
 import type { AnimEffect } from './animations';
 import { buildForExport, ANIM_DURATION } from './animations';
 import type { QuoteData } from './templates/types';
 
 export type VideoExportResult =
-  | { ok: true; format: 'mp4' | 'webm' }
-  | { ok: false; reason: string };
+  { ok: true; format: 'mp4' | 'webm' } | { ok: false; reason: string };
 
 /**
  * 视频分辨率档位。卡片画板短边基准 1080，分辨率档位 = 目标短边像素。
@@ -253,7 +252,10 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
   // 帧率越高、码率相应上调，避免高频细节压缩糊。
   const pixels = cw * ch;
   const fpsFactor = fps / 60;
-  const bitrate = Math.max(8_000_000, Math.round((pixels / (1920 * 1080)) * 14_000_000 * fpsFactor));
+  const bitrate = Math.max(
+    8_000_000,
+    Math.round((pixels / (1920 * 1080)) * 14_000_000 * fpsFactor),
+  );
   const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate });
   const chunks: Blob[] = [];
   recorder.ondataavailable = (e) => {
@@ -293,12 +295,20 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
 
   /** 取消 content 子树所有动画（含逐字子动画），录制结束/出错时清理用 */
   const cancelAll = (): void => {
-    try { anim.cancel(); } catch { /* 忽略 */ }
+    try {
+      anim.cancel();
+    } catch {
+      /* 忽略 */
+    }
     const targets: Element[] = [content, ...content.querySelectorAll('*')];
     for (const el of targets) {
       const anims = typeof el.getAnimations === 'function' ? el.getAnimations() : [];
       for (const a of anims) {
-        try { a.cancel(); } catch { /* 忽略 */ }
+        try {
+          a.cancel();
+        } catch {
+          /* 忽略 */
+        }
       }
     }
   };
@@ -317,7 +327,7 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
       }
       resolve({ ok: true as const, format: ext });
       setTimeout(() => {
-        const fname = `名言_${quote.author.slice(0, 12)}-${quote.text.slice(0, 12)}`.replace(/[\\/:*?"<>|\n\r\s]/g, '_');
+        const fname = `名言_${sanitizeFilePart(quote.author, 12)}-${sanitizeFilePart(quote.text, 12)}`;
         downloadBlob(blob, `${fname}.${ext}`);
       }, 50);
     };
@@ -428,25 +438,37 @@ async function realtimeFallback(
     const cleanup = () => {
       cancelAnimationFrame(rafId);
       clearTimeout(stopTimer);
-      try { anim?.cancel(); } catch { /* 忽略 */ }
+      try {
+        anim?.cancel();
+      } catch {
+        /* 忽略 */
+      }
     };
     recorder.onstop = () => {
       cleanup();
       const blob = new Blob(chunks, { type: mime });
-      if (blob.size === 0) { resolve({ ok: false, reason: '录制内容为空' }); return; }
+      if (blob.size === 0) {
+        resolve({ ok: false, reason: '录制内容为空' });
+        return;
+      }
       resolve({ ok: true as const, format: ext });
       setTimeout(() => {
-        const fname = `名言_${quote.author.slice(0, 12)}-${quote.text.slice(0, 12)}`.replace(/[\\/:*?"<>|\n\r\s]/g, '_');
+        const fname = `名言_${sanitizeFilePart(quote.author, 12)}-${sanitizeFilePart(quote.text, 12)}`;
         downloadBlob(blob, `${fname}.${ext}`);
       }, 50);
     };
-    recorder.onerror = () => { cleanup(); resolve({ ok: false, reason: '录制过程出错' }); };
+    recorder.onerror = () => {
+      cleanup();
+      resolve({ ok: false, reason: '录制过程出错' });
+    };
     const paintFrame = async () => {
       try {
         const frame = await toCanvas(surface, { pixelRatio: pr, cacheBust: false });
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
-      } catch { /* 保留上一帧 */ }
+      } catch {
+        /* 保留上一帧 */
+      }
       const t = anim ? Number(anim.currentTime) : ANIM_DURATION;
       if (t < ANIM_DURATION) {
         rafId = requestAnimationFrame(paintFrame);
@@ -458,9 +480,12 @@ async function realtimeFallback(
       anim.currentTime = 0;
       anim.play();
       rafId = requestAnimationFrame(paintFrame);
-      stopTimer = window.setTimeout(() => {
-        if (recorder.state !== 'inactive') recorder.stop();
-      }, ANIM_DURATION + 200 + tailMs);
+      stopTimer = window.setTimeout(
+        () => {
+          if (recorder.state !== 'inactive') recorder.stop();
+        },
+        ANIM_DURATION + 200 + tailMs,
+      );
     } catch (e) {
       cleanup();
       resolve({ ok: false, reason: e instanceof Error ? e.message : '启动录制失败' });

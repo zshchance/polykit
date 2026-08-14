@@ -107,9 +107,7 @@ export function getCategories(): string[] {
   return list;
 }
 
-export type ExpandResult =
-  | { ok: true; added: number }
-  | { ok: false; reason: string };
+export type ExpandResult = { ok: true; added: number } | { ok: false; reason: string };
 
 /**
  * 可选在线扩充：仅用户主动点击时联网拉取更多名言，缓存到 localStorage。

@@ -1,0 +1,6 @@
+dist
+node_modules
+coverage
+gui-test-screenshots
+package-lock.json
+docs/optimization-report.md

@@ -43,10 +43,12 @@ export const paper: CardTemplate = {
         textContent: quote.author,
       }),
       ...(quote.source
-        ? [h('div', {
-            style: 'margin-top:8px;font-size:24px;color:#a08866;position:relative;z-index:1;',
-            textContent: `《${quote.source}》`,
-          })]
+        ? [
+            h('div', {
+              style: 'margin-top:8px;font-size:24px;color:#a08866;position:relative;z-index:1;',
+              textContent: `《${quote.source}》`,
+            }),
+          ]
         : []),
     );
   },

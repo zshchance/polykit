@@ -21,8 +21,7 @@ export const minimal: CardTemplate = {
     el.replaceChildren(
       // 左侧强调竖条
       h('div', {
-        style:
-          'position:absolute;left:0;top:0;bottom:0;width:10px;background:#0f172a;',
+        style: 'position:absolute;left:0;top:0;bottom:0;width:10px;background:#0f172a;',
       }),
       // 名言正文（字号随长度自适应 + 断词安全网）
       h('div', {

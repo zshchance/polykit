@@ -1,10 +1,13 @@
 /**
- * 配置持久化 —— 版本化 localStorage，含字段校验 + colorMode↔halfBlock 钳制。
+ * 配置持久化 —— 版本化 localStorage（读写经 core/utils/storage 统一容错），
+ * 含字段校验 + colorMode↔halfBlock 钳制。
  *
  * 钳制规则：colorMode === false 时 halfBlock 强制 false。
  *   原因：半块模式用 fg/bg 表示两个像素，单色下两者相同 = 死图，无意义。
  *   在 load 时统一钳制，保证任何来源（旧草稿 / 手改 localStorage）都不会产生非法组合。
  */
+
+import { readJSON, writeJSON } from '@/core/utils/storage';
 
 import type { StyleConfig, TerminalType, CursorStyle, InputMode } from './types';
 import { DEFAULT_PRESET, ASPECT_HALF_BLOCK, ASPECT_TEXT } from './presets';
@@ -55,13 +58,19 @@ function normalize(partial: Partial<StyleConfig> | undefined): StyleConfig {
   const cfg: StyleConfig = {
     ...base,
     ...partial,
-    charset: typeof partial.charset === 'string' && partial.charset.length > 0 ? partial.charset : base.charset,
+    charset:
+      typeof partial.charset === 'string' && partial.charset.length > 0
+        ? partial.charset
+        : base.charset,
     width: clampInt(partial.width, 20, 240, base.width),
     halfBlock: typeof partial.halfBlock === 'boolean' ? partial.halfBlock : base.halfBlock,
     colorMode: typeof partial.colorMode === 'boolean' ? partial.colorMode : base.colorMode,
-    aspectRatio: typeof partial.aspectRatio === 'number' && Number.isFinite(partial.aspectRatio) && partial.aspectRatio > 0
-      ? partial.aspectRatio
-      : base.aspectRatio,
+    aspectRatio:
+      typeof partial.aspectRatio === 'number' &&
+      Number.isFinite(partial.aspectRatio) &&
+      partial.aspectRatio > 0
+        ? partial.aspectRatio
+        : base.aspectRatio,
     contrast: clampInt(partial.contrast, -100, 100, 0),
     brightness: clampInt(partial.brightness, -100, 100, 0),
     invert: typeof partial.invert === 'boolean' ? partial.invert : false,
@@ -70,7 +79,8 @@ function normalize(partial: Partial<StyleConfig> | undefined): StyleConfig {
     terminal: isValidTerminal(partial.terminal) ? partial.terminal! : base.terminal,
     title: typeof partial.title === 'string' ? partial.title : base.title,
     showFrame: typeof partial.showFrame === 'boolean' ? partial.showFrame : base.showFrame,
-    crtScanlines: typeof partial.crtScanlines === 'boolean' ? partial.crtScanlines : base.crtScanlines,
+    crtScanlines:
+      typeof partial.crtScanlines === 'boolean' ? partial.crtScanlines : base.crtScanlines,
     crtGlow: typeof partial.crtGlow === 'boolean' ? partial.crtGlow : base.crtGlow,
     crtCurve: typeof partial.crtCurve === 'boolean' ? partial.crtCurve : base.crtCurve,
     cursor: isValidCursor(partial.cursor) ? partial.cursor! : base.cursor,
@@ -131,43 +141,33 @@ export const DEFAULT_LOGO_SIZE = 16;
 
 /** 读取并归一化。任何错误静默回退默认（不阻塞 UI）。v1 旧数据迁移补 findWord 默认。 */
 export function loadCfg(): PersistedState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultState();
-    const parsed = JSON.parse(raw) as Blob;
-    if (!parsed) return defaultState();
-    // v1（无 findWord）和 v2 都走归一化：v1 的 findWord 为 undefined → normalizeFindWord 补默认
-    return {
-      cfg: normalize(parsed.cfg),
-      mode: parsed.mode === 'text' ? 'text' : 'image',
-      text: typeof parsed.text === 'string' ? parsed.text : '',
-      textLogo: parsed.textLogo === true,
-      logoSize: clampInt(parsed.logoSize, 8, 40, DEFAULT_LOGO_SIZE),
-      textLogoSelfChar: parsed.textLogoSelfChar === true,
-      findWord: normalizeFindWord(parsed.findWord),
-    };
-  } catch {
-    return defaultState();
-  }
+  const parsed = readJSON(STORAGE_KEY) as Blob | null;
+  if (!parsed) return defaultState();
+  // v1（无 findWord）和 v2 都走归一化：v1 的 findWord 为 undefined → normalizeFindWord 补默认
+  return {
+    cfg: normalize(parsed.cfg),
+    mode: parsed.mode === 'text' ? 'text' : 'image',
+    text: typeof parsed.text === 'string' ? parsed.text : '',
+    textLogo: parsed.textLogo === true,
+    logoSize: clampInt(parsed.logoSize, 8, 40, DEFAULT_LOGO_SIZE),
+    textLogoSelfChar: parsed.textLogoSelfChar === true,
+    findWord: normalizeFindWord(parsed.findWord),
+  };
 }
 
 export function saveCfg(state: PersistedState): void {
-  try {
-    const blob: Blob = {
-      version: CURRENT_VERSION,
-      // 保存前再钳制一次（防御性）
-      cfg: { ...state.cfg, halfBlock: state.cfg.colorMode ? state.cfg.halfBlock : false },
-      mode: state.mode,
-      text: state.text,
-      textLogo: state.textLogo,
-      logoSize: clampInt(state.logoSize, 8, 40, DEFAULT_LOGO_SIZE),
-      textLogoSelfChar: state.textLogoSelfChar,
-      findWord: state.findWord,
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
-  } catch {
-    // 静默失败（隐私模式 / 配额满）
-  }
+  const blob: Blob = {
+    version: CURRENT_VERSION,
+    // 保存前再钳制一次（防御性）
+    cfg: { ...state.cfg, halfBlock: state.cfg.colorMode ? state.cfg.halfBlock : false },
+    mode: state.mode,
+    text: state.text,
+    textLogo: state.textLogo,
+    logoSize: clampInt(state.logoSize, 8, 40, DEFAULT_LOGO_SIZE),
+    textLogoSelfChar: state.textLogoSelfChar,
+    findWord: state.findWord,
+  };
+  writeJSON(STORAGE_KEY, blob);
 }
 
 /**

@@ -15,7 +15,14 @@ export const DESIGN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '把任意场景描述成吉卜力动画画面，治愈感拉满。',
     variables: [
-      { key: 'scene', label: '场景描述', placeholder: '一个女孩在雨天的公交站等车，旁边有只猫', required: true, multiline: true, default: '一个女孩在雨天的公交站等车，旁边有只猫' },
+      {
+        key: 'scene',
+        label: '场景描述',
+        placeholder: '一个女孩在雨天的公交站等车，旁边有只猫',
+        required: true,
+        multiline: true,
+        default: '一个女孩在雨天的公交站等车，旁边有只猫',
+      },
     ],
     template: `请基于以下描述，生成一张吉卜力工作室（宫崎骏）风格的插画。
 
@@ -40,7 +47,14 @@ export const DESIGN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '把普通场景改造成霓虹未来感的赛博朋克画面。',
     variables: [
-      { key: 'scene', label: '场景描述', placeholder: '一条老式街道', required: true, multiline: true, default: '一条老式街道' },
+      {
+        key: 'scene',
+        label: '场景描述',
+        placeholder: '一条老式街道',
+        required: true,
+        multiline: true,
+        default: '一条老式街道',
+      },
     ],
     template: `请把以下场景改造成赛博朋克风格的画面描述，用于 AI 绘画。
 
@@ -64,7 +78,14 @@ export const DESIGN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '把风景描述成中国传统水墨写意画，意境悠远。',
     variables: [
-      { key: 'scene', label: '场景描述', placeholder: '远山、孤舟、江面薄雾', required: true, multiline: true, default: '远山、孤舟、江面薄雾' },
+      {
+        key: 'scene',
+        label: '场景描述',
+        placeholder: '远山、孤舟、江面薄雾',
+        required: true,
+        multiline: true,
+        default: '远山、孤舟、江面薄雾',
+      },
     ],
     template: `请把以下场景画成中国传统水墨写意画，用于 AI 绘画。
 
@@ -87,7 +108,13 @@ export const DESIGN_PROMPTS: Prompt[] = [
     fun: false,
     desc: '生成专业 Logo 设计需求，含风格、配色、参考方向。',
     variables: [
-      { key: 'brand', label: '品牌名/行业', placeholder: '一家精品咖啡品牌「山野」', required: true, default: '一家精品咖啡品牌「山野」' },
+      {
+        key: 'brand',
+        label: '品牌名/行业',
+        placeholder: '一家精品咖啡品牌「山野」',
+        required: true,
+        default: '一家精品咖啡品牌「山野」',
+      },
       { key: 'style', label: '风格偏好', placeholder: '极简/手绘/几何/复古', default: '极简自然' },
     ],
     template: `请为「{{brand}}」设计一个 Logo，给我设计方案和 AI 绘画提示词。
@@ -111,7 +138,13 @@ export const DESIGN_PROMPTS: Prompt[] = [
     fun: false,
     desc: '活动/产品海报的视觉方案与 AI 绘画提示词。',
     variables: [
-      { key: 'purpose', label: '海报用途', placeholder: '一场 indie 音乐节', required: true, default: '一场 indie 音乐节' },
+      {
+        key: 'purpose',
+        label: '海报用途',
+        placeholder: '一场 indie 音乐节',
+        required: true,
+        default: '一场 indie 音乐节',
+      },
       { key: 'mood', label: '氛围', placeholder: '热血/迷幻/复古', default: '迷幻复古' },
     ],
     template: `请为「{{purpose}}」设计一张海报，给我视觉方案和 AI 绘画提示词。
@@ -136,8 +169,19 @@ export const DESIGN_PROMPTS: Prompt[] = [
     fun: false,
     desc: '为一组插画确定统一的画风规范，保证系列感。',
     variables: [
-      { key: 'project', label: '项目', placeholder: '儿童绘本「小熊的冒险」', required: true, default: '儿童绘本「小熊的冒险」' },
-      { key: 'ref', label: '参考风格', placeholder: '暖色、圆润、童趣', default: '暖色、圆润、童趣' },
+      {
+        key: 'project',
+        label: '项目',
+        placeholder: '儿童绘本「小熊的冒险」',
+        required: true,
+        default: '儿童绘本「小熊的冒险」',
+      },
+      {
+        key: 'ref',
+        label: '参考风格',
+        placeholder: '暖色、圆润、童趣',
+        default: '暖色、圆润、童趣',
+      },
     ],
     template: `请为「{{project}}」确定一套统一的插画风格规范。
 
@@ -161,7 +205,13 @@ export const DESIGN_PROMPTS: Prompt[] = [
     fun: false,
     desc: '生成 App/网页界面的设计方案与布局说明。',
     variables: [
-      { key: 'product', label: '产品', placeholder: '一个冥想 App 的首页', required: true, default: '一个冥想 App 的首页' },
+      {
+        key: 'product',
+        label: '产品',
+        placeholder: '一个冥想 App 的首页',
+        required: true,
+        default: '一个冥想 App 的首页',
+      },
       { key: 'style', label: '风格', placeholder: '极简/温暖/治愈系', default: '温暖治愈系' },
     ],
     template: `请为「{{product}}」设计界面，输出布局方案。
@@ -186,7 +236,14 @@ export const DESIGN_PROMPTS: Prompt[] = [
     fun: false,
     desc: '根据描述生成个性化头像的 AI 绘画提示词。',
     variables: [
-      { key: 'desc', label: '想要的样子', placeholder: '戴眼镜的橘猫，穿宇航服', required: true, multiline: true, default: '戴眼镜的橘猫，穿宇航服' },
+      {
+        key: 'desc',
+        label: '想要的样子',
+        placeholder: '戴眼镜的橘猫，穿宇航服',
+        required: true,
+        multiline: true,
+        default: '戴眼镜的橘猫，穿宇航服',
+      },
       { key: 'style', label: '风格', placeholder: '扁平/3D/像素/油画', default: '扁平矢量' },
     ],
     template: `请为以下描述生成头像的 AI 绘画提示词。
@@ -210,7 +267,13 @@ export const DESIGN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '把任何东西变成复古像素游戏画风，情怀拉满。',
     variables: [
-      { key: 'subject', label: '主体', placeholder: '一只柴犬在吃拉面', required: true, default: '一只柴犬在吃拉面' },
+      {
+        key: 'subject',
+        label: '主体',
+        placeholder: '一只柴犬在吃拉面',
+        required: true,
+        default: '一只柴犬在吃拉面',
+      },
     ],
     template: `请把以下主体画成复古像素游戏画风，用于 AI 绘画。
 
@@ -233,7 +296,13 @@ export const DESIGN_PROMPTS: Prompt[] = [
     fun: false,
     desc: '针对拍摄主题给出构图、光线、参数建议。',
     variables: [
-      { key: 'subject', label: '拍摄主题', placeholder: '咖啡馆里的人像', required: true, default: '咖啡馆里的人像' },
+      {
+        key: 'subject',
+        label: '拍摄主题',
+        placeholder: '咖啡馆里的人像',
+        required: true,
+        default: '咖啡馆里的人像',
+      },
       { key: 'device', label: '设备', placeholder: '手机/微单', default: '手机' },
     ],
     template: `请为拍摄「{{subject}}」（设备：{{device}}）给出专业建议。
@@ -256,7 +325,13 @@ export const DESIGN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '设计一套统一风格的表情包，可直接拿去画。',
     variables: [
-      { key: 'character', label: '主角', placeholder: '一只总是困困的水豚', required: true, default: '一只总是困困的水豚' },
+      {
+        key: 'character',
+        label: '主角',
+        placeholder: '一只总是困困的水豚',
+        required: true,
+        default: '一只总是困困的水豚',
+      },
     ],
     template: `请为「{{character}}」设计一套表情包/贴纸。
 

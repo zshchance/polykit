@@ -15,7 +15,7 @@
 import type { Plugin, ResolvedConfig } from 'vite';
 import { transformSync } from 'esbuild';
 import { globSync } from 'glob';
-import { resolve, dirname, sep } from 'node:path';
+import { resolve, dirname } from 'node:path';
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import type { ToolConfig } from '@/core/types';
 // 注意：本插件在 vite 配置加载期（Node ESM）执行，此时 Vite 的 @ 别名尚未生效，
@@ -23,7 +23,8 @@ import type { ToolConfig } from '@/core/types';
 import { registryConfig } from '../../home/registry-config';
 
 const SITE_NAME = '即开宝匣';
-const SITE_DESC = '即开即用的本地小工具合集：密码生成、名言卡片、二维码、图片压缩、AI 提示词等实用与趣味工具，数据不出本地。';
+const SITE_DESC =
+  '即开即用的本地小工具合集：密码生成、名言卡片、二维码、图片压缩、AI 提示词等实用与趣味工具，数据不出本地。';
 // canonical 前缀：含子路径（GitHub Pages 镜像的默认域名）。
 // 用作 SITE_URL 未配置时的兜底，避免泄露 example.com。
 // 双平台部署时（Cloudflare 主站 + GitHub 镜像）都用此 canonical，便于 SEO 聚合。
@@ -59,16 +60,21 @@ function readToolConfig(absPath: string): ToolConfig | null {
   }).code;
 
   // esbuild 会把 "export default {...}" 转成 "var stdin_default = {...}; export { stdin_default as default };"
-  // 安全约束：仅当存在 "as default" 导出，且顶层有一个 var = {...} 时才提取。
-  if (!/export\s*\{[^}]*\bas\s+default\b[^}]*\}/.test(transpiled)) {
+  // 安全约束：先从 export 语句反查 default 导出对应的变量名，再定位该变量的 var 声明。
+  // 不能直接抓第一个 "var x = {"：若 default export 之前还有其他顶层对象字面量，
+  // 会命中错误目标，导致该工具 SEO 注入静默丢失、首页 JSON-LD 出现 undefined。
+  const exportMatch = transpiled.match(/export\s*\{([^}]*)\}/);
+  const nameMatch = exportMatch?.[1]?.match(/(\w+)\s+as\s+default\b/);
+  if (!nameMatch) {
     console.warn(`[seo] ${absPath} 不是 "export default {...}" 纯数据，跳过`);
     return null;
   }
+  const varName = nameMatch[1]!;
 
   // 用括号平衡法提取 "var <name> = { ... }" 中的对象字面量（支持嵌套花括号）
-  const start = transpiled.search(/var\s+\w+\s*=\s*\{/);
+  const start = transpiled.search(new RegExp(`var\\s+${varName}\\s*=\\s*\\{`));
   if (start === -1) {
-    console.warn(`[seo] ${absPath} 不是 "export default {...}" 纯数据，跳过`);
+    console.warn(`[seo] ${absPath} 未找到 default export 对应的对象字面量，跳过`);
     return null;
   }
   const objStart = transpiled.indexOf('{', start);
@@ -80,7 +86,7 @@ function readToolConfig(absPath: string): ToolConfig | null {
 
   // 用 Function 求值对象字面量（数据源来自仓库内已审计文件，非用户输入）
   try {
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    // eslint-disable-next-line no-new-func
     const fn = new Function(`"use strict"; return (${objText});`);
     return fn() as ToolConfig;
   } catch (e) {
@@ -134,8 +140,7 @@ export function seoPlugin(options: SeoOptions = {}): Plugin {
     }
     // 排序与首页卡片一致：先按 registry 策展 order（默认 100）升序，再按名称兜底。
     // 这样 ItemList / sitemap 顺序与用户实际看到的卡片顺序吻合。
-    const orderOf = (slug: string): number =>
-      registryConfig.modules[slug]?.order ?? 100;
+    const orderOf = (slug: string): number => registryConfig.modules[slug]?.order ?? 100;
     list.sort((a, b) => {
       const oa = orderOf(a.slug);
       const ob = orderOf(b.slug);
@@ -185,11 +190,7 @@ export function seoPlugin(options: SeoOptions = {}): Plugin {
 
 // ─────────────────────────── 首页注入 ───────────────────────────
 
-function injectHome(
-  html: string,
-  tools: ToolConfig[],
-  options: SeoOptions,
-): string {
+function injectHome(html: string, tools: ToolConfig[], options: SeoOptions): string {
   // 首页关键词 = 站点级关键词 + 各工具关键词；去重（保留首次出现顺序），
   // 避免 siteKeywords 与工具 keywords 同时含「名言卡片」等造成 meta 重复。
   const keywords = dedupStrings(
@@ -222,9 +223,7 @@ function injectHome(
     description: SITE_DESC,
     keywords: keywords.join(', '),
   };
-  tags.push(
-    `<script type="application/ld+json">${JSON.stringify(website)}</script>`,
-  );
+  tags.push(`<script type="application/ld+json">${JSON.stringify(website)}</script>`);
 
   // Organization：暴露开发者联系方式（email）与开源项目（sameAs），
   // 提升"软件服务 / 技术支持"类检索的实体可发现性。
@@ -237,9 +236,7 @@ function injectHome(
     sameAs: [GITHUB_URL],
     description: SITE_DESC,
   };
-  tags.push(
-    `<script type="application/ld+json">${JSON.stringify(org)}</script>`,
-  );
+  tags.push(`<script type="application/ld+json">${JSON.stringify(org)}</script>`);
 
   // ItemList：把所有工具作为结构化数据，利于搜索引擎/AI 理解站点
   const itemList = {
@@ -255,9 +252,7 @@ function injectHome(
       description: t.description,
     })),
   };
-  tags.push(
-    `<script type="application/ld+json">${JSON.stringify(itemList)}</script>`,
-  );
+  tags.push(`<script type="application/ld+json">${JSON.stringify(itemList)}</script>`);
 
   return injectIntoHead(html, tags.join('\n    '));
 }
@@ -311,11 +306,7 @@ function injectTool(
 
 // ─────────────────────────── sitemap / robots ───────────────────────────
 
-function writeSitemap(
-  outDir: string,
-  siteUrl: string,
-  tools: ToolConfig[],
-): void {
+function writeSitemap(outDir: string, siteUrl: string, tools: ToolConfig[]): void {
   const urls: string[] = [];
 
   // 首页
@@ -373,11 +364,6 @@ function injectIntoHead(html: string, tags: string): string {
     return html.replace(/<\/head>/i, `    ${tags}\n  </head>`);
   }
   return `${tags}\n${html}`;
-}
-
-/** 跨平台：确保相对分隔符是正斜杠（导出给其他模块用） */
-export function toPosix(p: string): string {
-  return p.split(sep).join('/');
 }
 
 export default seoPlugin;

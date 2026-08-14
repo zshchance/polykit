@@ -30,7 +30,13 @@ const SAMPLE = {
 /** 把 hex 转 rgb，便于派生半透明色（按钮悬停、边框等） */
 function hexToRgb(hex: string): [number, number, number] {
   const m = hex.replace('#', '');
-  const n = m.length === 3 ? m.split('').map((c) => c + c).join('') : m;
+  const n =
+    m.length === 3
+      ? m
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : m;
   const num = parseInt(n, 16);
   return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
 }
@@ -54,17 +60,25 @@ export function renderWebsitePreview(p: Palette): HTMLElement {
   const accent = colorOf(p, 'accent');
 
   const cardEl = (title: string, body: string) =>
-    h('div', {
-      class: 'rounded-lg p-3',
-      style: `background:${surface};color:${text};border:1px solid ${alpha(text, 0.08)};`,
-    }, [
-      h('div', {
-        class: 'mb-1.5 h-6 w-6 rounded',
-        style: `background:${alpha(primary, 0.15)};`,
-      }),
-      h('div', { class: 'text-xs font-semibold', textContent: title }),
-      h('div', { class: 'mt-0.5 text-[10px] leading-snug', style: `color:${muted};`, textContent: body }),
-    ]);
+    h(
+      'div',
+      {
+        class: 'rounded-lg p-3',
+        style: `background:${surface};color:${text};border:1px solid ${alpha(text, 0.08)};`,
+      },
+      [
+        h('div', {
+          class: 'mb-1.5 h-6 w-6 rounded',
+          style: `background:${alpha(primary, 0.15)};`,
+        }),
+        h('div', { class: 'text-xs font-semibold', textContent: title }),
+        h('div', {
+          class: 'mt-0.5 text-[10px] leading-snug',
+          style: `color:${muted};`,
+          textContent: body,
+        }),
+      ],
+    );
 
   return h(
     'section',
@@ -75,26 +89,39 @@ export function renderWebsitePreview(p: Palette): HTMLElement {
     },
     [
       // 导航条
-      h('div', {
-        class: 'flex items-center justify-between px-4 py-2.5',
-        style: `border-bottom:1px solid ${alpha(text, 0.08)};`,
-      }, [
-        h('span', { class: 'text-sm font-bold', textContent: SAMPLE.brand }),
-        h('div', { class: 'hidden gap-3 sm:flex' },
-          SAMPLE.navItems.map((it) =>
-            h('span', { class: 'text-[11px]', style: `color:${muted};`, textContent: it }),
+      h(
+        'div',
+        {
+          class: 'flex items-center justify-between px-4 py-2.5',
+          style: `border-bottom:1px solid ${alpha(text, 0.08)};`,
+        },
+        [
+          h('span', { class: 'text-sm font-bold', textContent: SAMPLE.brand }),
+          h(
+            'div',
+            { class: 'hidden gap-3 sm:flex' },
+            SAMPLE.navItems.map((it) =>
+              h('span', { class: 'text-[11px]', style: `color:${muted};`, textContent: it }),
+            ),
           ),
-        ),
-        h('span', {
-          class: 'rounded-md px-2.5 py-1 text-[11px] font-medium',
-          style: `background:${primary};color:${'#ffffff'};`,
-          textContent: '登录',
-        }),
-      ]),
+          h('span', {
+            class: 'rounded-md px-2.5 py-1 text-[11px] font-medium',
+            style: `background:${primary};color:${'#ffffff'};`,
+            textContent: '登录',
+          }),
+        ],
+      ),
       // Hero
       h('div', { class: 'px-4 py-5 text-center' }, [
-        h('h3', { class: 'mx-auto max-w-md text-base font-bold leading-snug sm:text-lg', textContent: SAMPLE.heroTitle }),
-        h('p', { class: 'mx-auto mt-1.5 max-w-sm text-[11px] leading-relaxed sm:text-xs', style: `color:${muted};`, textContent: SAMPLE.heroSub }),
+        h('h3', {
+          class: 'mx-auto max-w-md text-base font-bold leading-snug sm:text-lg',
+          textContent: SAMPLE.heroTitle,
+        }),
+        h('p', {
+          class: 'mx-auto mt-1.5 max-w-sm text-[11px] leading-relaxed sm:text-xs',
+          style: `color:${muted};`,
+          textContent: SAMPLE.heroSub,
+        }),
         h('div', { class: 'mt-3 flex justify-center gap-2' }, [
           h('span', {
             class: 'rounded-md px-3 py-1.5 text-[11px] font-medium',
@@ -144,16 +171,28 @@ export function renderSlidePreview(p: Palette): HTMLElement {
         style: `background:${primary};`,
       }),
       h('div', { class: 'absolute left-10 top-6 right-6' }, [
-        h('h3', { class: 'text-base font-bold leading-tight sm:text-lg', textContent: SAMPLE.slideTitle }),
-        h('ul', { class: 'mt-2 space-y-1.5' },
+        h('h3', {
+          class: 'text-base font-bold leading-tight sm:text-lg',
+          textContent: SAMPLE.slideTitle,
+        }),
+        h(
+          'ul',
+          { class: 'mt-2 space-y-1.5' },
           SAMPLE.slidePoints.map((pt) =>
-            h('li', { class: 'flex items-start gap-1.5 text-[11px] leading-snug sm:text-xs', style: `color:${muted};` }, [
-              h('span', {
-                class: 'mt-1 h-1.5 w-1.5 shrink-0 rounded-full',
-                style: `background:${accent};`,
-              }),
-              h('span', { textContent: pt }),
-            ]),
+            h(
+              'li',
+              {
+                class: 'flex items-start gap-1.5 text-[11px] leading-snug sm:text-xs',
+                style: `color:${muted};`,
+              },
+              [
+                h('span', {
+                  class: 'mt-1 h-1.5 w-1.5 shrink-0 rounded-full',
+                  style: `background:${accent};`,
+                }),
+                h('span', { textContent: pt }),
+              ],
+            ),
           ),
         ),
       ]),

@@ -1,13 +1,9 @@
 import type { ToolConfig } from '@/core/types';
 
 /**
- * 文字夹私货 —— 模块自描述配置。
- * 首页（import.meta.glob）与 SEO 插件会自动读取本文件，无需手动登记。
- *
- * 可选美化素材请放在 ./assets/ 目录下：
- *   - assets/icon.<svg|png>   工具图标
- *   - assets/cover.<svg|png>  卡片首图
- * 文件名固定（icon / cover），扩展名不限。未提供时用下方 icon emoji 兜底。
+ * 文字夹私货 —— 模块自描述配置（首页与 SEO 插件自动发现，无需登记）。
+ * 字段说明见 README「tool.config.ts 字段」；美化素材放 ./assets/
+ * （icon.* / cover.*，文件名固定，未提供时用 icon emoji 兜底）。
  */
 export default {
   slug: 'contact-obfuscator',

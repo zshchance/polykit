@@ -127,9 +127,7 @@ function buildHardRequirementsWithPage(page: PasswordOptions): string {
     // 极端情况：主页面所有字符类型都被取消勾选。如实告知，交由 AI 权衡。
     lines.push('2. 字符类型未作限定，请自行选择能保证强度的字符组成。');
   } else if (disabled.length === 0) {
-    lines.push(
-      `2. 必须同时包含：${enabled.map((c) => c.label).join('、')} 至少各一个。`,
-    );
+    lines.push(`2. 必须同时包含：${enabled.map((c) => c.label).join('、')} 至少各一个。`);
   } else {
     const enabledText = enabled.map((c) => c.label).join('、');
     const disabledText = disabled.map((c) => c.label).join('、');
@@ -144,9 +142,7 @@ function buildHardRequirementsWithPage(page: PasswordOptions): string {
       '3. 长度较短，优先保证强度：避免连续重复字符、避免 keyboard walk（如 qwerty、1234）。',
     );
   } else {
-    lines.push(
-      '3. 可适当加入主题相关词或短语，提升可记忆性，但不要牺牲上面的字符多样性要求。',
-    );
+    lines.push('3. 可适当加入主题相关词或短语，提升可记忆性，但不要牺牲上面的字符多样性要求。');
   }
 
   lines.push(

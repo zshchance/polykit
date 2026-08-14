@@ -163,7 +163,13 @@ function inCenterArea(r: number, c: number, size: number, ratio: number): boolea
 }
 
 /** 单个 data 模块按形状绘制（ctx 已设 fillStyle，scale 为像素边长） */
-function drawModule(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, shape: DotShape): void {
+function drawModule(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  s: number,
+  shape: DotShape,
+): void {
   switch (shape) {
     case 'square':
       ctx.fillRect(x, y, s, s);
@@ -238,7 +244,14 @@ function rectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
 }
 
 /** 独立画一个圆角矩形并 fill（非 evenodd，给 Logo 底垫用） */
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
   const rr = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
   ctx.moveTo(x + rr, y);

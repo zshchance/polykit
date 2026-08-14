@@ -59,13 +59,7 @@ export function createCompareViewer(): CompareViewer {
   const labelL = h('div', { class: 'icv-tag icv-tag-left', textContent: '原图' });
   const labelR = h('div', { class: 'icv-tag icv-tag-right', textContent: '输出' });
 
-  const stage = h('div', { class: 'icv-stage' }, [
-    originalImg,
-    outputImg,
-    divider,
-    labelL,
-    labelR,
-  ]);
+  const stage = h('div', { class: 'icv-stage' }, [originalImg, outputImg, divider, labelL, labelR]);
 
   const el = h('div', { class: 'icv-root' }, [stage]);
 

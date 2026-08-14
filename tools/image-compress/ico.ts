@@ -35,10 +35,7 @@ async function renderPngSize(bitmap: ImageBitmap, size: number): Promise<Blob> {
   ctx.drawImage(bitmap, dx, dy, dw, dh);
 
   return await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error('PNG 编码失败'))),
-      'image/png',
-    );
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG 编码失败'))), 'image/png');
   });
 }
 

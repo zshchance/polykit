@@ -16,7 +16,14 @@ export const FUN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '把干巴巴的简历改写成江湖侠客传记，HR 看了眼前一亮。',
     variables: [
-      { key: 'content', label: '简历内容', placeholder: '5年产品经理，做过电商和增长', required: true, multiline: true, default: '5年产品经理，做过电商和增长' },
+      {
+        key: 'content',
+        label: '简历内容',
+        placeholder: '5年产品经理，做过电商和增长',
+        required: true,
+        multiline: true,
+        default: '5年产品经理，做过电商和增长',
+      },
     ],
     template: `请把下面的简历改写成武侠人物传记风格，但要保留核心经历信息。
 
@@ -64,7 +71,14 @@ export const FUN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '把大白话翻译成文绉绉的文言文，装腔利器。',
     variables: [
-      { key: 'text', label: '原文', placeholder: '今天好累不想上班', required: true, multiline: true, default: '今天好累不想上班' },
+      {
+        key: 'text',
+        label: '原文',
+        placeholder: '今天好累不想上班',
+        required: true,
+        multiline: true,
+        default: '今天好累不想上班',
+      },
     ],
     template: `请把下面这段现代白话文翻译成文言文。
 
@@ -87,7 +101,13 @@ export const FUN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '给个主题，AI 设计一整套桌游规则，脑洞大开。',
     variables: [
-      { key: 'theme', label: '主题', placeholder: '在便利店打工的猫咪', required: true, default: '在便利店打工的猫咪' },
+      {
+        key: 'theme',
+        label: '主题',
+        placeholder: '在便利店打工的猫咪',
+        required: true,
+        default: '在便利店打工的猫咪',
+      },
     ],
     template: `请以「{{theme}}」为主题，设计一款桌面游戏。
 
@@ -110,7 +130,14 @@ export const FUN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '倾诉你的烦恼，AI 把它写成一首有情绪的歌。',
     variables: [
-      { key: 'worry', label: '你的烦恼', placeholder: '每天加班还存不下钱', required: true, multiline: true, default: '每天加班还存不下钱' },
+      {
+        key: 'worry',
+        label: '你的烦恼',
+        placeholder: '每天加班还存不下钱',
+        required: true,
+        multiline: true,
+        default: '每天加班还存不下钱',
+      },
       { key: 'genre', label: '曲风', placeholder: '民谣/摇滚/R&B/说唱', default: '民谣' },
     ],
     template: `请把我的烦恼写成一首{{genre}}风格的歌词。
@@ -134,7 +161,13 @@ export const FUN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '把一句话变成 emoji 谜语，发给朋友猜着玩。',
     variables: [
-      { key: 'phrase', label: '要猜的话', placeholder: '今晚吃火锅', required: true, default: '今晚吃火锅' },
+      {
+        key: 'phrase',
+        label: '要猜的话',
+        placeholder: '今晚吃火锅',
+        required: true,
+        default: '今晚吃火锅',
+      },
     ],
     template: `请把「{{phrase}}」做成一个 emoji 谜题。
 
@@ -155,7 +188,13 @@ export const FUN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '以宠物的口吻写一本迷你回忆录，催泪又可爱。',
     variables: [
-      { key: 'pet', label: '宠物', placeholder: '一只叫馒头的橘猫，3岁', required: true, default: '一只叫馒头的橘猫，3岁' },
+      {
+        key: 'pet',
+        label: '宠物',
+        placeholder: '一只叫馒头的橘猫，3岁',
+        required: true,
+        default: '一只叫馒头的橘猫，3岁',
+      },
     ],
     template: `请以宠物的第一人称口吻，写一本迷你回忆录。
 
@@ -178,8 +217,20 @@ export const FUN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '别再发"生日快乐"，AI 帮你写走心又特别的祝福。',
     variables: [
-      { key: 'relation', label: '对方是谁', placeholder: '认识10年的闺蜜', required: true, default: '认识10年的闺蜜' },
-      { key: 'trait', label: 'TA的特点/回忆', placeholder: '爱喝奶茶、总迟到但很讲义气', multiline: true, default: '爱喝奶茶、总迟到但很讲义气' },
+      {
+        key: 'relation',
+        label: '对方是谁',
+        placeholder: '认识10年的闺蜜',
+        required: true,
+        default: '认识10年的闺蜜',
+      },
+      {
+        key: 'trait',
+        label: 'TA的特点/回忆',
+        placeholder: '爱喝奶茶、总迟到但很讲义气',
+        multiline: true,
+        default: '爱喝奶茶、总迟到但很讲义气',
+      },
       { key: 'style', label: '风格', placeholder: '走心/搞笑/文艺/毒舌', default: '走心' },
     ],
     template: `请帮我写一段给「{{relation}}」的生日祝福。
@@ -204,7 +255,14 @@ export const FUN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '描述你的穿搭，AI 用时尚毒舌评委的口吻犀利点评。',
     variables: [
-      { key: 'outfit', label: '你的穿搭', placeholder: '格子衬衫+运动裤+洞洞鞋', required: true, multiline: true, default: '格子衬衫+运动裤+洞洞鞋' },
+      {
+        key: 'outfit',
+        label: '你的穿搭',
+        placeholder: '格子衬衫+运动裤+洞洞鞋',
+        required: true,
+        multiline: true,
+        default: '格子衬衫+运动裤+洞洞鞋',
+      },
     ],
     template: `请扮演一位嘴毒但专业的时尚评委，犀利点评我的穿搭。
 
@@ -227,7 +285,14 @@ export const FUN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '把无聊的会议纪要改写成脱口秀段子，苦中作乐。',
     variables: [
-      { key: 'minutes', label: '会议纪要', placeholder: '讨论Q3 OKR，确认三个目标…', required: true, multiline: true, default: '讨论Q3 OKR，确认三个目标，安排下周复盘' },
+      {
+        key: 'minutes',
+        label: '会议纪要',
+        placeholder: '讨论Q3 OKR，确认三个目标…',
+        required: true,
+        multiline: true,
+        default: '讨论Q3 OKR，确认三个目标，安排下周复盘',
+      },
     ],
     template: `请把下面这段会议纪要，改写成一段脱口秀段子。
 
@@ -250,7 +315,13 @@ export const FUN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '让 AI 当面试官，针对你的岗位连环追问，练手神器。',
     variables: [
-      { key: 'role', label: '岗位', placeholder: '初级产品经理', required: true, default: '初级产品经理' },
+      {
+        key: 'role',
+        label: '岗位',
+        placeholder: '初级产品经理',
+        required: true,
+        default: '初级产品经理',
+      },
     ],
     template: `请你扮演一位资深、专业、会连环追问的{{role}}面试官，对我进行模拟面试。
 
@@ -271,7 +342,13 @@ export const FUN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '把电影剧情浓缩成一句神吐槽，看完不剧透也想笑。',
     variables: [
-      { key: 'movie', label: '电影', placeholder: '泰坦尼克号', required: true, default: '泰坦尼克号' },
+      {
+        key: 'movie',
+        label: '电影',
+        placeholder: '泰坦尼克号',
+        required: true,
+        default: '泰坦尼克号',
+      },
     ],
     template: `请把电影「{{movie}}」的剧情，用一句神吐槽总结（不剧透核心悬念，但抓住精髓）。
 
@@ -292,7 +369,14 @@ export const FUN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '体面地请假、推掉饭局、拒绝邀约，话术得体又不伤和气。',
     variables: [
-      { key: 'situation', label: '场景', placeholder: '想拒绝同事的周末聚餐邀请', required: true, multiline: true, default: '想拒绝同事的周末聚餐邀请' },
+      {
+        key: 'situation',
+        label: '场景',
+        placeholder: '想拒绝同事的周末聚餐邀请',
+        required: true,
+        multiline: true,
+        default: '想拒绝同事的周末聚餐邀请',
+      },
     ],
     template: `请帮我写一段高情商的话术，应对这个场景：「{{situation}}」
 
@@ -314,7 +398,13 @@ export const FUN_PROMPTS: Prompt[] = [
     desc: '把孩子/朋友的名字和喜好编进专属童话，哄睡神器。',
     variables: [
       { key: 'name', label: '主角名字', placeholder: '朵朵', required: true, default: '朵朵' },
-      { key: 'likes', label: '喜欢的东西', placeholder: '恐龙、星星、草莓', multiline: true, default: '恐龙、星星、草莓' },
+      {
+        key: 'likes',
+        label: '喜欢的东西',
+        placeholder: '恐龙、星星、草莓',
+        multiline: true,
+        default: '恐龙、星星、草莓',
+      },
     ],
     template: `请讲一个定制的睡前故事，主角叫「{{name}}」，喜欢：{{likes}}。
 
@@ -335,7 +425,14 @@ export const FUN_PROMPTS: Prompt[] = [
     fun: true,
     desc: '把一件小事升华成哲学命题，朋友圈装深度专用。',
     variables: [
-      { key: 'thing', label: '一件小事', placeholder: '今天外卖迟到了半小时', required: true, multiline: true, default: '今天外卖迟到了半小时' },
+      {
+        key: 'thing',
+        label: '一件小事',
+        placeholder: '今天外卖迟到了半小时',
+        required: true,
+        multiline: true,
+        default: '今天外卖迟到了半小时',
+      },
     ],
     template: `请把下面这件日常小事，升华成一段哲学思辨。
 

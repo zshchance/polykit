@@ -73,9 +73,12 @@ function renderQrCode(): void {
 
   // ────────── 预览区 ──────────
   const previewWrap = h('div', {
-    class: 'flex items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 min-h-[320px]',
+    class:
+      'flex items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 min-h-[320px]',
   });
-  const statusLine = h('div', { class: 'min-h-[1.25rem] text-xs text-[var(--fg-muted)] text-center' });
+  const statusLine = h('div', {
+    class: 'min-h-[1.25rem] text-xs text-[var(--fg-muted)] text-center',
+  });
 
   /** 防抖重绘 */
   let drawTimer: number | undefined;
@@ -88,7 +91,10 @@ function renderQrCode(): void {
     const text = cfg.text.trim();
     if (!text) {
       previewWrap.replaceChildren(
-        h('div', { class: 'text-sm text-[var(--fg-muted)]', textContent: '输入内容后这里会显示二维码' }),
+        h('div', {
+          class: 'text-sm text-[var(--fg-muted)]',
+          textContent: '输入内容后这里会显示二维码',
+        }),
       );
       lastCanvas = null;
       return;
@@ -106,7 +112,10 @@ function renderQrCode(): void {
       showStatus('');
     } catch (err) {
       previewWrap.replaceChildren(
-        h('div', { class: 'px-4 text-center text-sm text-[var(--holiday-legal)]', textContent: err instanceof Error ? err.message : '生成失败' }),
+        h('div', {
+          class: 'px-4 text-center text-sm text-[var(--holiday-legal)]',
+          textContent: err instanceof Error ? err.message : '生成失败',
+        }),
       );
       lastCanvas = null;
       showStatus('');
@@ -168,25 +177,44 @@ function renderQrCode(): void {
   let fgText: HTMLInputElement;
   let bgPicker: HTMLInputElement;
   let bgText: HTMLInputElement;
-  const fgInput = colorInput('码点颜色', cfg.fgColor, (v) => {
-    cfg.fgColor = v;
-    activePresetId = null;
-    cfg.activeStyleId = null;
-    renderPresetRow();
-    scheduleDraw();
-    persist();
-  }, (p, t) => { fgPicker = p; fgText = t; });
-  const bgInput = colorInput('背景颜色', cfg.bgColor, (v) => {
-    cfg.bgColor = v;
-    activePresetId = null;
-    cfg.activeStyleId = null;
-    renderPresetRow();
-    scheduleDraw();
-    persist();
-  }, (p, t) => { bgPicker = p; bgText = t; });
+  const fgInput = colorInput(
+    '码点颜色',
+    cfg.fgColor,
+    (v) => {
+      cfg.fgColor = v;
+      activePresetId = null;
+      cfg.activeStyleId = null;
+      renderPresetRow();
+      scheduleDraw();
+      persist();
+    },
+    (p, t) => {
+      fgPicker = p;
+      fgText = t;
+    },
+  );
+  const bgInput = colorInput(
+    '背景颜色',
+    cfg.bgColor,
+    (v) => {
+      cfg.bgColor = v;
+      activePresetId = null;
+      cfg.activeStyleId = null;
+      renderPresetRow();
+      scheduleDraw();
+      persist();
+    },
+    (p, t) => {
+      bgPicker = p;
+      bgText = t;
+    },
+  );
 
   // 6. Logo 上传与开关
-  const logoToggle = h('input', { type: 'checkbox', class: 'accent-[var(--accent)] h-4 w-4' }) as HTMLInputElement;
+  const logoToggle = h('input', {
+    type: 'checkbox',
+    class: 'accent-[var(--accent)] h-4 w-4',
+  }) as HTMLInputElement;
   logoToggle.checked = cfg.withLogo;
   logoToggle.addEventListener('change', () => {
     cfg.withLogo = logoToggle.checked;
@@ -199,11 +227,16 @@ function renderQrCode(): void {
   });
   const logoBtn = h('button', {
     type: 'button',
-    class: 'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg)] hover:border-[var(--accent)] transition-colors',
+    class:
+      'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg)] hover:border-[var(--accent)] transition-colors',
     textContent: logoBitmap ? '更换 Logo' : '上传 Logo',
     onclick: () => logoInput.click(),
   });
-  const logoInput = h('input', { type: 'file', accept: 'image/*', class: 'hidden' }) as HTMLInputElement;
+  const logoInput = h('input', {
+    type: 'file',
+    accept: 'image/*',
+    class: 'hidden',
+  }) as HTMLInputElement;
   logoInput.addEventListener('change', async () => {
     const f = logoInput.files?.[0];
     if (!f) return;
@@ -231,7 +264,8 @@ function renderQrCode(): void {
   });
   const clearLogoBtn = h('button', {
     type: 'button',
-    class: 'rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--fg-muted)] hover:text-[var(--holiday-legal)] transition-colors',
+    class:
+      'rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--fg-muted)] hover:text-[var(--holiday-legal)] transition-colors',
     textContent: '移除',
     onclick: () => {
       logoBitmap?.close();
@@ -273,17 +307,28 @@ function renderQrCode(): void {
   }
 
   // ────────── 上传已有二维码解码美化 ──────────
-  const decodeDrop = h('div', {
-    role: 'button',
-    tabindex: '0',
-    'aria-label': '上传二维码图片识别',
-    class:
-      'flex flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-5 text-center cursor-pointer transition-colors hover:border-[var(--accent)] focus:outline-none focus-visible:border-[var(--accent)]',
-  }, [
-    h('div', { class: 'text-xl', textContent: '📥' }),
-    h('div', { class: 'text-xs font-medium text-[var(--fg)]', textContent: '上传已有二维码 → 识别内容并用当前风格重绘' }),
-  ]);
-  const decodeInput = h('input', { type: 'file', accept: 'image/*', class: 'hidden' }) as HTMLInputElement;
+  const decodeDrop = h(
+    'div',
+    {
+      role: 'button',
+      tabindex: '0',
+      'aria-label': '上传二维码图片识别',
+      class:
+        'flex flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-5 text-center cursor-pointer transition-colors hover:border-[var(--accent)] focus:outline-none focus-visible:border-[var(--accent)]',
+    },
+    [
+      h('div', { class: 'text-xl', textContent: '📥' }),
+      h('div', {
+        class: 'text-xs font-medium text-[var(--fg)]',
+        textContent: '上传已有二维码 → 识别内容并用当前风格重绘',
+      }),
+    ],
+  );
+  const decodeInput = h('input', {
+    type: 'file',
+    accept: 'image/*',
+    class: 'hidden',
+  }) as HTMLInputElement;
   decodeDrop.addEventListener('click', () => decodeInput.click());
   decodeDrop.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -372,7 +417,10 @@ function renderQrCode(): void {
     const header = h('div', { class: 'flex items-center justify-between gap-2' }, [
       h('span', {
         class: 'text-xs font-medium text-[var(--fg)]',
-        textContent: detectedCodes.length > 1 ? `识别到 ${detectedCodes.length} 个二维码，选择要美化的` : '已识别二维码',
+        textContent:
+          detectedCodes.length > 1
+            ? `识别到 ${detectedCodes.length} 个二维码，选择要美化的`
+            : '已识别二维码',
       }),
     ]);
 
@@ -406,7 +454,8 @@ function renderQrCode(): void {
   // ────────── 导出 ──────────
   const downloadBtn = h('button', {
     type: 'button',
-    class: 'inline-flex items-center gap-1.5 rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+    class:
+      'inline-flex items-center gap-1.5 rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
     textContent: '⬇ 下载 PNG',
     onclick: () => {
       if (!lastCanvas) {
@@ -419,7 +468,8 @@ function renderQrCode(): void {
   });
   const copyBtn = h('button', {
     type: 'button',
-    class: 'inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-2 text-sm text-[var(--fg)] hover:border-[var(--accent)] transition-colors',
+    class:
+      'inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-2 text-sm text-[var(--fg)] hover:border-[var(--accent)] transition-colors',
     textContent: '⧉ 复制图片',
     onclick: async () => {
       if (!lastCanvas) {
@@ -476,7 +526,12 @@ function renderQrCode(): void {
       isCustom: boolean;
     }> = [
       ...PRESETS.map((p) => ({ id: p.id, name: p.name, swatch: p.swatch, isCustom: false })),
-      ...customStyles.map((s) => ({ id: s.id, name: '⭐ ' + s.name, swatch: s.swatch, isCustom: true })),
+      ...customStyles.map((s) => ({
+        id: s.id,
+        name: '⭐ ' + s.name,
+        swatch: s.swatch,
+        isCustom: true,
+      })),
     ];
     presetRow.replaceChildren(
       ...items.map((it) => {
@@ -522,10 +577,17 @@ function renderQrCode(): void {
           },
           [
             // 色条预览：前→背两小格
-            h('span', { class: 'flex overflow-hidden rounded border border-[var(--border)]', style: 'width:22px;height:14px;' }, [
-              h('span', { style: `flex:1;background:${it.swatch[0]};` }),
-              h('span', { style: `flex:1;background:${it.swatch[1]};` }),
-            ]),
+            h(
+              'span',
+              {
+                class: 'flex overflow-hidden rounded border border-[var(--border)]',
+                style: 'width:22px;height:14px;',
+              },
+              [
+                h('span', { style: `flex:1;background:${it.swatch[0]};` }),
+                h('span', { style: `flex:1;background:${it.swatch[1]};` }),
+              ],
+            ),
             h('span', { class: 'text-[var(--fg)]', textContent: it.name }),
           ],
         );
@@ -564,10 +626,10 @@ function renderQrCode(): void {
   const logoFitRow = h('div', { class: 'flex gap-2' });
   function renderLogoFitRow(): void {
     logoFitRow.replaceChildren(
-      ...([
+      ...[
         { id: 'rounded' as LogoFit, name: '圆角（推荐）' },
         { id: 'square' as LogoFit, name: '直角' },
-      ]).map((it) =>
+      ].map((it) =>
         h('button', {
           type: 'button',
           'aria-pressed': String(it.id === cfg.logoFit),
@@ -687,18 +749,23 @@ function renderQrCode(): void {
         '把 AI 的整段回复粘到这里（代码块首行形如「// 名称：冬日落雪」，其后可选「// 配色: ...」行，再后是 ```js 代码）。工具会自动识别。',
     }) as HTMLTextAreaElement;
     const step3 = h('div', { class: 'hidden space-y-2' }, [
-      h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '③ 粘贴 AI 返回的代码（含名称注释）' }),
+      h('label', {
+        class: 'block text-xs font-medium text-[var(--fg-muted)]',
+        textContent: '③ 粘贴 AI 返回的代码（含名称注释）',
+      }),
       pasteInput,
       h('div', { class: 'flex items-center justify-end gap-2' }, [
         h('button', {
           type: 'button',
-          class: 'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors',
+          class:
+            'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors',
           textContent: '取消',
           onclick: closeStyleDialog,
         }),
         h('button', {
           type: 'button',
-          class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+          class:
+            'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
           textContent: '保存并应用',
           onclick: saveStyle,
         }),
@@ -742,12 +809,14 @@ function renderQrCode(): void {
         name: parsed.name,
         apply: parsed.apply,
         dotEffectCode: parsed.code,
-        swatch: [
-          parsed.apply.fgColor || cfg.fgColor,
-          parsed.apply.bgColor || cfg.bgColor,
-        ],
+        swatch: [parsed.apply.fgColor || cfg.fgColor, parsed.apply.bgColor || cfg.bgColor],
       });
-      const saved = list.find((it) => it.name.trim() === parsed.name)!;
+      // addCustomStyle 同名覆盖，刚保存的必在列表首位；仍做回退防御
+      const saved = list.find((it) => it.name.trim() === parsed.name);
+      if (!saved) {
+        flashError('保存后未在列表中找到该风格，请重试');
+        return;
+      }
       // 立即套用：配色 + 码点钩子
       let effect: DotEffectFn | null = null;
       try {
@@ -760,49 +829,63 @@ function renderQrCode(): void {
       setTimeout(closeStyleDialog, 700);
     }
 
-    const card = h('div', {
-      role: 'dialog',
-      'aria-modal': 'true',
-      'aria-label': '用 AI 生成自定义二维码风格',
-      class:
-        'w-[min(92vw,42rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
-    }, [
-      h('div', { class: 'mb-1 flex items-center justify-between gap-2' }, [
-        h('span', { class: 'text-sm font-semibold text-[var(--fg)]', textContent: '💡 用 AI 生成自定义码点风格' }),
-        h('button', {
-          type: 'button',
-          'aria-label': '关闭',
-          class: 'text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors',
-          textContent: '✕',
-          onclick: closeStyleDialog,
-        }),
-      ]),
-      // 步骤 1
-      h('div', { class: 'mt-2 space-y-2' }, [
-        h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '① 描述你想要的风格' }),
-        descInput,
-        h('div', { class: 'flex items-center justify-end' }, [
+    const card = h(
+      'div',
+      {
+        role: 'dialog',
+        'aria-modal': 'true',
+        'aria-label': '用 AI 生成自定义二维码风格',
+        class:
+          'w-[min(92vw,42rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
+      },
+      [
+        h('div', { class: 'mb-1 flex items-center justify-between gap-2' }, [
+          h('span', {
+            class: 'text-sm font-semibold text-[var(--fg)]',
+            textContent: '💡 用 AI 生成自定义码点风格',
+          }),
           h('button', {
             type: 'button',
-            class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
-            textContent: '生成 AI 提示词',
-            onclick: generate,
+            'aria-label': '关闭',
+            class: 'text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors',
+            textContent: '✕',
+            onclick: closeStyleDialog,
           }),
         ]),
-      ]),
-      // 步骤 2
-      h('div', { class: 'mt-3' }, [
-        h('label', { class: 'mb-1 block text-xs font-medium text-[var(--fg-muted)]', textContent: '② 复制提示词给 AI' }),
-        step2,
-      ]),
-      // 步骤 3
-      step3,
-      statusRow,
-      h('p', {
-        class: 'mt-3 text-center text-[11px] text-[var(--fg-muted)]',
-        textContent: '数据不出本地 · 代码仅在你自己的浏览器运行',
-      }),
-    ]);
+        // 步骤 1
+        h('div', { class: 'mt-2 space-y-2' }, [
+          h('label', {
+            class: 'block text-xs font-medium text-[var(--fg-muted)]',
+            textContent: '① 描述你想要的风格',
+          }),
+          descInput,
+          h('div', { class: 'flex items-center justify-end' }, [
+            h('button', {
+              type: 'button',
+              class:
+                'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+              textContent: '生成 AI 提示词',
+              onclick: generate,
+            }),
+          ]),
+        ]),
+        // 步骤 2
+        h('div', { class: 'mt-3' }, [
+          h('label', {
+            class: 'mb-1 block text-xs font-medium text-[var(--fg-muted)]',
+            textContent: '② 复制提示词给 AI',
+          }),
+          step2,
+        ]),
+        // 步骤 3
+        step3,
+        statusRow,
+        h('p', {
+          class: 'mt-3 text-center text-[11px] text-[var(--fg-muted)]',
+          textContent: '数据不出本地 · 代码仅在你自己的浏览器运行',
+        }),
+      ],
+    );
 
     styleDialogEl = mountStyleDialog(card);
     requestAnimationFrame(() => descInput.focus());
@@ -813,13 +896,17 @@ function renderQrCode(): void {
     type: 'button',
     title: '用 AI 生成自定义码点风格：描述想要的效果 → 生成提示词 → 粘贴 AI 返回的代码 → 保存',
     'aria-label': '用 AI 生成自定义风格',
-    class: 'text-base leading-none text-[var(--fg-muted)] hover:text-[var(--accent)] transition-colors',
+    class:
+      'text-base leading-none text-[var(--fg-muted)] hover:text-[var(--accent)] transition-colors',
     textContent: '💡',
     onclick: () => openStyleHelpDialog(),
   });
   const styleField = h('div', { class: 'space-y-1.5' }, [
     h('div', { class: 'flex items-center gap-1.5' }, [
-      h('div', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '一键套用风格' }),
+      h('div', {
+        class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+        textContent: '一键套用风格',
+      }),
       aiHelpBtn,
     ]),
     presetRow,
@@ -831,9 +918,15 @@ function renderQrCode(): void {
     field('码点形状', dotRow),
     field('定位眼形状', eyeRow),
     field('纠错等级', levelContainer),
-    h('div', { class: 'grid grid-cols-2 gap-3' }, [field('码点颜色', fgInput), field('背景颜色', bgInput)]),
+    h('div', { class: 'grid grid-cols-2 gap-3' }, [
+      field('码点颜色', fgInput),
+      field('背景颜色', bgInput),
+    ]),
     h('div', { class: 'space-y-2' }, [
-      h('div', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '中心 Logo' }),
+      h('div', {
+        class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+        textContent: '中心 Logo',
+      }),
       h('div', { class: 'flex items-center gap-3' }, [
         h('label', { class: 'flex items-center gap-2 text-sm text-[var(--fg)]' }, [
           logoToggle,
@@ -852,8 +945,14 @@ function renderQrCode(): void {
     statusLine,
     h('div', { class: 'flex flex-wrap justify-center gap-2' }, [downloadBtn, copyBtn]),
     h('div', { class: 'mt-4' }, [
-      h('div', { class: 'mb-2 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '美化已有二维码' }),
-      h('p', { class: 'mb-2 text-[11px] leading-snug text-[var(--fg-muted)]', textContent: '上传海报/截图，自动识别其中所有二维码（含彩色码），多码时可在下方下拉切换。' }),
+      h('div', {
+        class: 'mb-2 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+        textContent: '美化已有二维码',
+      }),
+      h('p', {
+        class: 'mb-2 text-[11px] leading-snug text-[var(--fg-muted)]',
+        textContent: '上传海报/截图，自动识别其中所有二维码（含彩色码），多码时可在下方下拉切换。',
+      }),
       decodeDrop,
       decodeInput,
       decodeBar,
@@ -863,7 +962,8 @@ function renderQrCode(): void {
   content.append(
     h('p', {
       class: 'mb-6 text-sm text-[var(--fg-muted)]',
-      textContent: '生成可定制风格的二维码：一键套用风格预设，或自选码点/定位眼/配色/Logo。上传已有二维码（含海报里的多个码）识别后用当前风格美化重绘。全程本地处理。',
+      textContent:
+        '生成可定制风格的二维码：一键套用风格预设，或自选码点/定位眼/配色/Logo。上传已有二维码（含海报里的多个码）识别后用当前风格美化重绘。全程本地处理。',
     }),
     h('div', { class: 'grid gap-6 lg:grid-cols-2' }, [controls, previewCol]),
   );
@@ -986,7 +1086,10 @@ function colorInput(
   });
   if (onReady) onReady(picker, text);
   return h('div', { class: 'space-y-1' }, [
-    h('label', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: label }),
+    h('label', {
+      class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+      textContent: label,
+    }),
     h('div', { class: 'flex items-center gap-2' }, [picker, text]),
   ]);
 }
@@ -994,7 +1097,10 @@ function colorInput(
 /** 带 label 的小字段 */
 function field(label: string, control: HTMLElement): HTMLElement {
   return h('div', { class: 'space-y-1.5' }, [
-    h('div', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: label }),
+    h('div', {
+      class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+      textContent: label,
+    }),
     control,
   ]);
 }

@@ -27,50 +27,63 @@ import { getTerminalMeta } from '../presets';
 export function buildTerminalFrame(cfg: StyleConfig, contentEl: HTMLElement): HTMLElement {
   if (!cfg.showFrame) {
     // 无外框：直接背景 + padding + 内容
-    return h('div', {
-      class: 'ascii-frame ascii-frame--bare',
-      style: [
-        `background:${cfg.bg};`,
-        `color:${cfg.fg};`,
-        `padding:${cfg.padding}px;`,
-        'box-sizing:border-box;',
-        'display:inline-block;',
-        'font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;',
-        cfg.crtGlow ? `text-shadow:0 0 8px ${cfg.fg};` : '',
-      ].join(''),
-    }, [contentEl]);
+    return h(
+      'div',
+      {
+        class: 'ascii-frame ascii-frame--bare',
+        style: [
+          `background:${cfg.bg};`,
+          `color:${cfg.fg};`,
+          `padding:${cfg.padding}px;`,
+          'box-sizing:border-box;',
+          'display:inline-block;',
+          'font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;',
+          cfg.crtGlow ? `text-shadow:0 0 8px ${cfg.fg};` : '',
+        ].join(''),
+      },
+      [contentEl],
+    );
   }
 
   const meta = getTerminalMeta(cfg.terminal);
 
   // 标题栏圆点
-  const dots =
-    meta.dots
-      ? h('div', { class: 'flex items-center gap-1.5' }, [
-          h('span', { style: `width:12px;height:12px;border-radius:50%;background:${meta.dots[0]};display:inline-block;` }),
-          h('span', { style: `width:12px;height:12px;border-radius:50%;background:${meta.dots[1]};display:inline-block;` }),
-          h('span', { style: `width:12px;height:12px;border-radius:50%;background:${meta.dots[2]};display:inline-block;` }),
-        ])
-      : h('div');
+  const dots = meta.dots
+    ? h('div', { class: 'flex items-center gap-1.5' }, [
+        h('span', {
+          style: `width:12px;height:12px;border-radius:50%;background:${meta.dots[0]};display:inline-block;`,
+        }),
+        h('span', {
+          style: `width:12px;height:12px;border-radius:50%;background:${meta.dots[1]};display:inline-block;`,
+        }),
+        h('span', {
+          style: `width:12px;height:12px;border-radius:50%;background:${meta.dots[2]};display:inline-block;`,
+        }),
+      ])
+    : h('div');
 
-  const titlebar = h('div', {
-    class: 'ascii-titlebar',
-    style: [
-      'display:flex;',
-      'align-items:center;',
-      `gap:${meta.dots ? '12px' : '0'};`,
-      'padding:8px 12px;',
-      meta.barBg ? `background:${meta.barBg};` : '',
-      `color:${readableBarFg(cfg)};`,
-      'font-size:13px;',
-      'font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;',
-    ].join(''),
-  }, [
-    dots,
-    h('span', { style: 'flex:1;text-align:center;opacity:0.85;', textContent: cfg.title }),
-    // 右侧占位平衡布局
-    h('span', { style: 'width:54px;' }),
-  ]);
+  const titlebar = h(
+    'div',
+    {
+      class: 'ascii-titlebar',
+      style: [
+        'display:flex;',
+        'align-items:center;',
+        `gap:${meta.dots ? '12px' : '0'};`,
+        'padding:8px 12px;',
+        meta.barBg ? `background:${meta.barBg};` : '',
+        `color:${readableBarFg(cfg)};`,
+        'font-size:13px;',
+        'font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;',
+      ].join(''),
+    },
+    [
+      dots,
+      h('span', { style: 'flex:1;text-align:center;opacity:0.85;', textContent: cfg.title }),
+      // 右侧占位平衡布局
+      h('span', { style: 'width:54px;' }),
+    ],
+  );
 
   // 屏幕区：扫描线 + 内容
   const scanlines = cfg.crtScanlines
@@ -86,31 +99,39 @@ export function buildTerminalFrame(cfg: StyleConfig, contentEl: HTMLElement): HT
       })
     : null;
 
-  const screen = h('div', {
-    class: 'ascii-screen',
-    style: [
-      'position:relative;',
-      `background:${cfg.bg};`,
-      `color:${cfg.fg};`,
-      `padding:${cfg.padding}px;`,
-      'box-sizing:border-box;',
-      'overflow:hidden;',
-      cfg.crtCurve ? 'transform:perspective(800px) rotateX(1.5deg);' : '',
-      cfg.crtGlow ? `text-shadow:0 0 8px ${cfg.fg};` : '',
-    ].join(''),
-  }, [scanlines, contentEl].filter(Boolean) as HTMLElement[]);
+  const screen = h(
+    'div',
+    {
+      class: 'ascii-screen',
+      style: [
+        'position:relative;',
+        `background:${cfg.bg};`,
+        `color:${cfg.fg};`,
+        `padding:${cfg.padding}px;`,
+        'box-sizing:border-box;',
+        'overflow:hidden;',
+        cfg.crtCurve ? 'transform:perspective(800px) rotateX(1.5deg);' : '',
+        cfg.crtGlow ? `text-shadow:0 0 8px ${cfg.fg};` : '',
+      ].join(''),
+    },
+    [scanlines, contentEl].filter(Boolean) as HTMLElement[],
+  );
 
-  return h('div', {
-    class: 'ascii-frame',
-    style: [
-      'display:inline-block;',
-      'border-radius:' + meta.radius + 'px;',
-      'overflow:hidden;',
-      'border:1px solid rgba(128,128,128,0.25);',
-      'box-shadow:0 8px 32px rgba(0,0,0,0.35);',
-      'font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;',
-    ].join(''),
-  }, [titlebar, screen]);
+  return h(
+    'div',
+    {
+      class: 'ascii-frame',
+      style: [
+        'display:inline-block;',
+        'border-radius:' + meta.radius + 'px;',
+        'overflow:hidden;',
+        'border:1px solid rgba(128,128,128,0.25);',
+        'box-shadow:0 8px 32px rgba(0,0,0,0.35);',
+        'font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;',
+      ].join(''),
+    },
+    [titlebar, screen],
+  );
 }
 
 /** 标题栏文字色：根据屏幕背景明暗选白/黑，保证可读。 */

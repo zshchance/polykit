@@ -5,16 +5,24 @@
  * 下次打开页面时自动还原，免去重复输入与点选。
  * 仅存「当前编辑中的草稿」，不与 history.ts（用户主动保存的名言）混用。
  *
- * 设计与 history.ts 一致：带 version 的 JSON blob，损坏/隐私模式时安全回退默认值。
+ * 设计与 history.ts 一致：带 version 的 JSON blob，读写经 core/utils/storage 统一容错，
+ * 损坏/隐私模式时安全回退默认值。
  *
  * 存储形态（JSON）：
  *   { "version": 4, "draft": { text, author, source?, templateId, aspectId?, animId?, videoRes?, videoFps? } }
  *   （v2 新增 aspectId/animId，v3 新增 videoRes，v4 新增 videoFps；旧草稿缺字段时用默认值，向前兼容）
  */
 
+import { readJSON, writeJSON, removeKey } from '@/core/utils/storage';
+
 import { isValidAspectId, type AspectId } from './aspect';
 import { isValidAnimId } from './animations';
-import { isValidVideoResId, type VideoResId, isValidVideoFpsId, type VideoFpsId } from './video-export';
+import {
+  isValidVideoResId,
+  type VideoResId,
+  isValidVideoFpsId,
+  type VideoFpsId,
+} from './video-export';
 import { isValidTemplateId, defaultTemplate } from './templates';
 
 const STORAGE_KEY = 'quote-card:draft';
@@ -47,46 +55,46 @@ interface DraftBlob {
 
 /** 读取草稿；存储损坏/为空/字段非法时返回 null（调用方用默认值） */
 export function loadDraft(): QuoteDraft | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<DraftBlob>;
-    if (!parsed || typeof parsed !== 'object') return null;
-    const d = parsed.draft;
-    if (!d || typeof d !== 'object') return null;
-    // 逐字段校验：text/author/templateId 必须是非空字符串，source 可选字符串
-    if (typeof d.text !== 'string' || typeof d.author !== 'string' || typeof d.templateId !== 'string') return null;
-    if (d.text.length === 0 && d.author.length === 0) return null; // 全空视为无草稿
-    const source = typeof d.source === 'string' ? d.source : undefined;
-    // templateId 校验合法性（内置 + 自定义合并列表里存在）；非法（如删除的自定义模板）
-    // 回退默认模板。与 animId 的 isValidAnimId 行为一致。
-    const templateId = isValidTemplateId(d.templateId) ? d.templateId : defaultTemplate.id;
-    // aspectId / animId / videoRes / videoFps 仅在合法时保留，否则留空（调用方用默认）
-    const aspectId = isValidAspectId(d.aspectId) ? d.aspectId : undefined;
-    const animId = isValidAnimId(d.animId) ? d.animId : undefined;
-    const videoRes = isValidVideoResId(d.videoRes) ? d.videoRes : undefined;
-    const videoFps = isValidVideoFpsId(d.videoFps) ? d.videoFps : undefined;
-    return { text: d.text, author: d.author, source, templateId, aspectId, animId, videoRes, videoFps };
-  } catch {
+  const parsed = readJSON(STORAGE_KEY) as Partial<DraftBlob> | null;
+  if (!parsed) return null;
+  const d = parsed.draft;
+  if (!d || typeof d !== 'object') return null;
+  // 逐字段校验：text/author/templateId 必须是非空字符串，source 可选字符串
+  if (
+    typeof d.text !== 'string' ||
+    typeof d.author !== 'string' ||
+    typeof d.templateId !== 'string'
+  )
     return null;
-  }
+  if (d.text.length === 0 && d.author.length === 0) return null; // 全空视为无草稿
+  const source = typeof d.source === 'string' ? d.source : undefined;
+  // templateId 校验合法性（内置 + 自定义合并列表里存在）；非法（如删除的自定义模板）
+  // 回退默认模板。与 animId 的 isValidAnimId 行为一致。
+  const templateId = isValidTemplateId(d.templateId) ? d.templateId : defaultTemplate.id;
+  // aspectId / animId / videoRes / videoFps 仅在合法时保留，否则留空（调用方用默认）
+  const aspectId = isValidAspectId(d.aspectId) ? d.aspectId : undefined;
+  const animId = isValidAnimId(d.animId) ? d.animId : undefined;
+  const videoRes = isValidVideoResId(d.videoRes) ? d.videoRes : undefined;
+  const videoFps = isValidVideoFpsId(d.videoFps) ? d.videoFps : undefined;
+  return {
+    text: d.text,
+    author: d.author,
+    source,
+    templateId,
+    aspectId,
+    animId,
+    videoRes,
+    videoFps,
+  };
 }
 
 /** 持久化草稿（隐私模式 / 配额满时静默忽略） */
 export function saveDraft(draft: QuoteDraft): void {
-  try {
-    const blob: DraftBlob = { version: CURRENT_VERSION, draft };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
-  } catch {
-    // 容量满 / 隐私模式禁用 localStorage：静默忽略，不影响功能
-  }
+  const blob: DraftBlob = { version: CURRENT_VERSION, draft };
+  writeJSON(STORAGE_KEY, blob);
 }
 
 /** 清除草稿（恢复默认） */
 export function clearDraft(): void {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // 静默忽略
-  }
+  removeKey(STORAGE_KEY);
 }

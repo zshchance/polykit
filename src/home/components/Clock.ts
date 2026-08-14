@@ -22,8 +22,7 @@ function formatDate(d: Date): string {
 
 export function createClock(): HTMLElement {
   const timeEl = h('div', {
-    class:
-      'text-3xl sm:text-4xl font-semibold tabular-nums tracking-tight text-[var(--fg)]',
+    class: 'text-3xl sm:text-4xl font-semibold tabular-nums tracking-tight text-[var(--fg)]',
     textContent: formatTime(new Date()),
     'aria-label': '当前时间',
   });

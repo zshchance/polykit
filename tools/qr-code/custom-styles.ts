@@ -22,6 +22,8 @@
  */
 
 import type { DotShape, EyeShape, LogoFit, QrConfig } from './types';
+import { findDangerousPattern, dangerousCodeReason } from '@/core/utils/ai-code-guard';
+import { readJSON, writeJSON } from '@/core/utils/storage';
 
 const STORAGE_KEY = 'qr-code:custom-styles';
 const CURRENT_VERSION = 1;
@@ -69,47 +71,37 @@ export type DotEffectFn = (
 
 // ─────────────────────────── localStorage 增删查 ───────────────────────────
 
-/** 读取全部自定义风格；存储损坏/为空时返回 [] */
+/** 读取全部自定义风格；存储损坏/为空时返回 []（读取经 core/utils/storage 统一容错） */
 export function loadCustomStyles(): CustomStyle[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Partial<CustomStyleBlob>;
-    if (!parsed || typeof parsed !== 'object') return [];
-    const items = parsed.items;
-    if (!Array.isArray(items)) return [];
-    // 逐条校验
-    return items
-      .filter(
-        (it): it is CustomStyle =>
-          !!it &&
-          typeof it.id === 'string' &&
-          it.id.startsWith(ID_PREFIX) &&
-          typeof it.name === 'string' &&
-          it.name.trim().length > 0 &&
-          Array.isArray(it.swatch) &&
-          it.swatch.length === 2 &&
-          typeof it.swatch[0] === 'string' &&
-          typeof it.swatch[1] === 'string' &&
-          it.apply !== undefined &&
-          it.apply !== null &&
-          typeof it.dotEffectCode === 'string' &&
-          typeof it.createdAt === 'number',
-      )
-      .sort((a, b) => a.createdAt - b.createdAt);
-  } catch {
-    return [];
-  }
+  const parsed = readJSON(STORAGE_KEY) as Partial<CustomStyleBlob> | null;
+  if (!parsed) return [];
+  const items = parsed.items;
+  if (!Array.isArray(items)) return [];
+  // 逐条校验
+  return items
+    .filter(
+      (it): it is CustomStyle =>
+        !!it &&
+        typeof it.id === 'string' &&
+        it.id.startsWith(ID_PREFIX) &&
+        typeof it.name === 'string' &&
+        it.name.trim().length > 0 &&
+        Array.isArray(it.swatch) &&
+        it.swatch.length === 2 &&
+        typeof it.swatch[0] === 'string' &&
+        typeof it.swatch[1] === 'string' &&
+        it.apply !== undefined &&
+        it.apply !== null &&
+        typeof it.dotEffectCode === 'string' &&
+        typeof it.createdAt === 'number',
+    )
+    .sort((a, b) => a.createdAt - b.createdAt);
 }
 
 /** 持久化全部自定义风格（隐私模式 / 配额满时静默忽略） */
 function persist(items: CustomStyle[]): void {
-  try {
-    const blob: CustomStyleBlob = { version: CURRENT_VERSION, items };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
-  } catch {
-    // 容量满 / 隐私模式：静默忽略，不影响功能
-  }
+  const blob: CustomStyleBlob = { version: CURRENT_VERSION, items };
+  writeJSON(STORAGE_KEY, blob);
 }
 
 /** 生成一个新的自定义 id（custom: + 随机串） */
@@ -173,12 +165,15 @@ export function isCustomStyleId(id: string): boolean {
 /**
  * 编译码点绘制代码为函数（语法错会抛 Error，供 UI 在保存前即时校验）。
  * 编译出的函数签名：(ctx, x, y, s, r, c) => void。
- * 空串代码编译为 null（表示无叠加效果）。
+ * 空串代码、或含危险模式的代码都编译为 null（表示无叠加效果）——
+ * 后者是渲染路径的兜底防线：代码存 localStorage 后每次访问都会执行，
+ * 不能只信保存时的 dryRun（名单见 core/utils/ai-code-guard）。
  */
 export function compileDotEffect(code: string): DotEffectFn | null {
   const trimmed = code.trim();
   if (!trimmed) return null;
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
+  if (findDangerousPattern(trimmed)) return null;
+  // eslint-disable-next-line no-new-func
   const fn = new Function('ctx', 'x', 'y', 's', 'r', 'c', code) as DotEffectFn;
   return fn;
 }
@@ -192,14 +187,20 @@ export interface DryRunResult {
 
 /**
  * 在一个【离屏小 canvas】上对若干虚拟码点跑一遍代码，检查：
- *   1. 编译不抛语法错；
- *   2. 对几个不同 (r,c,x,y,s) 的调用都不抛运行时错。
+ *   1. 危险模式扫描通过（与模板/动画侧同一份共享名单，见 core/utils/ai-code-guard）；
+ *   2. 编译不抛语法错；
+ *   3. 对几个不同 (r,c,x,y,s) 的调用都不抛运行时错。
  *
- * canvas 绘制没有 DOM 结构破坏风险，所以只查「不抛错」。空代码直接通过。
+ * canvas 绘制没有 DOM 结构破坏风险，但同样能访问全局对象发请求，故危险扫描不能省。
+ * 空代码直接通过。
  */
 export function dryRunCheck(code: string): DryRunResult {
   const trimmed = code.trim();
   if (!trimmed) return { ok: true }; // 空代码 = 无叠加效果，合法
+  const danger = findDangerousPattern(trimmed);
+  if (danger) {
+    return { ok: false, reason: dangerousCodeReason(danger) };
+  }
   let fn: DotEffectFn;
   try {
     const compiled = compileDotEffect(trimmed);
@@ -336,7 +337,8 @@ export interface ParsedAIOutput {
 }
 
 /** 匹配一行「名称：xxx」（可有 // 前缀，中英文冒号，name 关键字）。捕获组 = 名称文本 */
-const NAME_LINE_RE = /^[ \t]*(?:(?:\/\/|#)\s*)?(?:名称|风格名(?:称)?|name)[ \t]*[:：][ \t]*(.+?)[ \t]*$/i;
+const NAME_LINE_RE =
+  /^[ \t]*(?:(?:\/\/|#)\s*)?(?:名称|风格名(?:称)?|name)[ \t]*[:：][ \t]*(.+?)[ \t]*$/i;
 
 /**
  * 把配色的中文值翻译成类型化的枚举值；非法返回 undefined。
@@ -345,7 +347,10 @@ const NAME_LINE_RE = /^[ \t]*(?:(?:\/\/|#)\s*)?(?:名称|风格名(?:称)?|name)
 function parseShapeValue(raw: string, kind: 'dot'): DotShape | undefined;
 function parseShapeValue(raw: string, kind: 'eye'): EyeShape | undefined;
 function parseShapeValue(raw: string, kind: 'logoFit'): LogoFit | undefined;
-function parseShapeValue(raw: string, kind: 'dot' | 'eye' | 'logoFit'): DotShape | EyeShape | LogoFit | undefined {
+function parseShapeValue(
+  raw: string,
+  kind: 'dot' | 'eye' | 'logoFit',
+): DotShape | EyeShape | LogoFit | undefined {
   const v = raw.trim();
   if (kind === 'dot') {
     if (v === '方块' || v === 'square') return 'square';
@@ -424,7 +429,7 @@ export function parseAIOutput(raw: string): ParsedAIOutput {
   if (!text) return { name: '', code: '', apply: {} };
 
   // 1) 代码体：优先围栏块
-  let codeBody = '';
+  let codeBody: string;
   const fence = text.match(/```(?:js|javascript)?\s*\n([\s\S]*?)\n?```/i);
   if (fence) {
     codeBody = fence[1]!.trim();
@@ -442,19 +447,27 @@ export function parseAIOutput(raw: string): ParsedAIOutput {
     .split('\n')
     .find((l) => NAME_LINE_RE.test(l.trim()) && /^\s*(?:\/\/|#)/.test(l));
   if (inCodeNameLine) {
-    name = inCodeNameLine.trim().match(NAME_LINE_RE)![1]!.trim().replace(/^["「『（(]+|["」』）)]+$/g, '').trim();
+    name = inCodeNameLine
+      .trim()
+      .match(NAME_LINE_RE)![1]!
+      .trim()
+      .replace(/^["「『（(]+|["」』）)]+$/g, '')
+      .trim();
   } else {
     const outsideNameLine = text.split('\n').find((l) => NAME_LINE_RE.test(l.trim()));
     if (outsideNameLine) {
-      name = outsideNameLine.trim().match(NAME_LINE_RE)![1]!.trim().replace(/^["「『（(]+|["」』）)]+$/g, '').trim();
+      name = outsideNameLine
+        .trim()
+        .match(NAME_LINE_RE)![1]!
+        .trim()
+        .replace(/^["「『（(]+|["」』）)]+$/g, '')
+        .trim();
     }
   }
 
   // 3) 配色：代码块内的 // 配色: ... 行
   let apply: StyleApply = {};
-  const paletteLine = codeBody
-    .split('\n')
-    .find((l) => /^\s*(?:\/\/|#)\s*配色\s*[:：]/i.test(l));
+  const paletteLine = codeBody.split('\n').find((l) => /^\s*(?:\/\/|#)\s*配色\s*[:：]/i.test(l));
   if (paletteLine) {
     apply = parsePaletteLine(paletteLine);
   }
@@ -462,9 +475,7 @@ export function parseAIOutput(raw: string): ParsedAIOutput {
   // 4) 从代码体剥掉名称行、配色行（含其前缀注释），得到纯净函数体
   const code = codeBody
     .split('\n')
-    .filter(
-      (l) => !NAME_LINE_RE.test(l.trim()) && !/^\s*(?:\/\/|#)\s*配色\s*[:：]/i.test(l),
-    )
+    .filter((l) => !NAME_LINE_RE.test(l.trim()) && !/^\s*(?:\/\/|#)\s*配色\s*[:：]/i.test(l))
     .join('\n')
     .trim();
 

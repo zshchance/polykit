@@ -81,7 +81,7 @@ export function rgbToHsl({ r, g, b }: RGB): HSL {
 
 /** HSL → RGB。h 支持越界（自动取模 360），s/l 钳到 [0,100]。 */
 export function hslToRgb({ h, s, l }: HSL): RGB {
-  const hn = ((h % 360) + 360) % 360 / 360;
+  const hn = (((h % 360) + 360) % 360) / 360;
   const sn = Math.max(0, Math.min(100, s)) / 100;
   const ln = Math.max(0, Math.min(100, l)) / 100;
   if (sn === 0) {

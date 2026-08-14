@@ -13,7 +13,7 @@
  */
 
 import { toPng } from 'html-to-image';
-import { downloadBlob } from '@/core/utils/clipboard';
+import { downloadBlob, dataURLtoBlob, sanitizeFilePart } from '@/core/utils/download';
 
 export type ExportResult = { ok: true } | { ok: false; reason: string };
 
@@ -25,7 +25,11 @@ export const EXPORT_TARGET_WIDTH = 1600;
  * @param frameEl 终端外框根元素（buildTerminalFrame 的返回值）
  * @param W 字符宽（仅图片模式用于算字号；文字流传 0 表示用预览原样字号）
  */
-export async function downloadPng(frameEl: HTMLElement, W: number, filename: string): Promise<ExportResult> {
+export async function downloadPng(
+  frameEl: HTMLElement,
+  W: number,
+  filename: string,
+): Promise<ExportResult> {
   // 注入导出态字号（图片模式）
   let styleInjector: HTMLStyleElement | null = null;
   if (W > 0) {
@@ -78,18 +82,8 @@ export async function downloadPng(frameEl: HTMLElement, W: number, filename: str
   }
 }
 
-function dataURLtoBlob(dataUrl: string): Blob {
-  const [meta, base64] = dataUrl.split(',');
-  const mime = /:(.*?);/.exec(meta ?? '')?.[1] ?? 'image/png';
-  const bin = atob(base64 ?? '');
-  const len = bin.length;
-  const arr = new Uint8Array(len);
-  for (let i = 0; i < len; i++) arr[i] = bin.charCodeAt(i);
-  return new Blob([arr], { type: mime });
-}
-
 /** 生成安全文件名。 */
 export function safeFilename(name: string, ext = '.png'): string {
-  const base = name.replace(/[\\/:*?"<>|\n\r]/g, '').replace(/\s+/g, '_').slice(0, 30) || 'ascii-art';
+  const base = sanitizeFilePart(name, 30) || 'ascii-art';
   return `字符画_${base}${ext}`;
 }

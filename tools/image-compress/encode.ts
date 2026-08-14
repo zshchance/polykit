@@ -36,7 +36,11 @@ const MIME: Record<Exclude<OutputFormat, 'ico'>, string> = {
 };
 
 /** 计算按最长边缩放后的目标尺寸（不放大） */
-export function scaledSize(srcW: number, srcH: number, maxLongEdge: number): { w: number; h: number } {
+export function scaledSize(
+  srcW: number,
+  srcH: number,
+  maxLongEdge: number,
+): { w: number; h: number } {
   if (!maxLongEdge || maxLongEdge <= 0) return { w: srcW, h: srcH };
   const longest = Math.max(srcW, srcH);
   if (longest <= maxLongEdge) return { w: srcW, h: srcH };

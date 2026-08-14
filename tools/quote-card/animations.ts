@@ -48,10 +48,7 @@ const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matc
 const dur = () => (reduced() ? 1 : ANIM_DURATION);
 
 /** 通用整块效果（fade/zoom/slide/blur）的构建器 */
-function blockEffect(
-  content: HTMLElement,
-  keyframes: Keyframe[],
-): Animation {
+function blockEffect(content: HTMLElement, keyframes: Keyframe[]): Animation {
   return content.animate(keyframes, {
     duration: dur(),
     easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
@@ -297,10 +294,30 @@ function glitchEffect(content: HTMLElement): Animation {
     content,
     [
       { opacity: 0, transform: 'translate(0,0) skewX(0deg)', textShadow: '0 0 0 transparent' },
-      { opacity: 0.6, transform: 'translate(-6px,1px) skewX(-3deg)', textShadow: '4px 0 #ff0040, -4px 0 #00ffff', offset: 0.2 },
-      { opacity: 0.9, transform: 'translate(5px,-1px) skewX(2deg)', textShadow: '-4px 0 #ff0040, 4px 0 #00ffff', offset: 0.45 },
-      { opacity: 0.7, transform: 'translate(-3px,0) skewX(-1deg)', textShadow: '3px 0 #ff0040, -3px 0 #00ffff', offset: 0.65 },
-      { opacity: 1, transform: 'translate(0,0) skewX(0deg)', textShadow: '0 0 0 transparent', offset: 0.85 },
+      {
+        opacity: 0.6,
+        transform: 'translate(-6px,1px) skewX(-3deg)',
+        textShadow: '4px 0 #ff0040, -4px 0 #00ffff',
+        offset: 0.2,
+      },
+      {
+        opacity: 0.9,
+        transform: 'translate(5px,-1px) skewX(2deg)',
+        textShadow: '-4px 0 #ff0040, 4px 0 #00ffff',
+        offset: 0.45,
+      },
+      {
+        opacity: 0.7,
+        transform: 'translate(-3px,0) skewX(-1deg)',
+        textShadow: '3px 0 #ff0040, -3px 0 #00ffff',
+        offset: 0.65,
+      },
+      {
+        opacity: 1,
+        transform: 'translate(0,0) skewX(0deg)',
+        textShadow: '0 0 0 transparent',
+        offset: 0.85,
+      },
       { opacity: 1, transform: 'translate(0,0) skewX(0deg)', textShadow: '0 0 0 transparent' },
     ],
     360,
@@ -457,6 +474,10 @@ export function isValidAnimId(id: unknown): boolean {
  * 视频导出用：在 content 上构建一个「从头播放」的可控动画并返回。
  * 与预览 build 行为一致，但调用方可 pause()/play()/监听 finish。
  */
-export function buildForExport(effect: AnimEffect, content: HTMLElement, quote: QuoteData): Animation {
+export function buildForExport(
+  effect: AnimEffect,
+  content: HTMLElement,
+  quote: QuoteData,
+): Animation {
   return effect.build(content, quote);
 }

@@ -128,8 +128,12 @@ function buildHalfBlock(px: number[], W: number, H: number, cfg: ImageToCellsCfg
     for (let x = 0; x < W; x++) {
       const upIdx = (upY * W + x) * 3;
       const downIdx = (downY * W + x) * 3;
-      const upR = px[upIdx]!, upG = px[upIdx + 1]!, upB = px[upIdx + 2]!;
-      const dnR = px[downIdx]!, dnG = px[downIdx + 1]!, dnB = px[downIdx + 2]!;
+      const upR = px[upIdx]!,
+        upG = px[upIdx + 1]!,
+        upB = px[upIdx + 2]!;
+      const dnR = px[downIdx]!,
+        dnG = px[downIdx + 1]!,
+        dnB = px[downIdx + 2]!;
 
       if (cfg.colorMode) {
         // 真彩双色
@@ -150,7 +154,13 @@ function buildHalfBlock(px: number[], W: number, H: number, cfg: ImageToCellsCfg
 }
 
 /** 纯字符灰度模式：每像素 1 个 Cell，亮度 → charset 索引。 */
-function buildText(px: number[], W: number, H: number, charset: string, cfg: ImageToCellsCfg): Rendered {
+function buildText(
+  px: number[],
+  W: number,
+  H: number,
+  charset: string,
+  cfg: ImageToCellsCfg,
+): Rendered {
   const cells: Rendered = [];
   const lastIdx = charset.length - 1;
   for (let y = 0; y < H; y++) {

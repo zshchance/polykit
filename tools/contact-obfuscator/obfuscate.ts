@@ -70,12 +70,46 @@ export interface ObfuscateResult {
 // ════════════════════════════════════════════════════════════════
 
 /** 数字 → 简体中文数字（适合零散穿插，笔画少、人眼易读） */
-const DIGIT_TO_HAN_SIMPLE: readonly string[] = ['〇', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+const DIGIT_TO_HAN_SIMPLE: readonly string[] = [
+  '〇',
+  '一',
+  '二',
+  '三',
+  '四',
+  '五',
+  '六',
+  '七',
+  '八',
+  '九',
+];
 /** 数字 → 大写财务数字（更难被正则识别，笔画多） */
-const DIGIT_TO_HAN_FORMAL: readonly string[] = ['零', '壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖'];
+const DIGIT_TO_HAN_FORMAL: readonly string[] = [
+  '零',
+  '壹',
+  '贰',
+  '叁',
+  '肆',
+  '伍',
+  '陆',
+  '柒',
+  '捌',
+  '玖',
+];
 
 /** 穿插用的可见汉字干扰符（弱干扰、不破坏可读性） */
-const HAN_FILLERS: readonly string[] = ['·', '。', '「', '」', '『', '』', '（', '）', '～', '—', '•'];
+const HAN_FILLERS: readonly string[] = [
+  '·',
+  '。',
+  '「',
+  '」',
+  '『',
+  '』',
+  '（',
+  '）',
+  '～',
+  '—',
+  '•',
+];
 
 /** 穿插用的 emoji（中性、小巧，不抢眼） */
 const EMOJI_FILLERS: readonly string[] = ['✨', '🌟', '💫', '🔹', '🔸', '▪️', '◾', '◇', '◆', '✦'];
@@ -94,7 +128,15 @@ const SEPARATORS: readonly string[] = ['\u3000', '\t']; // 全角空格 / 制表
  * 只选一对一映射（保证无损还原）。
  */
 const LEET_MAP: Readonly<Record<string, string>> = {
-  a: '@', e: '3', i: '!', o: '0', s: '$', t: '7', l: '1', b: '8', g: '9',
+  a: '@',
+  e: '3',
+  i: '!',
+  o: '0',
+  s: '$',
+  t: '7',
+  l: '1',
+  b: '8',
+  g: '9',
 };
 
 /**
@@ -150,7 +192,10 @@ function disguiseKeyword(keyword: string, emoji: string): string {
   const chars = Array.from(keyword);
   if (mode === 1) {
     // 反写 + 每字间插符号（原序列彻底打断，如 电话→话◆电）
-    return chars.reverse().map((c, i) => (i < chars.length - 1 ? c + securePick(SYMBOL_FILLERS) : c)).join('');
+    return chars
+      .reverse()
+      .map((c, i) => (i < chars.length - 1 ? c + securePick(SYMBOL_FILLERS) : c))
+      .join('');
   }
   // 拆字 + 每字间插符号（如 邮箱→邮★箱，单字间有符号不连续）
   if (chars.length < 2) return emoji;
@@ -178,9 +223,19 @@ function applyKeywordDisguise(text: string): { text: string; count: number } {
 
 /** 罗马数字基本符号（1-10、50、100、500、1000） */
 const ROMAN_VALUES: readonly [number, string][] = [
-  [1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'],
-  [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'],
-  [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I'],
+  [1000, 'M'],
+  [900, 'CM'],
+  [500, 'D'],
+  [400, 'CD'],
+  [100, 'C'],
+  [90, 'XC'],
+  [50, 'L'],
+  [40, 'XL'],
+  [10, 'X'],
+  [9, 'IX'],
+  [5, 'V'],
+  [4, 'IV'],
+  [1, 'I'],
 ];
 
 /** 阿拉伯数字 → 罗马数字（仅 1-3999 有意义；0 或超大返回原数字串） */
@@ -237,8 +292,20 @@ function applyEmailObfuscate(text: string): { text: string; count: number } {
  * 机器按 ASCII 码点匹配会失败（码点完全不同），人眼几乎看不出差别。
  */
 const HOMOGLYPH_MAP: Readonly<Record<string, string>> = {
-  a: 'а', e: 'е', o: 'о', p: 'р', c: 'с', y: 'у', x: 'х',
-  A: 'А', E: 'Е', O: 'О', P: 'Р', C: 'С', Y: 'У', X: 'Х',
+  a: 'а',
+  e: 'е',
+  o: 'о',
+  p: 'р',
+  c: 'с',
+  y: 'у',
+  x: 'х',
+  A: 'А',
+  E: 'Е',
+  O: 'О',
+  P: 'Р',
+  C: 'С',
+  Y: 'У',
+  X: 'Х',
 };
 
 // ════════════════════════════════════════════════════════════════
@@ -262,9 +329,8 @@ export function obfuscate(input: string, opts: ObfuscateOptions): ObfuscateResul
   //    邮箱/QQ」等关键词替换成 emoji/反写夹码/拆字夹码。保证百分百混淆，
   //    替换后不出现原始关键词的连续字符序列。必须最先做，否则后续变换会
   //    打散关键词，导致部分漏网。
-  let sourceText = input;
   const { text: disguisedText, count: disguiseCount } = applyKeywordDisguise(input);
-  sourceText = disguisedText;
+  let sourceText = disguisedText;
   if (disguiseCount > 0) applied.push('敏感词伪装');
 
   // —— 邮箱混淆（可见层）：@ 替换成 emoji + 域名点号打断。
@@ -403,8 +469,7 @@ export function obfuscate(input: string, opts: ObfuscateOptions): ObfuscateResul
       applied.push('段序打乱');
     }
     // 密集零宽：每个字符间都插一个零宽字符（比激进档密集得多）
-    text = Array.from(text)
-      .join(securePick(ZERO_WIDTH_CHARS));
+    text = Array.from(text).join(securePick(ZERO_WIDTH_CHARS));
     applied.push('密集零宽');
   }
 
@@ -445,7 +510,11 @@ function buildNote(applied: string[]): string {
   if (applied.includes('同形字')) {
     hints.push('部分字母已替换为视觉相同的其它语言字符');
   }
-  if (applied.includes('穿插汉字') || applied.includes('穿插表情') || applied.includes('穿插符号')) {
+  if (
+    applied.includes('穿插汉字') ||
+    applied.includes('穿插表情') ||
+    applied.includes('穿插符号')
+  ) {
     hints.push('文本中穿插了干扰符号，请忽略非联系方式字符');
   }
   if (applied.includes('可见分隔')) {
@@ -480,7 +549,9 @@ function buildNote(applied: string[]): string {
     hints.push('电话/微信/邮箱/QQ 等关键词已替换为 emoji 或反写或夹乱码，请还原原词');
   }
   if (applied.includes('邮箱混淆')) {
-    hints.push('邮箱地址中的 @ 已替换为 emoji（📧/✉️/💌 等），域名点号已替换为符号，请还原（@ 和 .）');
+    hints.push(
+      '邮箱地址中的 @ 已替换为 emoji（📧/✉️/💌 等），域名点号已替换为符号，请还原（@ 和 .）',
+    );
   }
 
   if (hints.length === 0) return '';

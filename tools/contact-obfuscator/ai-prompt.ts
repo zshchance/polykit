@@ -48,7 +48,9 @@ export function buildDecodePrompt(opts: ObfuscateOptions, applied: string[] = []
     if (opts.insertHan) parts.push('汉字标点（如 · 「 」 『 』 ～ — 等）');
     if (opts.insertEmoji) parts.push('emoji 表情');
     if (opts.insertSymbol) parts.push('特殊符号（如 ★ ◆ ※ ◎ ○ ● △ 等）');
-    rules.push(`文本中穿插了无关的干扰字符（${parts.join('、')}），请全部忽略、不要出现在还原结果里`);
+    rules.push(
+      `文本中穿插了无关的干扰字符（${parts.join('、')}），请全部忽略、不要出现在还原结果里`,
+    );
   }
   if (opts.visibleSeparator) {
     rules.push('数字之间可能插入了全角空格或制表符，请忽略这些分隔符、把数字连起来');
@@ -63,10 +65,14 @@ export function buildDecodePrompt(opts: ObfuscateOptions, applied: string[] = []
   }
   // —— 变态层 ——
   if (opts.leetReplace) {
-    rules.push('部分字母被替换成了形近符号（a→@、e→3、o→0、s→$、t→7、l→1、i→!、b→8、g→9 等 leet），请反向还原为字母');
+    rules.push(
+      '部分字母被替换成了形近符号（a→@、e→3、o→0、s→$、t→7、l→1、i→!、b→8、g→9 等 leet），请反向还原为字母',
+    );
   }
   if (opts.digitToRoman) {
-    rules.push('部分数字串被转成了罗马数字（如 CXXXVIII）或二进制（如 10001010），请还原成阿拉伯数字');
+    rules.push(
+      '部分数字串被转成了罗马数字（如 CXXXVIII）或二进制（如 10001010），请还原成阿拉伯数字',
+    );
   }
   if (opts.shuffleWords) {
     rules.push('文本段落顺序被打乱了，请按语义（电话/微信/邮箱等）重新排列成通顺顺序');
@@ -137,7 +143,11 @@ export function buildInlineRules(applied: string[]): string {
     rules.push('邮箱@的emoji还原成@、域名里的符号还原成.');
   }
   // 清理干扰
-  if (applied.includes('穿插汉字') || applied.includes('穿插表情') || applied.includes('穿插符号')) {
+  if (
+    applied.includes('穿插汉字') ||
+    applied.includes('穿插表情') ||
+    applied.includes('穿插符号')
+  ) {
     rules.push('删穿插的符号/表情');
   }
   if (applied.includes('可见分隔')) {
@@ -152,7 +162,8 @@ export function buildInlineRules(applied: string[]): string {
  * 随复制一起带走的暗示文案：追加在变换文本末尾，引导接收方用 AI 还原。
  * 用换行分隔，避免与正文视觉混淆。
  */
-export const HINT_SUFFIX = '\n（复制给豆包 / DeepSeek / ChatGPT 等 AI，按上述规则可还原原联系方式）';
+export const HINT_SUFFIX =
+  '\n（复制给豆包 / DeepSeek / ChatGPT 等 AI，按上述规则可还原原联系方式）';
 
 // ════════════════════════════════════════════════════════════════
 // AI 加密提示词（正向：让 AI 直接产出防检测文本）
@@ -182,7 +193,9 @@ export function buildEncryptPrompt(input: string, opts: ObfuscateOptions): strin
     techniques.push('把字母大小写随机打乱（主要改大写），但保持可读——读者按小写理解即可');
   }
   if (opts.digitToWords) {
-    techniques.push('把部分数字替换成中文数字（如 1→一、8→八，也可用大写 壹捌），不要全部替换以增加识别难度');
+    techniques.push(
+      '把部分数字替换成中文数字（如 1→一、8→八，也可用大写 壹捌），不要全部替换以增加识别难度',
+    );
   }
   if (opts.insertHan) {
     techniques.push('在字符间随机穿插少量汉字标点（如 · 「 」 ～ 等）作干扰');
@@ -215,14 +228,19 @@ export function buildEncryptPrompt(input: string, opts: ObfuscateOptions): strin
     techniques.push('最后把整段文本做 Base64 编码');
   }
   // 敏感词伪装是强制层（始终生效），无论开关状态都告知 AI
-  techniques.push('把「电话/微信/邮箱/QQ/手机」等敏感关键词百分百替换成相关 emoji（微信→💚 电话→📞 邮箱→✉️ QQ→🐧）或反写夹符号（电话→话◆电），绝对不能保留原始关键词');
+  techniques.push(
+    '把「电话/微信/邮箱/QQ/手机」等敏感关键词百分百替换成相关 emoji（微信→💚 电话→📞 邮箱→✉️ QQ→🐧）或反写夹符号（电话→话◆电），绝对不能保留原始关键词',
+  );
   if (opts.emailObfuscate) {
-    techniques.push('把邮箱地址中的 @ 替换成邮箱 emoji（如 test📧x.com），并把域名里的点号替换成符号（如 x◆com），让邮箱正则失效');
+    techniques.push(
+      '把邮箱地址中的 @ 替换成邮箱 emoji（如 test📧x.com），并把域名里的点号替换成符号（如 x◆com），让邮箱正则失效',
+    );
   }
 
-  const techBlock = techniques.length > 0
-    ? techniques.map((t, i) => `${i + 1}. ${t}`).join('\n')
-    : '（用户未选择任何变换，请自由发挥：打乱大小写 + 数字转中文 + 少量穿插符号）';
+  const techBlock =
+    techniques.length > 0
+      ? techniques.map((t, i) => `${i + 1}. ${t}`).join('\n')
+      : '（用户未选择任何变换，请自由发挥：打乱大小写 + 数字转中文 + 少量穿插符号）';
 
   // 根据激进程度给不同的「可读性」要求
   const isInsane = opts.base64Encode || opts.shuffleWords || opts.digitToRoman || opts.leetReplace;

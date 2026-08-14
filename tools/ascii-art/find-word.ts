@@ -48,7 +48,9 @@ export const FIND_WORD_DEFAULTS: FindWordCfg = {
 
 /** 生成 4 位十六进制种子。 */
 export function randomSeed(): string {
-  return Math.floor(Math.random() * 0x10000).toString(16).padStart(4, '0');
+  return Math.floor(Math.random() * 0x10000)
+    .toString(16)
+    .padStart(4, '0');
 }
 
 /**
@@ -104,9 +106,12 @@ function applyDotMatrix(cells: Rendered, chars: string[], cfg: FindWordCfg, fg: 
   // 用最大字宽估算「紧凑」布局的步距，让紧挨时字与字不重叠。
   const rng = makeRng(cfg.seed || 'default');
   const anchors = planAnchors({
-    N, W, H, rng,
+    N,
+    W,
+    H,
+    rng,
     spread: clampInt(cfg.spread, 0, 100, 30),
-    itemW: maxGlyphW,   // 紧凑步距≈最大字宽
+    itemW: maxGlyphW, // 紧凑步距≈最大字宽
     itemH: glyphH,
   });
 
@@ -124,7 +129,10 @@ function applySingleChar(cells: Rendered, chars: string[], cfg: FindWordCfg, fg:
   const rng = makeRng(cfg.seed || 'default');
   // 非点阵每字占 1 列 1 行，紧凑步距 = 1
   const rawAnchors = planAnchors({
-    N, W, H, rng,
+    N,
+    W,
+    H,
+    rng,
     spread: clampInt(cfg.spread, 0, 100, 30),
     itemW: 1,
     itemH: 1,
@@ -152,7 +160,10 @@ function applySingleChar(cells: Rendered, chars: string[], cfg: FindWordCfg, fg:
  *
  * 同种子→同起点→同布局（可复现）。放不下的字标 x=-1（跳过，不回溯）。
  */
-interface PlanAnchor { x: number; y: number; }
+interface PlanAnchor {
+  x: number;
+  y: number;
+}
 interface PlanOpts {
   N: number;
   W: number;
@@ -215,7 +226,10 @@ function planAnchors(opts: PlanOpts): PlanAnchor[] {
   for (let i = 0; i < N; i++) {
     const cp = compact[i]!;
     // compact 放不下的字 → 直接跳过（即使 distributed 能放也不插值，保持顺序语义）
-    if (cp.x < 0) { anchors.push({ x: -1, y: -1 }); continue; }
+    if (cp.x < 0) {
+      anchors.push({ x: -1, y: -1 });
+      continue;
+    }
     const dp = distributed[i]!;
     const ix = Math.round(cp.x + (dp.x - cp.x) * t);
     const iy = Math.round(cp.y + (dp.y - cp.y) * t);
@@ -390,7 +404,10 @@ function stampChars(
         const xStart = y === a.y ? a.x : 0;
         for (let x = xStart; x < row.length; x++) {
           if (row[x]!.ch !== ' ' && !placed!.has(y * W + x)) {
-            px = x; py = y; found = true; break;
+            px = x;
+            py = y;
+            found = true;
+            break;
           }
         }
       }
@@ -432,7 +449,7 @@ function isFullWidthChar(ch: string): boolean {
     (cp >= 0xf900 && cp <= 0xfaff) || // CJK 兼容汉字
     (cp >= 0xfe30 && cp <= 0xfe4f) || // CJK 兼容形式
     (cp >= 0xff00 && cp <= 0xff60) || // 全角 ASCII / 标点
-    (cp >= 0xffe0 && cp <= 0xffe6)    // 全角符号
+    (cp >= 0xffe0 && cp <= 0xffe6) // 全角符号
   );
 }
 
@@ -456,14 +473,17 @@ function xmur3(str: string): () => number {
 /** sfc32 PRNG：4 个 32 位种子 → [0,1) 浮点。标准算法，可复现。 */
 function sfc32(a: number, b: number, c: number, d: number): () => number {
   return () => {
-    a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;
+    a >>>= 0;
+    b >>>= 0;
+    c >>>= 0;
+    d >>>= 0;
     let t = (a + b) | 0;
     a = b ^ (b >>> 9);
-    b = c + (c << 3) | 0;
-    c = (c << 21 | c >>> 11);
-    d = d + 1 | 0;
-    t = t + d | 0;
-    c = c + t | 0;
+    b = (c + (c << 3)) | 0;
+    c = (c << 21) | (c >>> 11);
+    d = (d + 1) | 0;
+    t = (t + d) | 0;
+    c = (c + t) | 0;
     return (t >>> 0) / 4294967296;
   };
 }
@@ -494,7 +514,10 @@ function parseHex(hex: string): [number, number, number] {
 
 /** [r,g,b] → #rrggbb。 */
 function rgbToHex(r: number, g: number, b: number): string {
-  const h = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  const h = (v: number) =>
+    Math.max(0, Math.min(255, Math.round(v)))
+      .toString(16)
+      .padStart(2, '0');
   return `#${h(r)}${h(g)}${h(b)}`;
 }
 

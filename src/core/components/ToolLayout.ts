@@ -18,14 +18,22 @@ export interface ToolLayout {
 export function renderToolLayout(parent: HTMLElement, title: string): ToolLayout {
   const backLink = h('a', {
     href: getHomeUrl(),
-    class: 'inline-flex items-center gap-1 text-sm text-[var(--fg-muted)] hover:text-[var(--accent)] transition-colors',
+    class:
+      'inline-flex items-center gap-1 text-sm text-[var(--fg-muted)] hover:text-[var(--accent)] transition-colors',
     textContent: '← 首页',
   });
 
-  const header = h('header', { class: 'flex items-center justify-between gap-4 border-b pb-4 mb-8' }, [
-    h('div', { class: 'flex items-center gap-3' }, [backLink, h('h1', { class: 'text-xl font-semibold', textContent: title })]),
-    createThemeToggle(),
-  ]);
+  const header = h(
+    'header',
+    { class: 'flex items-center justify-between gap-4 border-b pb-4 mb-8' },
+    [
+      h('div', { class: 'flex items-center gap-3' }, [
+        backLink,
+        h('h1', { class: 'text-xl font-semibold', textContent: title }),
+      ]),
+      createThemeToggle(),
+    ],
+  );
 
   const content = h('main', { class: 'flex-1' }, []);
 

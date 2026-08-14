@@ -81,7 +81,12 @@ export function extractPalette(
   if (valid.length === 0) return [];
 
   // 初始桶：包含全部有效像素
-  let buckets: Bucket[] = [makeBucket(valid, Array.from({ length: valid.length }, (_, i) => i))];
+  const buckets: Bucket[] = [
+    makeBucket(
+      valid,
+      Array.from({ length: valid.length }, (_, i) => i),
+    ),
+  ];
 
   // 过分割：切到远多于目标数的桶（min(目标*3, 64)），让相近色被切成相邻小块，
   // 后续合并阶段再把它们归并。这样能规避中位切分对"并列值中位数"导致的切偏，
@@ -175,8 +180,11 @@ function mergeCentroids(
         }
       }
     }
-    if (centroids.length <= targetCount) break; // 已达到目标数，停止阈值合并
-    if (bestI === -1 || bestDist > threshold) break; // 没有阈值内可合对，进入阶段 2
+    // 完全相同的色（dist=0）始终合并——即使已达目标数。否则纯色/双色图
+    // 会被过分割切成 N 个一模一样的重复色，占据全部色位毫无意义。
+    if (bestI === -1) break;
+    if (bestDist > threshold && centroids.length <= targetCount) break; // 已达目标数且无零距对
+    if (bestDist > threshold) break; // 阈值内无可合对 → 进入阶段 2
     mergeAt(centroids, bestI, bestJ);
   }
 

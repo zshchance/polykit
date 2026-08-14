@@ -17,9 +17,15 @@ import { h } from '@/core/components/element';
 import { renderToolLayout } from '@/core/components/ToolLayout';
 import { initTheme } from '@/core/components/ThemeToggle';
 import { copyText } from '@/core/utils/clipboard';
+import { on } from '@/core/utils/dom';
 
 import type { StyleConfig, InputMode, Rendered } from './types';
-import { STYLE_PRESETS, TERMINAL_METAS, getEffectivePresets, setCustomStyleProvider } from './presets';
+import {
+  STYLE_PRESETS,
+  TERMINAL_METAS,
+  getEffectivePresets,
+  setCustomStyleProvider,
+} from './presets';
 import { CHARSET_PRESETS } from './charsets';
 import { loadCfg, saveCfg, aspectRatioForHalfBlock, type PersistedState } from './settings';
 import { loadImage, revokeImage, type LoadedImage } from './image';
@@ -30,8 +36,13 @@ import { serializeText } from './serialize/to-text';
 import { buildStandaloneHtml } from './serialize/to-html';
 import { downloadPng, safeFilename } from './export';
 import {
-  loadCustomStyles, addCustomStyle, removeCustomStyle,
-  isCustomStyleId, toStylePreset, buildStylePrompt, parseStyleAIOutput,
+  loadCustomStyles,
+  addCustomStyle,
+  removeCustomStyle,
+  isCustomStyleId,
+  toStylePreset,
+  buildStylePrompt,
+  parseStyleAIOutput,
   type StyleAppearance,
 } from './custom-styles';
 import { applyFindWord, randomSeed } from './find-word';
@@ -109,10 +120,15 @@ function render() {
 
   const frameWrap = h('div', { class: 'flex justify-center' });
 
-  const stage = h('div', {
-    class: 'w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6',
-    style: 'min-height:300px;display:flex;align-items:center;justify-content:center;',
-  }, [frameWrap]);
+  const stage = h(
+    'div',
+    {
+      class:
+        'w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6',
+      style: 'min-height:300px;display:flex;align-items:center;justify-content:center;',
+    },
+    [frameWrap],
+  );
 
   // —— 预览缩放 + 拖动（仅视觉层，transform 在 frameWrap 上，不影响导出：导出取 frame 本体）——
   // zoom 1=100%，范围 0.5~5，步进 1.25；panX/panY 为 translate 偏移（px）。
@@ -131,7 +147,10 @@ function render() {
   function setZoom(next: number): void {
     zoom = Math.max(0.5, Math.min(5, next));
     // 缩回 1 时复位偏移
-    if (zoom <= 1) { panX = 0; panY = 0; }
+    if (zoom <= 1) {
+      panX = 0;
+      panY = 0;
+    }
     applyZoomTransform();
   }
   // 拖动：mousedown 记起点，document mousemove 更新偏移，mouseup 结束
@@ -332,7 +351,8 @@ function render() {
         (cp >= 0xf900 && cp <= 0xfaff) ||
         (cp >= 0xff00 && cp <= 0xff60) ||
         (cp >= 0xffe0 && cp <= 0xffe6)
-      ) return true;
+      )
+        return true;
     }
     return false;
   }
@@ -405,23 +425,27 @@ function render() {
   const actions = buildActions();
 
   // —— 布局：左控制 + 右预览 ——
-  const inputCol = h('div', { class: 'space-y-5 min-w-0' }, [
-    controls,
-    actions,
-  ]);
+  const inputCol = h('div', { class: 'space-y-5 min-w-0' }, [controls, actions]);
   // 预览区：始终 sticky 吸顶。
   //   大屏：右侧悬浮（lg:top-6），滚动参数区时预览始终可见。
   //   小屏：顶部吸顶（top-0），预览区最高不超过可视区域一半（50vh）+ 内部滚动，
   //         下方参数区始终可见可操作。
-  const previewCol = h('div', {
-    class: 'space-y-3 min-w-0 order-first lg:order-none sticky top-0 lg:top-6 z-10 bg-[var(--bg)] py-2 max-h-[50vh] lg:max-h-none overflow-auto lg:overflow-visible',
-  }, [
-    buildPreviewToolbar(),
-    stage,
-  ]);
-  const layout = h('div', {
-    class: 'grid gap-6 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] items-start',
-  }, [inputCol, previewCol]);
+  const previewCol = h(
+    'div',
+    {
+      class:
+        'space-y-3 min-w-0 order-first lg:order-none sticky top-0 lg:top-6 z-10 bg-[var(--bg)] py-2 max-h-[50vh] lg:max-h-none overflow-auto lg:overflow-visible',
+    },
+    [buildPreviewToolbar(), stage],
+  );
+  const layout = h(
+    'div',
+    {
+      class:
+        'grid gap-6 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] items-start',
+    },
+    [inputCol, previewCol],
+  );
 
   content.append(layout);
 
@@ -439,7 +463,8 @@ function render() {
       class: 'text-xs tabular-nums text-[var(--fg-muted)] w-9 text-center',
       textContent: '100%',
     });
-    const btnBase = 'inline-flex items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] w-7 h-7 text-xs text-[var(--fg-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors';
+    const btnBase =
+      'inline-flex items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] w-7 h-7 text-xs text-[var(--fg-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors';
     const zoomInBtn = h('button', {
       type: 'button',
       title: '放大（拖动查看细节）',
@@ -462,25 +487,24 @@ function render() {
       'aria-label': '恢复 100%',
       class: btnBase,
       textContent: '🎯',
-      onclick: () => { setZoom(1); },
+      onclick: () => {
+        setZoom(1);
+      },
     });
     return h('div', { class: 'flex items-center justify-between' }, [
       h('span', { class: 'text-sm font-medium text-[var(--fg)]', textContent: '预览' }),
-      h('div', { class: 'flex items-center gap-1' }, [
-        zoomOutBtn,
-        zoomLabel,
-        zoomInBtn,
-        resetBtn,
-      ]),
+      h('div', { class: 'flex items-center gap-1' }, [zoomOutBtn, zoomLabel, zoomInBtn, resetBtn]),
     ]);
   }
 
   // —— 控制面板 ——
   function buildControls(): HTMLElement {
     // 控制面板根元素引用（updateModeVisibility 通过它查 details 做显隐，下方 return 时赋值）
+    // eslint-disable-next-line prefer-const -- TDZ 前向声明（函数定义在赋值前），不能合并声明
     let controlsEl: HTMLElement;
     // 找字游戏分组引用（updateModeVisibility / updateFindWordDisabled 在下方赋值前
     // 可能被首次同步调用，需提前声明避免 TDZ）
+    // eslint-disable-next-line prefer-const -- TDZ 前向声明（函数定义在赋值前），不能合并声明
     let findWordDetails: HTMLElement;
     let findWordContent: HTMLElement;
     let findWordHint: HTMLElement;
@@ -497,7 +521,10 @@ function render() {
       textContent: '📝 文字流',
       onclick: () => switchMode('text'),
     });
-    const tabBar = h('div', { class: 'flex gap-1 rounded-lg bg-[var(--bg-elevated)] p-1' }, [tabImage, tabText]);
+    const tabBar = h('div', { class: 'flex gap-1 rounded-lg bg-[var(--bg-elevated)] p-1' }, [
+      tabImage,
+      tabText,
+    ]);
 
     function updateTabs(): void {
       const active = 'bg-[var(--accent)] text-[var(--accent-fg)]';
@@ -513,19 +540,24 @@ function render() {
       h('div', {}, ['点击选择 / 拖入图片 / ']),
       h('div', {}, ['粘贴 (Ctrl+V) 截图']),
     ]);
-    const dropzone = h('div', {
-      role: 'button',
-      tabindex: '0',
-      'aria-label': '选择或拖入图片',
-      class: 'cursor-pointer rounded-xl border-2 border-dashed border-[var(--border)] hover:border-[var(--accent)] transition-colors',
-      onclick: () => fileInput.click(),
-      onkeydown: (e: KeyboardEvent) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          fileInput.click();
-        }
+    const dropzone = h(
+      'div',
+      {
+        role: 'button',
+        tabindex: '0',
+        'aria-label': '选择或拖入图片',
+        class:
+          'cursor-pointer rounded-xl border-2 border-dashed border-[var(--border)] hover:border-[var(--accent)] transition-colors',
+        onclick: () => fileInput.click(),
+        onkeydown: (e: KeyboardEvent) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            fileInput.click();
+          }
+        },
       },
-    }, [dropHint]);
+      [dropHint],
+    );
 
     fileInput.addEventListener('change', () => {
       const f = (fileInput as HTMLInputElement).files?.[0];
@@ -545,7 +577,9 @@ function render() {
     // 全局粘贴（图片模式时）
     document.addEventListener('paste', (e: ClipboardEvent) => {
       if (state.mode !== 'image') return;
-      const item = Array.from(e.clipboardData?.items ?? []).find((it) => it.type.startsWith('image/'));
+      const item = Array.from(e.clipboardData?.items ?? []).find((it) =>
+        it.type.startsWith('image/'),
+      );
       const f = item?.getAsFile();
       if (f) handleFile(f);
     });
@@ -556,21 +590,29 @@ function render() {
         if (loadedImage) revokeImage(loadedImage);
         loadedImage = img;
         dropHint.replaceChildren(
-          h('div', { class: 'text-xs', textContent: `✓ ${img.name}（${img.width}×${img.height}）` }),
+          h('div', {
+            class: 'text-xs',
+            textContent: `✓ ${img.name}（${img.width}×${img.height}）`,
+          }),
         );
         rerenderPreview();
       } catch (e) {
         dropHint.replaceChildren(
-          h('div', { class: 'text-xs text-red-500', textContent: e instanceof Error ? e.message : '加载失败' }),
+          h('div', {
+            class: 'text-xs text-red-500',
+            textContent: e instanceof Error ? e.message : '加载失败',
+          }),
         );
       }
     }
 
     // —— 文字流输入 ——
     const textArea = h('textarea', {
-      class: 'w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--fg)] font-mono',
+      class:
+        'w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--fg)] font-mono',
       rows: 6,
-      placeholder: '输入要显示在终端里的文字…\n支持多行，自动换行。\n开启下方「Logo 字符」可把文字放大成大字 banner。',
+      placeholder:
+        '输入要显示在终端里的文字…\n支持多行，自动换行。\n开启下方「Logo 字符」可把文字放大成大字 banner。',
       oninput: () => {
         state.text = textArea.value;
         persist();
@@ -580,12 +622,16 @@ function render() {
     textArea.value = state.text;
 
     // Logo 字符开关（文字流子模式）
-    const logoChk = checkbox('Logo 字符（把文字放大成大字 banner，支持中文）', state.textLogo, (v) => {
-      state.textLogo = v;
-      persist();
-      if (state.mode === 'text') rerenderPreview();
-      updateModeVisibility();
-    });
+    const logoChk = checkbox(
+      'Logo 字符（把文字放大成大字 banner，支持中文）',
+      state.textLogo,
+      (v) => {
+        state.textLogo = v;
+        persist();
+        if (state.mode === 'text') rerenderPreview();
+        updateModeVisibility();
+      },
+    );
 
     // Logo 大小滑动条（仅文字流 + logo 开启时用）
     const logoSizeSlider = rangeSlider('Logo 大小', state.logoSize, 8, 40, (v) => {
@@ -595,37 +641,51 @@ function render() {
     });
 
     // Logo 同字元素开关：每个字用它自身字符填充（用 p 组成大的 p，用「即」组成大的「即」）
-    const logoSelfChk = checkbox('同字元素（每个字用它自身字符组成，而非 █）', state.textLogoSelfChar, (v) => {
-      state.textLogoSelfChar = v;
-      persist();
-      if (state.mode === 'text' && state.textLogo) rerenderPreview();
-    });
+    const logoSelfChk = checkbox(
+      '同字元素（每个字用它自身字符组成，而非 █）',
+      state.textLogoSelfChar,
+      (v) => {
+        state.textLogoSelfChar = v;
+        persist();
+        if (state.mode === 'text' && state.textLogo) rerenderPreview();
+      },
+    );
 
     // —— 风格预设选择器（内置 + 自定义，💡 加 AI 风格，✕ 删自定义）——
     const presetGrid = h('div', { class: 'grid grid-cols-3 gap-2' });
 
-    function makePresetButton(p: { id: string; name: string; preview: { bg: string; fg: string }; config: StyleConfig }): HTMLElement {
+    function makePresetButton(p: {
+      id: string;
+      name: string;
+      preview: { bg: string; fg: string };
+      config: StyleConfig;
+    }): HTMLElement {
       const active = isCurrentPreset(p.config);
-      const btn = h('button', {
-        type: 'button',
-        'data-preset': p.id,
-        class: `rounded-lg border-2 p-2 text-xs transition-all ${active ? 'border-[var(--accent)]' : 'border-[var(--border)] hover:border-[var(--accent)]/50'}`,
-        onclick: () => applyPreset(p.config),
-      }, [
-        h('div', {
-          class: 'mb-1 h-8 rounded font-mono text-sm flex items-center justify-center',
-          style: `background:${p.preview.bg};color:${p.preview.fg};`,
-          textContent: '>_',
-        }),
-        h('div', { class: 'truncate text-[var(--fg-muted)]', textContent: p.name }),
-      ]);
+      const btn = h(
+        'button',
+        {
+          type: 'button',
+          'data-preset': p.id,
+          class: `rounded-lg border-2 p-2 text-xs transition-all ${active ? 'border-[var(--accent)]' : 'border-[var(--border)] hover:border-[var(--accent)]/50'}`,
+          onclick: () => applyPreset(p.config),
+        },
+        [
+          h('div', {
+            class: 'mb-1 h-8 rounded font-mono text-sm flex items-center justify-center',
+            style: `background:${p.preview.bg};color:${p.preview.fg};`,
+            textContent: '>_',
+          }),
+          h('div', { class: 'truncate text-[var(--fg-muted)]', textContent: p.name }),
+        ],
+      );
       // 自定义风格：右下角挂 ✕ 删除（阻止冒泡以免触发选择）
       if (isCustomStyleId(p.id)) {
         const del = h('button', {
           type: 'button',
           'aria-label': `删除自定义风格 ${p.name}`,
           title: '删除此自定义风格',
-          class: 'absolute -right-1.5 -bottom-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-[11px] leading-none text-[var(--fg-muted)] hover:bg-red-500/15 hover:text-red-500 transition-colors',
+          class:
+            'absolute -right-1.5 -bottom-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-[11px] leading-none text-[var(--fg-muted)] hover:bg-red-500/15 hover:text-red-500 transition-colors',
           textContent: '✕',
           onclick: (e: Event) => {
             e.stopPropagation();
@@ -656,13 +716,17 @@ function render() {
       updateParamReadouts();
     });
     // 半块模式（随 colorMode 联动禁用）
-    const halfBlockChk = checkbox('半块高细节（▀ 真彩双色，垂直分辨率翻倍）', state.cfg.halfBlock, (v) => {
-      state.cfg.halfBlock = v;
-      if (v) state.cfg.aspectRatio = aspectRatioForHalfBlock(true); // 联动重设
-      persist();
-      rerenderPreview();
-      updateParamReadouts();
-    });
+    const halfBlockChk = checkbox(
+      '半块高细节（▀ 真彩双色，垂直分辨率翻倍）',
+      state.cfg.halfBlock,
+      (v) => {
+        state.cfg.halfBlock = v;
+        if (v) state.cfg.aspectRatio = aspectRatioForHalfBlock(true); // 联动重设
+        persist();
+        rerenderPreview();
+        updateParamReadouts();
+      },
+    );
     // 彩色模式（关 → halfBlock 联动关）
     const colorModeChk = checkbox('彩色（保留原图颜色）', state.cfg.colorMode, (v) => {
       state.cfg.colorMode = v;
@@ -679,21 +743,26 @@ function render() {
       updateParamReadouts();
     });
     // 字符集
-    const charsetSel = select('字符集', CHARSET_PRESETS.map((c) => ({ value: c.chars, label: c.name })), state.cfg.charset, (v) => {
-      state.cfg.charset = v;
-      // 字符集只在纯字符灰度模式生效（半块模式用 ▀+双色，不读 charset）。
-      // 彩色+半块时改字符集无反应，故自动切回单色灰度：取消彩色 → 联动取消半块。
-      if (state.cfg.colorMode) {
-        state.cfg.colorMode = false;
-        state.cfg.halfBlock = false;
-        state.cfg.aspectRatio = aspectRatioForHalfBlock(false);
-        colorModeChk.input.checked = false;
-        halfBlockChk.input.disabled = true;
-        halfBlockChk.input.checked = false;
-      }
-      persist();
-      rerenderPreview();
-    });
+    const charsetSel = select(
+      '字符集',
+      CHARSET_PRESETS.map((c) => ({ value: c.chars, label: c.name })),
+      state.cfg.charset,
+      (v) => {
+        state.cfg.charset = v;
+        // 字符集只在纯字符灰度模式生效（半块模式用 ▀+双色，不读 charset）。
+        // 彩色+半块时改字符集无反应，故自动切回单色灰度：取消彩色 → 联动取消半块。
+        if (state.cfg.colorMode) {
+          state.cfg.colorMode = false;
+          state.cfg.halfBlock = false;
+          state.cfg.aspectRatio = aspectRatioForHalfBlock(false);
+          colorModeChk.input.checked = false;
+          halfBlockChk.input.disabled = true;
+          halfBlockChk.input.checked = false;
+        }
+        persist();
+        rerenderPreview();
+      },
+    );
     // 对比度 / 亮度 / 反转
     const contrastSlider = rangeSlider('对比度', state.cfg.contrast, -100, 100, (v) => {
       state.cfg.contrast = v;
@@ -714,14 +783,20 @@ function render() {
     });
 
     // —— 终端外观 ——
-    const terminalSel = select('终端类型', TERMINAL_METAS.map((t) => ({ value: t.id, label: t.name })), state.cfg.terminal, (v) => {
-      state.cfg.terminal = v as StyleConfig['terminal'];
-      persist();
-      rerenderPreview();
-    });
+    const terminalSel = select(
+      '终端类型',
+      TERMINAL_METAS.map((t) => ({ value: t.id, label: t.name })),
+      state.cfg.terminal,
+      (v) => {
+        state.cfg.terminal = v as StyleConfig['terminal'];
+        persist();
+        rerenderPreview();
+      },
+    );
     const titleInput = h('input', {
       type: 'text',
-      class: 'w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--fg)]',
+      class:
+        'w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--fg)]',
       value: state.cfg.title,
       oninput: () => {
         state.cfg.title = titleInput.value;
@@ -729,10 +804,26 @@ function render() {
         rerenderPreview();
       },
     });
-    const scanChk = checkbox('扫描线', state.cfg.crtScanlines, (v) => { state.cfg.crtScanlines = v; persist(); rerenderPreview(); });
-    const glowChk = checkbox('辉光', state.cfg.crtGlow, (v) => { state.cfg.crtGlow = v; persist(); rerenderPreview(); });
-    const curveChk = checkbox('屏幕弧度', state.cfg.crtCurve, (v) => { state.cfg.crtCurve = v; persist(); rerenderPreview(); });
-    const frameChk = checkbox('显示外框', state.cfg.showFrame, (v) => { state.cfg.showFrame = v; persist(); rerenderPreview(); });
+    const scanChk = checkbox('扫描线', state.cfg.crtScanlines, (v) => {
+      state.cfg.crtScanlines = v;
+      persist();
+      rerenderPreview();
+    });
+    const glowChk = checkbox('辉光', state.cfg.crtGlow, (v) => {
+      state.cfg.crtGlow = v;
+      persist();
+      rerenderPreview();
+    });
+    const curveChk = checkbox('屏幕弧度', state.cfg.crtCurve, (v) => {
+      state.cfg.crtCurve = v;
+      persist();
+      rerenderPreview();
+    });
+    const frameChk = checkbox('显示外框', state.cfg.showFrame, (v) => {
+      state.cfg.showFrame = v;
+      persist();
+      rerenderPreview();
+    });
 
     function updateParamReadouts(): void {
       widthSlider.set(state.cfg.width);
@@ -821,7 +912,7 @@ function render() {
       }
       // 找字游戏分组：仅图片模式 或 文字流 Logo 模式（有字符画网格）显示
       // findWordDetails 在下方声明，首次调用时尚未赋值，需守护
-      if (findWordDetails) findWordDetails.style.display = (imgShow || state.textLogo) ? '' : 'none';
+      if (findWordDetails) findWordDetails.style.display = imgShow || state.textLogo ? '' : 'none';
       // 图片专属参数
       widthSlider.row.style.display = imgShow ? '' : 'none';
       halfBlockChk.row.style.display = imgShow ? '' : 'none';
@@ -895,18 +986,25 @@ function render() {
       // 步骤 1：描述
       const descInput = h('textarea', {
         rows: 3,
-        class: 'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
-        placeholder: '例如：深紫背景配青绿色文字，赛博朋克风，带扫描线和辉光；或：米白纸张色配深棕字，无外框，复古打字机',
+        class:
+          'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+        placeholder:
+          '例如：深紫背景配青绿色文字，赛博朋克风，带扫描线和辉光；或：米白纸张色配深棕字，无外框，复古打字机',
       });
 
       // 步骤 2：生成的提示词
       const promptArea = h('textarea', {
         readonly: true,
         rows: 10,
-        class: 'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 font-mono text-[12px] leading-relaxed text-[var(--fg)] outline-none',
+        class:
+          'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 font-mono text-[12px] leading-relaxed text-[var(--fg)] outline-none',
       });
       const step2 = h('div', { class: 'hidden space-y-2' }, [
-        h('p', { class: 'text-xs text-[var(--fg-muted)]', textContent: '② 把下面的提示词发给任意 AI（ChatGPT / Claude / GLM 等），让它生成终端风格参数。' }),
+        h('p', {
+          class: 'text-xs text-[var(--fg-muted)]',
+          textContent:
+            '② 把下面的提示词发给任意 AI（ChatGPT / Claude / GLM 等），让它生成终端风格参数。',
+        }),
         promptArea,
         h('div', { class: 'flex justify-end' }, [
           createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
@@ -917,22 +1015,30 @@ function render() {
       const pasteInput = h('textarea', {
         rows: 10,
         spellcheck: false,
-        class: 'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 font-mono text-[12px] leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)]',
-        placeholder: '把 AI 返回的 ```json 代码块整体粘到这里（含名称/背景/文字色注释 + JSON 对象）',
+        class:
+          'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 font-mono text-[12px] leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+        placeholder:
+          '把 AI 返回的 ```json 代码块整体粘到这里（含名称/背景/文字色注释 + JSON 对象）',
       });
       const step3 = h('div', { class: 'hidden space-y-2' }, [
-        h('p', { class: 'text-xs text-[var(--fg-muted)]', textContent: '③ 粘贴 AI 返回的 JSON（含名称/背景/文字色注释），点保存即可在选择器看到 ⭐ 自定义风格。' }),
+        h('p', {
+          class: 'text-xs text-[var(--fg-muted)]',
+          textContent:
+            '③ 粘贴 AI 返回的 JSON（含名称/背景/文字色注释），点保存即可在选择器看到 ⭐ 自定义风格。',
+        }),
         pasteInput,
         h('div', { class: 'flex items-center justify-end gap-2' }, [
           h('button', {
             type: 'button',
-            class: 'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors',
+            class:
+              'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors',
             textContent: '取消',
             onclick: () => closeDialog(),
           }),
           h('button', {
             type: 'button',
-            class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+            class:
+              'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
             textContent: '保存并应用',
             onclick: () => save(),
           }),
@@ -972,41 +1078,56 @@ function render() {
         setTimeout(closeDialog, 700);
       }
 
-      const card = h('div', {
-        role: 'dialog',
-        'aria-modal': 'true',
-        'aria-label': '用 AI 生成自定义风格',
-        class: 'w-[min(92vw,42rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
-      }, [
-        // 标题行
-        h('div', { class: 'mb-4 flex items-center justify-between' }, [
-          h('h2', { class: 'text-base font-semibold text-[var(--fg)]', textContent: '💡 用 AI 生成自定义风格' }),
-          h('button', {
-            type: 'button',
-            'aria-label': '关闭',
-            class: 'text-[var(--fg-muted)] hover:text-[var(--fg)] text-lg leading-none',
-            textContent: '✕',
-            onclick: () => closeDialog(),
-          }),
-        ]),
-        // 步骤 1
-        h('div', { class: 'space-y-2' }, [
-          h('label', { class: 'text-xs font-medium text-[var(--fg-muted)]', textContent: '① 描述你想要的终端风格' }),
-          descInput,
-          h('div', { class: 'flex justify-end' }, [
+      const card = h(
+        'div',
+        {
+          role: 'dialog',
+          'aria-modal': 'true',
+          'aria-label': '用 AI 生成自定义风格',
+          class:
+            'w-[min(92vw,42rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
+        },
+        [
+          // 标题行
+          h('div', { class: 'mb-4 flex items-center justify-between' }, [
+            h('h2', {
+              class: 'text-base font-semibold text-[var(--fg)]',
+              textContent: '💡 用 AI 生成自定义风格',
+            }),
             h('button', {
               type: 'button',
-              class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
-              textContent: '生成 AI 提示词',
-              onclick: () => generate(),
+              'aria-label': '关闭',
+              class: 'text-[var(--fg-muted)] hover:text-[var(--fg)] text-lg leading-none',
+              textContent: '✕',
+              onclick: () => closeDialog(),
             }),
           ]),
-        ]),
-        step2,
-        step3,
-        statusRow,
-        h('p', { class: 'mt-3 text-center text-[11px] text-[var(--fg-muted)]', textContent: '数据不出本地 · 仅保存风格参数（配色/终端/CRT 开关）' }),
-      ]);
+          // 步骤 1
+          h('div', { class: 'space-y-2' }, [
+            h('label', {
+              class: 'text-xs font-medium text-[var(--fg-muted)]',
+              textContent: '① 描述你想要的终端风格',
+            }),
+            descInput,
+            h('div', { class: 'flex justify-end' }, [
+              h('button', {
+                type: 'button',
+                class:
+                  'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+                textContent: '生成 AI 提示词',
+                onclick: () => generate(),
+              }),
+            ]),
+          ]),
+          step2,
+          step3,
+          statusRow,
+          h('p', {
+            class: 'mt-3 text-center text-[11px] text-[var(--fg-muted)]',
+            textContent: '数据不出本地 · 仅保存风格参数（配色/终端/CRT 开关）',
+          }),
+        ],
+      );
 
       dialogEl = mountDialog(card);
       // rAF 在后台标签页会暂停，用 setTimeout 兜底聚焦
@@ -1018,21 +1139,28 @@ function render() {
     // —— 找字游戏分组（独立 details，默认折叠）——
     // 开关 off 时，分组内其余控件整体禁用（opacity + pointer-events）。
     // 半块真彩模式下隐藏字为显式彩蛋 → 提示行可见。
+    // eslint-disable-next-line prefer-const -- TDZ 前向声明（函数定义在赋值前），不能合并声明
     findWordHint = h('p', {
       class: 'text-[11px] text-[var(--fg-muted)]',
       textContent: '💡 半块真彩模式下隐藏字为显式彩蛋，关闭「彩色」切灰度可真隐藏',
     });
+    // eslint-disable-next-line prefer-const -- TDZ 前向声明（函数定义在赋值前），不能合并声明
     findWordContent = h('div', { class: 'mt-3 space-y-3' });
 
-    const fwEnabledChk = checkbox('开启找字游戏（把一句话藏进字符画）', state.findWord.enabled, (v) => {
-      state.findWord.enabled = v;
-      persist();
-      updateFindWordDisabled();
-      rerenderPreview();
-    });
+    const fwEnabledChk = checkbox(
+      '开启找字游戏（把一句话藏进字符画）',
+      state.findWord.enabled,
+      (v) => {
+        state.findWord.enabled = v;
+        persist();
+        updateFindWordDisabled();
+        rerenderPreview();
+      },
+    );
     const fwText = h('textarea', {
       rows: 2,
-      class: 'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      class:
+        'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
       placeholder: '一句话，每个字按顺序藏进画面（如：我爱字符画）',
       oninput: () => {
         state.findWord.text = fwText.value;
@@ -1044,7 +1172,8 @@ function render() {
     fwText.value = state.findWord.text;
     const fwSeedInput = h('input', {
       type: 'text',
-      class: 'w-20 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs font-mono text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+      class:
+        'w-20 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs font-mono text-[var(--fg)] outline-none focus:border-[var(--accent)]',
       value: state.findWord.seed,
       onchange: () => {
         const v = fwSeedInput.value.trim();
@@ -1058,7 +1187,8 @@ function render() {
       type: 'button',
       title: '随机一个种子（同种子→同位置）',
       'aria-label': '随机种子',
-      class: 'inline-flex items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors',
+      class:
+        'inline-flex items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors',
       textContent: '🎲',
       onclick: () => {
         state.findWord.seed = randomSeed();
@@ -1068,43 +1198,51 @@ function render() {
       },
     });
     // 点阵字符开关：true=每字栅格化成 █ 点阵；false=每字作为单个字符（全角压缩）。
-    const fwDotMatrixChk = checkbox('点阵字符（关闭则每字单个字符植入）', state.findWord.dotMatrix, (v) => {
-      state.findWord.dotMatrix = v;
-      persist();
-      updateFindWordDisabled();
-      rerenderPreview();
-    });
+    const fwDotMatrixChk = checkbox(
+      '点阵字符（关闭则每字单个字符植入）',
+      state.findWord.dotMatrix,
+      (v) => {
+        state.findWord.dotMatrix = v;
+        persist();
+        updateFindWordDisabled();
+        rerenderPreview();
+      },
+    );
     const fwGlyphSlider = rangeSlider('字符大小', state.findWord.glyphSize, 4, 16, (v) => {
       state.findWord.glyphSize = v;
       persist();
       rerenderPreview();
     });
-    fwGlyphSlider.row.querySelector('label')?.append(
-      document.createTextNode('（行数，显示时纵向拉长）'),
-    );
+    fwGlyphSlider.row
+      .querySelector('label')
+      ?.append(document.createTextNode('（行数，显示时纵向拉长）'));
     const fwSpreadSlider = rangeSlider('分布程度', state.findWord.spread, 0, 100, (v) => {
       state.findWord.spread = v;
       persist();
       rerenderPreview();
     });
-    fwSpreadSlider.row.querySelector('label')?.append(
-      document.createTextNode('（0 紧挨 / 100 分散）'),
-    );
+    fwSpreadSlider.row
+      .querySelector('label')
+      ?.append(document.createTextNode('（0 紧挨 / 100 分散）'));
     const fwColorSlider = rangeSlider('杂色', state.findWord.colorContrast, 0, 100, (v) => {
       state.findWord.colorContrast = v;
       persist();
       rerenderPreview();
     });
-    fwColorSlider.row.querySelector('label')?.append(
-      document.createTextNode('（0 融入 / 100 对比）'),
-    );
+    fwColorSlider.row
+      .querySelector('label')
+      ?.append(document.createTextNode('（0 融入 / 100 对比）'));
 
     // 仅替换非空白字符：隐藏字只盖到原 Cell 非空的格子，融入图片实际内容
-    const fwNonBlankChk = checkbox('仅替换非空白（隐藏字只盖到画面已有的字符上）', state.findWord.nonBlankOnly === true, (v) => {
-      state.findWord.nonBlankOnly = v;
-      persist();
-      rerenderPreview();
-    });
+    const fwNonBlankChk = checkbox(
+      '仅替换非空白（隐藏字只盖到画面已有的字符上）',
+      state.findWord.nonBlankOnly === true,
+      (v) => {
+        state.findWord.nonBlankOnly = v;
+        persist();
+        rerenderPreview();
+      },
+    );
 
     findWordContent.append(
       // 注意：开启开关不放这里——开关须始终可点击（disabled 状态用 opacity+pointer-events
@@ -1143,7 +1281,8 @@ function render() {
 
     findWordDetails = h('details', { class: 'group' }, [
       h('summary', {
-        class: 'cursor-pointer select-none text-sm font-medium text-[var(--fg)] marker:text-[var(--fg-muted)] marker:no-underline',
+        class:
+          'cursor-pointer select-none text-sm font-medium text-[var(--fg)] marker:text-[var(--fg-muted)] marker:no-underline',
         textContent: '🔍 找字游戏',
       }),
       // 开关放在 findWordContent 外层，始终可点击（disabled 仅遮 content 区）
@@ -1171,7 +1310,8 @@ function render() {
             type: 'button',
             title: '用 AI 生成自定义风格：描述风格 → 生成提示词 → 粘贴 AI 返回的 JSON → 保存',
             'aria-label': '用 AI 生成自定义风格',
-            class: 'inline-flex shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+            class:
+              'inline-flex shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
             textContent: '💡',
             onclick: () => openStyleDialog(),
           }),
@@ -1181,7 +1321,8 @@ function render() {
       // 字符画参数（默认展开；文字流模式下整区隐藏）
       h('details', { open: true, class: 'group' }, [
         h('summary', {
-          class: 'cursor-pointer select-none text-sm font-medium text-[var(--fg)] marker:text-[var(--fg-muted)] marker:no-underline',
+          class:
+            'cursor-pointer select-none text-sm font-medium text-[var(--fg)] marker:text-[var(--fg-muted)] marker:no-underline',
           textContent: '字符画参数',
         }),
         h('div', { class: 'mt-3 space-y-3' }, [
@@ -1199,7 +1340,8 @@ function render() {
       // 终端外观（默认折叠）
       h('details', { class: 'group' }, [
         h('summary', {
-          class: 'cursor-pointer select-none text-sm font-medium text-[var(--fg)] marker:text-[var(--fg-muted)] marker:no-underline',
+          class:
+            'cursor-pointer select-none text-sm font-medium text-[var(--fg)] marker:text-[var(--fg-muted)] marker:no-underline',
           textContent: '终端外观',
         }),
         h('div', { class: 'mt-3 space-y-3' }, [
@@ -1209,7 +1351,10 @@ function render() {
             titleInput,
           ]),
           h('div', { class: 'grid grid-cols-2 gap-2' }, [
-            scanChk.row, glowChk.row, curveChk.row, frameChk.row,
+            scanChk.row,
+            glowChk.row,
+            curveChk.row,
+            frameChk.row,
           ]),
         ]),
       ]),
@@ -1229,7 +1374,8 @@ function render() {
     });
     const textBtn = h('button', {
       type: 'button',
-      class: 'inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg)] hover:opacity-80 transition-opacity',
+      class:
+        'inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg)] hover:opacity-80 transition-opacity',
       title: '复制字符画纯文本（不含外框）',
       textContent: '复制纯文本',
       onclick: async () => {
@@ -1245,7 +1391,8 @@ function render() {
 
     htmlCopyBtn = h('button', {
       type: 'button',
-      class: 'inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg)] hover:opacity-80 transition-opacity',
+      class:
+        'inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg)] hover:opacity-80 transition-opacity',
       title: '复制完整 HTML 页面（含终端外框、配色、CRT 效果、字符画，粘到 .html 文件可直接打开）',
       textContent: '复制 HTML',
       onclick: async () => {
@@ -1263,7 +1410,8 @@ function render() {
 
     const pngBtn = h('button', {
       type: 'button',
-      class: 'inline-flex items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+      class:
+        'inline-flex items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
       title: '下载 PNG（含终端外框）',
       textContent: '下载 PNG',
       onclick: async () => {
@@ -1276,27 +1424,32 @@ function render() {
         b.textContent = '生成中…';
         b.disabled = true;
         // 图片模式：W=cfg.width；文字流 Logo 模式：W=currentGridWidth；纯文字流：0（用预览原样字号）
-        const W = state.mode === 'image'
-          ? state.cfg.width
-          : state.textLogo ? currentGridWidth : 0;
-        const name = state.mode === 'image'
-          ? (loadedImage?.name ?? '字符画')
-          : state.textLogo
-            ? ((state.text.split('\n')[0] ?? 'logo') + '-logo')
-            : (state.text.split('\n')[0] ?? '文字流');
+        const W = state.mode === 'image' ? state.cfg.width : state.textLogo ? currentGridWidth : 0;
+        const name =
+          state.mode === 'image'
+            ? (loadedImage?.name ?? '字符画')
+            : state.textLogo
+              ? (state.text.split('\n')[0] ?? 'logo') + '-logo'
+              : (state.text.split('\n')[0] ?? '文字流');
         // Cell 模式（图片 / Logo）用 Canvas 自绘导出（所见即所得，无 html-to-image 的
         // SVG foreignObject 子像素漂移）；纯文字流 / 无网格时回退 DOM 截图。
         const hasCells = currentCells.length > 0;
-        const result = (state.mode === 'text' && !state.textLogo) || !hasCells
-          ? await downloadPng(frame, W, safeFilename(name))
-          : await downloadPngCanvas(currentCells, state.cfg, W, safeFilename(name));
+        const result =
+          (state.mode === 'text' && !state.textLogo) || !hasCells
+            ? await downloadPng(frame, W, safeFilename(name))
+            : await downloadPngCanvas(currentCells, state.cfg, W, safeFilename(name));
         // 导出完成：用 flash 显示结果（1.5s 后恢复「下载 PNG」）
         flash(pngBtn, result.ok ? '已下载 ✓' : `失败：${result.reason}`);
       },
     });
 
     updatePlainTextHint();
-    return h('div', { class: 'flex flex-wrap items-center gap-2' }, [textBtn, plainTextHint, htmlCopyBtn, pngBtn]);
+    return h('div', { class: 'flex flex-wrap items-center gap-2' }, [
+      textBtn,
+      plainTextHint,
+      htmlCopyBtn,
+      pngBtn,
+    ]);
   }
 
   /**
@@ -1352,18 +1505,22 @@ function render() {
 
 // —— 控件工厂（保持 main.ts 简洁）——
 
-function on(el: Element, events: string[], handler: (e: Event) => void): void {
-  for (const ev of events) el.addEventListener(ev, handler as EventListener);
-}
-
 interface SliderControl {
   row: HTMLElement;
   set: (v: number) => void;
 }
 
 /** 离散值滑块（字符宽）。 */
-function slider(label: string, value: number, options: number[], onChange: (v: number) => void): SliderControl & { input: HTMLInputElement } {
-  const readout = h('span', { class: 'text-xs text-[var(--fg-muted)] tabular-nums', textContent: String(value) });
+function slider(
+  label: string,
+  value: number,
+  options: number[],
+  onChange: (v: number) => void,
+): SliderControl & { input: HTMLInputElement } {
+  const readout = h('span', {
+    class: 'text-xs text-[var(--fg-muted)] tabular-nums',
+    textContent: String(value),
+  });
   const input = h('input', {
     type: 'range',
     min: String(options[0]),
@@ -1386,14 +1543,27 @@ function slider(label: string, value: number, options: number[], onChange: (v: n
     input,
   ]);
   return {
-    row, input,
-    set: (v: number) => { input.value = String(v); readout.textContent = String(v); },
+    row,
+    input,
+    set: (v: number) => {
+      input.value = String(v);
+      readout.textContent = String(v);
+    },
   };
 }
 
 /** 连续值滑块（对比度/亮度）。 */
-function rangeSlider(label: string, value: number, min: number, max: number, onChange: (v: number) => void): SliderControl {
-  const readout = h('span', { class: 'text-xs text-[var(--fg-muted)] tabular-nums', textContent: String(value) });
+function rangeSlider(
+  label: string,
+  value: number,
+  min: number,
+  max: number,
+  onChange: (v: number) => void,
+): SliderControl {
+  const readout = h('span', {
+    class: 'text-xs text-[var(--fg-muted)] tabular-nums',
+    textContent: String(value),
+  });
   const input = h('input', {
     type: 'range',
     min: String(min),
@@ -1417,7 +1587,10 @@ function rangeSlider(label: string, value: number, min: number, max: number, onC
   ]);
   return {
     row,
-    set: (v: number) => { input.value = String(v); readout.textContent = String(v); },
+    set: (v: number) => {
+      input.value = String(v);
+      readout.textContent = String(v);
+    },
   };
 }
 
@@ -1426,14 +1599,22 @@ interface CheckboxControl {
   input: HTMLInputElement;
 }
 
-function checkbox(label: string, checked: boolean, onChange: (v: boolean) => void): CheckboxControl {
-  const input = h('input', { type: 'checkbox', class: 'accent-[var(--accent)]' }) as HTMLInputElement;
+function checkbox(
+  label: string,
+  checked: boolean,
+  onChange: (v: boolean) => void,
+): CheckboxControl {
+  const input = h('input', {
+    type: 'checkbox',
+    class: 'accent-[var(--accent)]',
+  }) as HTMLInputElement;
   input.checked = checked;
   input.addEventListener('change', () => onChange(input.checked));
-  const row = h('label', { class: 'flex items-center gap-2 text-xs text-[var(--fg)] cursor-pointer' }, [
-    input,
-    h('span', { textContent: label }),
-  ]);
+  const row = h(
+    'label',
+    { class: 'flex items-center gap-2 text-xs text-[var(--fg)] cursor-pointer' },
+    [input, h('span', { textContent: label })],
+  );
   return { row, input };
 }
 
@@ -1442,11 +1623,21 @@ interface SelectControl {
   set: (v: string) => void;
 }
 
-function select(label: string, options: { value: string; label: string }[], value: string, onChange: (v: string) => void): SelectControl {
-  const sel = h('select', {
-    class: 'w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--fg)]',
-    onchange: () => onChange(sel.value),
-  }, options.map((o) => h('option', { value: o.value, textContent: o.label }))) as HTMLSelectElement;
+function select(
+  label: string,
+  options: { value: string; label: string }[],
+  value: string,
+  onChange: (v: string) => void,
+): SelectControl {
+  const sel = h(
+    'select',
+    {
+      class:
+        'w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--fg)]',
+      onchange: () => onChange(sel.value),
+    },
+    options.map((o) => h('option', { value: o.value, textContent: o.label })),
+  ) as HTMLSelectElement;
   sel.value = value;
   const row = h('div', { class: 'space-y-1' }, [
     h('label', { class: 'text-xs text-[var(--fg-muted)]', textContent: label }),
@@ -1454,7 +1645,9 @@ function select(label: string, options: { value: string; label: string }[], valu
   ]);
   return {
     row,
-    set: (v: string) => { sel.value = v; },
+    set: (v: string) => {
+      sel.value = v;
+    },
   };
 }
 

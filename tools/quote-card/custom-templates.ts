@@ -22,6 +22,8 @@
  */
 
 import { h } from '@/core/components/element';
+import { findDangerousPattern, dangerousCodeReason } from '@/core/utils/ai-code-guard';
+import { readJSON, writeJSON } from '@/core/utils/storage';
 import type { CardTemplate, QuoteData } from './templates/types';
 
 const STORAGE_KEY = 'quote-card:custom-templates';
@@ -49,44 +51,34 @@ interface CustomTemplateBlob {
   items: CustomTemplate[];
 }
 
-/** 读取全部自定义模板；存储损坏/为空时返回 [] */
+/** 读取全部自定义模板；存储损坏/为空时返回 []（读取经 core/utils/storage 统一容错） */
 export function loadCustomTemplates(): CustomTemplate[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Partial<CustomTemplateBlob>;
-    if (!parsed || typeof parsed !== 'object') return [];
-    const items = parsed.items;
-    if (!Array.isArray(items)) return [];
-    // 逐条校验：id 必须带前缀、name/code/background/iconColor 非空字符串
-    return items.filter(
-      (it): it is CustomTemplate =>
-        !!it &&
-        typeof it.id === 'string' &&
-        it.id.startsWith(ID_PREFIX) &&
-        typeof it.name === 'string' &&
-        it.name.trim().length > 0 &&
-        typeof it.code === 'string' &&
-        it.code.trim().length > 0 &&
-        typeof it.background === 'string' &&
-        it.background.trim().length > 0 &&
-        typeof it.iconColor === 'string' &&
-        it.iconColor.trim().length > 0 &&
-        typeof it.createdAt === 'number',
-    );
-  } catch {
-    return [];
-  }
+  const parsed = readJSON(STORAGE_KEY) as Partial<CustomTemplateBlob> | null;
+  if (!parsed) return [];
+  const items = parsed.items;
+  if (!Array.isArray(items)) return [];
+  // 逐条校验：id 必须带前缀、name/code/background/iconColor 非空字符串
+  return items.filter(
+    (it): it is CustomTemplate =>
+      !!it &&
+      typeof it.id === 'string' &&
+      it.id.startsWith(ID_PREFIX) &&
+      typeof it.name === 'string' &&
+      it.name.trim().length > 0 &&
+      typeof it.code === 'string' &&
+      it.code.trim().length > 0 &&
+      typeof it.background === 'string' &&
+      it.background.trim().length > 0 &&
+      typeof it.iconColor === 'string' &&
+      it.iconColor.trim().length > 0 &&
+      typeof it.createdAt === 'number',
+  );
 }
 
 /** 持久化全部自定义模板（隐私模式 / 配额满时静默忽略） */
 function persist(items: CustomTemplate[]): void {
-  try {
-    const blob: CustomTemplateBlob = { version: CURRENT_VERSION, items };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
-  } catch {
-    // 容量满 / 隐私模式：静默忽略，不影响功能
-  }
+  const blob: CustomTemplateBlob = { version: CURRENT_VERSION, items };
+  writeJSON(STORAGE_KEY, blob);
 }
 
 /** 生成一个新的自定义 id（ctmpl: + 随机串） */
@@ -142,11 +134,9 @@ export function isCustomTemplateId(id: string): boolean {
  * 编译代码为 render 函数（语法错会抛 Error，供 UI 在保存前即时校验）。
  * 编译出的函数签名：(el, quote) => void（无返回值，渲染即副作用）。
  */
-export function compileTemplateRender(
-  code: string,
-): (el: HTMLElement, quote: QuoteData) => void {
+export function compileTemplateRender(code: string): (el: HTMLElement, quote: QuoteData) => void {
   // new Function 的函数体即用户代码；模板代码只负责把内容画进 el，不需要 return。
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
+  // eslint-disable-next-line no-new-func
   const fn = new Function('el', 'quote', code) as (el: HTMLElement, quote: QuoteData) => unknown;
   return (el, quote) => {
     fn(el, quote);
@@ -154,25 +144,9 @@ export function compileTemplateRender(
 }
 
 /**
- * 危险模式静态扫描：模板代码只应操作传入的 el，不应触碰页面其它部分或发网络请求。
- * 命中任一模式即拒绝保存。这是模板代码的安全边界（动画侧同等约束：只操作 content）。
+ * 危险模式扫描统一走 core 共享层（与动画/码点侧同一份名单与强度），
+ * 保存时（dryRunCheck）与每次渲染执行前（toCardTemplate.render）都会复检。
  */
-const DANGER_PATTERNS: RegExp[] = [
-  /document\s*\.\s*body\b/,
-  /document\s*\.\s*documentElement\b/,
-  /window\s*\.\s*location\b/,
-  /\bfetch\s*\(/,
-  /\bXMLHttpRequest\b/,
-  /\bWebSocket\b/,
-  /\bimport\s*\(/, // 动态 import（静态 import 在函数体里写不了）
-  /\beval\s*\(/,
-  /navigator\s*\.\s*sendBeacon\b/,
-];
-
-/** 代码是否含越界操作（供 dryRun 与运行时回退前统一判定） */
-function hasDangerousCode(code: string): boolean {
-  return DANGER_PATTERNS.some((re) => re.test(code));
-}
 
 /** 试跑校验结果：给「添加」模态的保存用，提前暴露问题代码 */
 export interface TemplateDryRunResult {
@@ -193,11 +167,9 @@ export interface TemplateDryRunResult {
  * 让 AI 代码里可能的 getBoundingClientRect 不报错；校验完即移除。
  */
 export function dryRunCheck(code: string, el: HTMLElement, quote: QuoteData): TemplateDryRunResult {
-  if (hasDangerousCode(code)) {
-    return {
-      ok: false,
-      reason: '代码含越界操作（document.body / 网络请求 / 动态 import 等）。模板代码只能操作传入的 el，不能触碰页面其它部分。',
-    };
+  const danger = findDangerousPattern(code);
+  if (danger) {
+    return { ok: false, reason: dangerousCodeReason(danger) };
   }
   let render: (e: HTMLElement, q: QuoteData) => void;
   try {
@@ -215,7 +187,10 @@ export function dryRunCheck(code: string, el: HTMLElement, quote: QuoteData): Te
   }
   // 产出可见内容？
   if (el.childElementCount === 0) {
-    return { ok: false, reason: '代码没有往容器里放任何内容（应调用 el.replaceChildren(...) 摆放正文与装饰）。' };
+    return {
+      ok: false,
+      reason: '代码没有往容器里放任何内容（应调用 el.replaceChildren(...) 摆放正文与装饰）。',
+    };
   }
   const text = (el.textContent ?? '').trim();
   if (text.length === 0) {
@@ -225,7 +200,10 @@ export function dryRunCheck(code: string, el: HTMLElement, quote: QuoteData): Te
   const svgs = el.querySelectorAll('svg');
   for (const svg of Array.from(svgs)) {
     if ((svg.innerHTML ?? '').trim().length === 0 && (svg.childNodes.length ?? 0) === 0) {
-      return { ok: false, reason: '代码注入了一个空的 <svg>（没有子元素）。请补全 svg 内部的图形元素。' };
+      return {
+        ok: false,
+        reason: '代码注入了一个空的 <svg>（没有子元素）。请补全 svg 内部的图形元素。',
+      };
     }
   }
   return { ok: true };
@@ -243,14 +221,25 @@ export function toCardTemplate(c: CustomTemplate): CardTemplate {
     preview: { background: c.background, iconColor: c.iconColor },
     render: (el, quote) => {
       try {
+        // 渲染路径复检：dryRun 只在保存时跑一次，代码存 localStorage 后每次访问
+        // 都会执行——防止保存之后被篡改/绕过的危险代码被反复执行。
+        const danger = findDangerousPattern(c.code);
+        if (danger) throw new Error(dangerousCodeReason(danger));
         compileTemplateRender(c.code)(el, quote);
       } catch {
         // 运行时失败（编译错/抛错）：回退极简白底黑字，避免整页崩
         el.style.cssText =
           'background:#ffffff;color:#0f172a;font-family:Georgia,"Songti SC","Noto Serif SC",serif;display:flex;flex-direction:column;justify-content:center;padding:96px;box-sizing:border-box;position:relative;';
         el.replaceChildren(
-          h('div', { style: 'font-size:46px;line-height:1.45;font-weight:600;word-break:break-word;overflow-wrap:anywhere;', textContent: quote.text }),
-          h('div', { style: 'margin-top:48px;font-size:30px;color:#64748b;font-style:italic;', textContent: `— ${quote.author}${quote.source ? ` · ${quote.source}` : ''}` }),
+          h('div', {
+            style:
+              'font-size:46px;line-height:1.45;font-weight:600;word-break:break-word;overflow-wrap:anywhere;',
+            textContent: quote.text,
+          }),
+          h('div', {
+            style: 'margin-top:48px;font-size:30px;color:#64748b;font-style:italic;',
+            textContent: `— ${quote.author}${quote.source ? ` · ${quote.source}` : ''}`,
+          }),
         );
       }
     },
@@ -265,7 +254,8 @@ export function toCardTemplate(c: CustomTemplate): CardTemplate {
  * @param description 用户对想要的卡片风格的自由描述
  */
 export function buildTemplatePrompt(description: string): string {
-  const desc = description.trim() || '（用户未填写具体描述，请按高级感、耐看的名言卡片风格生成一个）';
+  const desc =
+    description.trim() || '（用户未填写具体描述，请按高级感、耐看的名言卡片风格生成一个）';
 
   return `你是一个前端 + 视觉设计专家。请帮我为「名言卡片」工具设计一个卡片模板的渲染代码。
 
@@ -430,11 +420,14 @@ export interface ParsedTemplateAIOutput {
 }
 
 /** 匹配一行「名称：xxx」（可有 // 前缀，中英文冒号）。捕获组 = 名称文本 */
-const NAME_LINE_RE = /^[ \t]*(?:(?:\/\/|#)\s*)?(?:名称|模板名(?:称)?|name)[ \t]*[:：][ \t]*(.+?)[ \t]*$/i;
+const NAME_LINE_RE =
+  /^[ \t]*(?:(?:\/\/|#)\s*)?(?:名称|模板名(?:称)?|name)[ \t]*[:：][ \t]*(.+?)[ \t]*$/i;
 /** 匹配一行「背景：xxx」 */
-const BG_LINE_RE = /^[ \t]*(?:(?:\/\/|#)\s*)?(?:背景|缩略图背景|background|bg)[ \t]*[:：][ \t]*(.+?)[ \t]*$/i;
+const BG_LINE_RE =
+  /^[ \t]*(?:(?:\/\/|#)\s*)?(?:背景|缩略图背景|background|bg)[ \t]*[:：][ \t]*(.+?)[ \t]*$/i;
 /** 匹配一行「图标色：xxx」 */
-const ICON_LINE_RE = /^[ \t]*(?:(?:\/\/|#)\s*)?(?:图标色|缩略图图标色|图标|icon(?:color)?)[ \t]*[:：][ \t]*(.+?)[ \t]*$/i;
+const ICON_LINE_RE =
+  /^[ \t]*(?:(?:\/\/|#)\s*)?(?:图标色|缩略图图标色|图标|icon(?:color)?)[ \t]*[:：][ \t]*(.+?)[ \t]*$/i;
 
 const DEFAULT_BACKGROUND = 'linear-gradient(135deg,#6366f1,#8b5cf6)';
 const DEFAULT_ICON_COLOR = '#ffffff';
@@ -446,7 +439,10 @@ const DEFAULT_ICON_COLOR = '#ffffff';
 function cleanMetaValue(line: string, re: RegExp): string | null {
   const m = line.trim().match(re);
   if (!m) return null;
-  return m[1]!.trim().replace(/^["'「『]+|["'」』]+$/g, '').trim();
+  return m[1]!
+    .trim()
+    .replace(/^["'「『]+|["'」』]+$/g, '')
+    .trim();
 }
 
 /**
@@ -465,10 +461,11 @@ function cleanMetaValue(line: string, re: RegExp): string | null {
  */
 export function parseTemplateAIOutput(raw: string): ParsedTemplateAIOutput {
   const text = raw.replace(/\r\n/g, '\n').trim();
-  if (!text) return { name: '', code: '', background: DEFAULT_BACKGROUND, iconColor: DEFAULT_ICON_COLOR };
+  if (!text)
+    return { name: '', code: '', background: DEFAULT_BACKGROUND, iconColor: DEFAULT_ICON_COLOR };
 
   // 1) 代码：优先 ```js / ```javascript / ``` 围栏
-  let codeBody = '';
+  let codeBody: string;
   const fence = text.match(/```(?:js|javascript)?\s*\n([\s\S]*?)\n?```/i);
   if (fence) {
     codeBody = fence[1]!.trim();

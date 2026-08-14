@@ -13,7 +13,26 @@
  * 备份/恢复仅包含本批偏好（置顶/星标/排序），不含主题等其它本地状态。
  */
 
-const STORAGE_KEY = 'static-toolkit:home-prefs';
+import { toDateCompact } from '@/core/utils/date';
+
+// key 命名遵循全站连字符风格（theme/holidays 等均如此）；从旧的冒号风格 key 迁移
+const STORAGE_KEY = 'static-toolkit-home-prefs';
+const LEGACY_STORAGE_KEY = 'static-toolkit:home-prefs';
+
+/** 旧 key → 新 key 一次性迁移（读到旧值且新 key 为空时搬运，随后清掉旧 key） */
+function migrateLegacyKey(): void {
+  try {
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy !== null) {
+      if (localStorage.getItem(STORAGE_KEY) === null) {
+        localStorage.setItem(STORAGE_KEY, legacy);
+      }
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+    }
+  } catch {
+    // 存储不可用：忽略，loadPrefs 自会安全回退
+  }
+}
 
 /** 首页用户偏好 */
 export interface HomePrefs {
@@ -46,6 +65,7 @@ function cleanStrArr(v: unknown): string[] {
 
 /** 读取偏好；存储损坏或为空时安全回退为空偏好 */
 export function loadPrefs(): HomePrefs {
+  migrateLegacyKey();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return emptyPrefs();
@@ -119,8 +139,7 @@ export function exportPrefsJSON(p: HomePrefs): string {
 /** 默认导出文件名（带日期） */
 export function prefsExportFilename(): string {
   const d = new Date();
-  const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-  return `polykit-home-prefs-${ymd}.json`;
+  return `polykit-home-prefs-${toDateCompact(d)}.json`;
 }
 
 /**

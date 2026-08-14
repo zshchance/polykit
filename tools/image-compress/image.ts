@@ -34,7 +34,10 @@ export function revokeImage(img: LoadedImage): void {
  * @throws 若文件不是合法图片或解码失败
  */
 export async function loadImage(file: File): Promise<LoadedImage> {
-  if (!file.type.startsWith('image/') && !/\.(png|jpe?g|webp|gif|bmp|avif|ico|svg)$/i.test(file.name)) {
+  if (
+    !file.type.startsWith('image/') &&
+    !/\.(png|jpe?g|webp|gif|bmp|avif|ico|svg)$/i.test(file.name)
+  ) {
     throw new Error('请选择图片文件');
   }
 

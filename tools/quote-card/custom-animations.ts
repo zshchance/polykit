@@ -18,6 +18,8 @@
 
 import type { QuoteData } from './templates/types';
 import { fallbackFade, type AnimEffect } from './animations';
+import { findDangerousPattern, dangerousCodeReason } from '@/core/utils/ai-code-guard';
+import { readJSON, writeJSON } from '@/core/utils/storage';
 
 const STORAGE_KEY = 'quote-card:custom-animations';
 const CURRENT_VERSION = 1;
@@ -40,40 +42,30 @@ interface CustomAnimBlob {
   items: CustomAnim[];
 }
 
-/** 读取全部自定义效果；存储损坏/为空时返回 [] */
+/** 读取全部自定义效果；存储损坏/为空时返回 []（读取经 core/utils/storage 统一容错） */
 export function loadCustomAnims(): CustomAnim[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Partial<CustomAnimBlob>;
-    if (!parsed || typeof parsed !== 'object') return [];
-    const items = parsed.items;
-    if (!Array.isArray(items)) return [];
-    // 逐条校验：id 必须带前缀、name/code 非空字符串
-    return items.filter(
-      (it): it is CustomAnim =>
-        !!it &&
-        typeof it.id === 'string' &&
-        it.id.startsWith(ID_PREFIX) &&
-        typeof it.name === 'string' &&
-        it.name.trim().length > 0 &&
-        typeof it.code === 'string' &&
-        it.code.trim().length > 0 &&
-        typeof it.createdAt === 'number',
-    );
-  } catch {
-    return [];
-  }
+  const parsed = readJSON(STORAGE_KEY) as Partial<CustomAnimBlob> | null;
+  if (!parsed) return [];
+  const items = parsed.items;
+  if (!Array.isArray(items)) return [];
+  // 逐条校验：id 必须带前缀、name/code 非空字符串
+  return items.filter(
+    (it): it is CustomAnim =>
+      !!it &&
+      typeof it.id === 'string' &&
+      it.id.startsWith(ID_PREFIX) &&
+      typeof it.name === 'string' &&
+      it.name.trim().length > 0 &&
+      typeof it.code === 'string' &&
+      it.code.trim().length > 0 &&
+      typeof it.createdAt === 'number',
+  );
 }
 
 /** 持久化全部自定义效果（隐私模式 / 配额满时静默忽略） */
 function persist(items: CustomAnim[]): void {
-  try {
-    const blob: CustomAnimBlob = { version: CURRENT_VERSION, items };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
-  } catch {
-    // 容量满 / 隐私模式：静默忽略，不影响功能
-  }
+  const blob: CustomAnimBlob = { version: CURRENT_VERSION, items };
+  writeJSON(STORAGE_KEY, blob);
 }
 
 /** 生成一个新的自定义 id（custom: + 随机串） */
@@ -126,7 +118,7 @@ export function compileCustomBuild(
   code: string,
 ): (content: HTMLElement, quote: QuoteData) => Animation {
   // new Function 的函数体即用户代码；用户在代码里 return 一个 Animation。
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
+  // eslint-disable-next-line no-new-func
   const fn = new Function('content', 'quote', code) as (
     content: HTMLElement,
     quote: QuoteData,
@@ -159,6 +151,11 @@ export interface DryRunResult {
  * 在副本上跑是为了不污染真实卡片。返回详细结果供 UI 展示。
  */
 export function dryRunCheck(code: string, content: HTMLElement, quote: QuoteData): DryRunResult {
+  // 危险模式扫描：与模板/码点侧同一份共享名单（core/utils/ai-code-guard）
+  const danger = findDangerousPattern(code);
+  if (danger) {
+    return { ok: false, reason: dangerousCodeReason(danger) };
+  }
   // 克隆真实 content 做试跑（深克隆，保留结构与文本）
   const clone = content.cloneNode(true) as HTMLElement;
   const beforeChildCount = clone.childElementCount;
@@ -175,12 +172,18 @@ export function dryRunCheck(code: string, content: HTMLElement, quote: QuoteData
   } catch (e) {
     return {
       ok: false,
-      reason: '运行时报错：' + (e instanceof Error ? e.message : String(e)) + '（常见：用了 GroupEffect 等浏览器不支持的 API）',
+      reason:
+        '运行时报错：' +
+        (e instanceof Error ? e.message : String(e)) +
+        '（常见：用了 GroupEffect 等浏览器不支持的 API）',
     };
   }
   // 返回值是否真实 Animation
   if (!anim || typeof anim.play !== 'function' || typeof anim.finish !== 'function') {
-    return { ok: false, reason: '代码未返回有效的 Animation（请用 return content.animate(...) 结尾）' };
+    return {
+      ok: false,
+      reason: '代码未返回有效的 Animation（请用 return content.animate(...) 结尾）',
+    };
   }
   // 结构破坏检测：清空/替换 content 的代码会让 childElementCount 或文本长度剧变
   const afterChildCount = clone.childElementCount;
@@ -188,7 +191,8 @@ export function dryRunCheck(code: string, content: HTMLElement, quote: QuoteData
   if (afterChildCount < beforeChildCount || afterTextLength < beforeTextLength * 0.5) {
     return {
       ok: false,
-      reason: '代码破坏了卡片结构（疑似清空/替换了 content，会丢失作者落款和排版）。请只对文本节点拆字，不要改 content 的 DOM 结构。',
+      reason:
+        '代码破坏了卡片结构（疑似清空/替换了 content，会丢失作者落款和排版）。请只对文本节点拆字，不要改 content 的 DOM 结构。',
     };
   }
   // 立即取消试跑产生的动画（副本未挂载到文档，但保险起见）
@@ -211,6 +215,10 @@ export function toAnimEffect(c: CustomAnim): AnimEffect {
     name: '⭐ ' + c.name,
     build: (content, quote) => {
       try {
+        // 渲染路径复检：代码存 localStorage 后每次访问都会执行，不能只信保存时的 dryRun
+        if (findDangerousPattern(c.code)) {
+          return fallbackFade(content);
+        }
         return compileCustomBuild(c.code)(content, quote);
       } catch {
         // 运行时失败（编译错/抛错/未返回 Animation）：静默回退淡入
@@ -350,14 +358,15 @@ export interface ParsedAIOutput {
  */
 
 /** 匹配一行「名称：xxx」（可有 // 前缀，中英文冒号，name 关键字）。捕获组 = 名称文本 */
-const NAME_LINE_RE = /^[ \t]*(?:(?:\/\/|#)\s*)?(?:名称|效果名(?:称)?|name)[ \t]*[:：][ \t]*(.+?)[ \t]*$/i;
+const NAME_LINE_RE =
+  /^[ \t]*(?:(?:\/\/|#)\s*)?(?:名称|效果名(?:称)?|name)[ \t]*[:：][ \t]*(.+?)[ \t]*$/i;
 
 export function parseAIOutput(raw: string): ParsedAIOutput {
   const text = raw.replace(/\r\n/g, '\n').trim();
   if (!text) return { name: '', code: '' };
 
   // 1) 代码：优先 \`\`\`js / \`\`\`javascript / \`\`\` 围栏
-  let codeBody = '';
+  let codeBody: string;
   const fence = text.match(/```(?:js|javascript)?\s*\n([\s\S]*?)\n?```/i);
   if (fence) {
     codeBody = fence[1]!.trim();
@@ -377,12 +386,22 @@ export function parseAIOutput(raw: string): ParsedAIOutput {
     .split('\n')
     .find((l) => NAME_LINE_RE.test(l.trim()) && /^\s*(?:\/\/|#)/.test(l));
   if (inCodeNameLine) {
-    name = inCodeNameLine.trim().match(NAME_LINE_RE)![1]!.trim().replace(/^["「『（(]+|["」』）)]+$/g, '').trim();
+    name = inCodeNameLine
+      .trim()
+      .match(NAME_LINE_RE)![1]!
+      .trim()
+      .replace(/^["「『（(]+|["」』）)]+$/g, '')
+      .trim();
   } else {
     // 2b) 代码块外：整段文本里找首个名称行（兼容旧式「名称：xxx 写在块外」）
     const outsideNameLine = text.split('\n').find((l) => NAME_LINE_RE.test(l.trim()));
     if (outsideNameLine) {
-      name = outsideNameLine.trim().match(NAME_LINE_RE)![1]!.trim().replace(/^["「『（(]+|["」』）)]+$/g, '').trim();
+      name = outsideNameLine
+        .trim()
+        .match(NAME_LINE_RE)![1]!
+        .trim()
+        .replace(/^["「『（(]+|["」』）)]+$/g, '')
+        .trim();
     }
   }
 

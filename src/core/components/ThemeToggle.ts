@@ -5,7 +5,13 @@ const STORAGE_KEY = 'static-toolkit-theme';
 
 /** 取已持久化的主题；无则跟随系统偏好 */
 function getStoredTheme(): Theme {
-  const saved = localStorage.getItem(STORAGE_KEY) as Theme | null;
+  let saved: string | null = null;
+  try {
+    // 「阻止所有 Cookie」等策略下访问 localStorage 本身就可能抛错
+    saved = localStorage.getItem(STORAGE_KEY);
+  } catch {
+    // 存储不可用：保持 null，跟随系统偏好
+  }
   if (saved === 'light' || saved === 'dark') return saved;
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
@@ -13,7 +19,12 @@ function getStoredTheme(): Theme {
 /** 把主题应用到 <html>，并持久化 */
 function applyTheme(theme: Theme): void {
   document.documentElement.classList.toggle('dark', theme === 'dark');
-  localStorage.setItem(STORAGE_KEY, theme);
+  try {
+    localStorage.setItem(STORAGE_KEY, theme);
+  } catch {
+    // 存储被禁用时主题本次会话仍生效，只是不持久化；
+    // 这里绝不能让异常冒泡——initTheme 在模块顶层执行，挂了整页白屏。
+  }
 }
 
 /**

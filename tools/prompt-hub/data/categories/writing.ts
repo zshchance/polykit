@@ -15,8 +15,20 @@ export const WRITING_PROMPTS: Prompt[] = [
     fun: false,
     desc: '闺蜜语气种草，自带黄金 3 秒钩子和 emoji，爆款结构。',
     variables: [
-      { key: 'topic', label: '产品/主题', placeholder: '便携咖啡机', required: true, default: '便携咖啡机' },
-      { key: 'points', label: '核心卖点', placeholder: '60秒萃取、可充电、颜值高', multiline: true, default: '60秒萃取、可充电、颜值高' },
+      {
+        key: 'topic',
+        label: '产品/主题',
+        placeholder: '便携咖啡机',
+        required: true,
+        default: '便携咖啡机',
+      },
+      {
+        key: 'points',
+        label: '核心卖点',
+        placeholder: '60秒萃取、可充电、颜值高',
+        multiline: true,
+        default: '60秒萃取、可充电、颜值高',
+      },
     ],
     template: `请用小红书种草博主的口吻，帮我写一篇关于「{{topic}}」的种草文案。
 
@@ -43,8 +55,20 @@ export const WRITING_PROMPTS: Prompt[] = [
     fun: false,
     desc: '沉浸式探店，环境+菜品+性价比，氛围感拉满。',
     variables: [
-      { key: 'shop', label: '店铺/品类', placeholder: '巷子里的日式拉面店', required: true, default: '巷子里的日式拉面店' },
-      { key: 'highlight', label: '亮点', placeholder: '汤头浓郁、老板是日本人、人均40', multiline: true, default: '汤头浓郁、老板是日本人、人均40' },
+      {
+        key: 'shop',
+        label: '店铺/品类',
+        placeholder: '巷子里的日式拉面店',
+        required: true,
+        default: '巷子里的日式拉面店',
+      },
+      {
+        key: 'highlight',
+        label: '亮点',
+        placeholder: '汤头浓郁、老板是日本人、人均40',
+        multiline: true,
+        default: '汤头浓郁、老板是日本人、人均40',
+      },
     ],
     template: `请用小红书探店博主的风格，写一篇「{{shop}}」的探店文案。
 
@@ -66,8 +90,20 @@ export const WRITING_PROMPTS: Prompt[] = [
     fun: false,
     desc: '有观点有论据的深度长文，结构清晰引人入胜。',
     variables: [
-      { key: 'topic', label: '主题', placeholder: '为什么年轻人开始迷上逛菜市场', required: true, default: '为什么年轻人开始迷上逛菜市场' },
-      { key: 'angle', label: '观点/角度', placeholder: '治愈感、掌控感、对抗原子化', multiline: true, default: '治愈感、掌控感、对抗原子化' },
+      {
+        key: 'topic',
+        label: '主题',
+        placeholder: '为什么年轻人开始迷上逛菜市场',
+        required: true,
+        default: '为什么年轻人开始迷上逛菜市场',
+      },
+      {
+        key: 'angle',
+        label: '观点/角度',
+        placeholder: '治愈感、掌控感、对抗原子化',
+        multiline: true,
+        default: '治愈感、掌控感、对抗原子化',
+      },
     ],
     template: `请写一篇公众号深度文章，主题是「{{topic}}」。
 
@@ -89,7 +125,13 @@ export const WRITING_PROMPTS: Prompt[] = [
     fun: false,
     desc: '结构化干货清单体，信息密度高，易收藏易传播。',
     variables: [
-      { key: 'topic', label: '主题', placeholder: '打工人必备的10个免费AI工具', required: true, default: '打工人必备的10个免费AI工具' },
+      {
+        key: 'topic',
+        label: '主题',
+        placeholder: '打工人必备的10个免费AI工具',
+        required: true,
+        default: '打工人必备的10个免费AI工具',
+      },
       { key: 'count', label: '数量', placeholder: '10' },
     ],
     template: `请写一篇「{{topic}}」的干货清单文。
@@ -111,8 +153,20 @@ export const WRITING_PROMPTS: Prompt[] = [
     fun: false,
     desc: '专业又有温度的高赞回答，先抛结论再展开论证。',
     variables: [
-      { key: 'question', label: '问题', placeholder: '普通人如何建立被动收入？', required: true, default: '普通人如何建立被动收入？' },
-      { key: 'stance', label: '你的立场', placeholder: '不靠理财暴富，靠技能资产化', multiline: true, default: '不靠理财暴富，靠技能资产化' },
+      {
+        key: 'question',
+        label: '问题',
+        placeholder: '普通人如何建立被动收入？',
+        required: true,
+        default: '普通人如何建立被动收入？',
+      },
+      {
+        key: 'stance',
+        label: '你的立场',
+        placeholder: '不靠理财暴富，靠技能资产化',
+        multiline: true,
+        default: '不靠理财暴富，靠技能资产化',
+      },
     ],
     template: `请以知乎高赞回答的风格，回答这个问题：「{{question}}」
 
@@ -135,8 +189,20 @@ export const WRITING_PROMPTS: Prompt[] = [
     fun: false,
     desc: '高转化详情页，痛点→方案→信任→促单一条龙。',
     variables: [
-      { key: 'product', label: '产品', placeholder: '人体工学腰靠', required: true, default: '人体工学腰靠' },
-      { key: 'points', label: '卖点', placeholder: '记忆棉、贴合曲线、久坐不累', multiline: true, default: '记忆棉、贴合曲线、久坐不累' },
+      {
+        key: 'product',
+        label: '产品',
+        placeholder: '人体工学腰靠',
+        required: true,
+        default: '人体工学腰靠',
+      },
+      {
+        key: 'points',
+        label: '卖点',
+        placeholder: '记忆棉、贴合曲线、久坐不累',
+        multiline: true,
+        default: '记忆棉、贴合曲线、久坐不累',
+      },
     ],
     template: `请为「{{product}}」写电商详情页文案。
 
@@ -158,7 +224,13 @@ export const WRITING_PROMPTS: Prompt[] = [
     fun: false,
     desc: '15-60秒口播脚本，前3秒留人，结构紧凑有钩子。',
     variables: [
-      { key: 'topic', label: '主题', placeholder: '3个让你变有钱的小习惯', required: true, default: '3个让你变有钱的小习惯' },
+      {
+        key: 'topic',
+        label: '主题',
+        placeholder: '3个让你变有钱的小习惯',
+        required: true,
+        default: '3个让你变有钱的小习惯',
+      },
       { key: 'duration', label: '时长', placeholder: '45秒', default: '45秒' },
     ],
     template: `请写一个抖音口播短视频脚本，主题「{{topic}}」，时长约{{duration}}。
@@ -183,8 +255,20 @@ export const WRITING_PROMPTS: Prompt[] = [
     fun: false,
     desc: '把流水账简历改成 STAR 结构，突出成果与数据。',
     variables: [
-      { key: 'role', label: '目标岗位', placeholder: '产品经理', required: true, default: '产品经理' },
-      { key: 'content', label: '原经历', placeholder: '负责XX功能，做了XX，提升了XX', multiline: true, default: '负责用户增长功能，做了签到活动，DAU有提升' },
+      {
+        key: 'role',
+        label: '目标岗位',
+        placeholder: '产品经理',
+        required: true,
+        default: '产品经理',
+      },
+      {
+        key: 'content',
+        label: '原经历',
+        placeholder: '负责XX功能，做了XX，提升了XX',
+        multiline: true,
+        default: '负责用户增长功能，做了签到活动，DAU有提升',
+      },
     ],
     template: `请帮我把下面的工作经历，改写成适合「{{role}}」岗位的优秀简历条目。
 
@@ -209,8 +293,20 @@ export const WRITING_PROMPTS: Prompt[] = [
     fun: false,
     desc: '得体专业的商务邮件，开场到落款一步到位。',
     variables: [
-      { key: 'purpose', label: '邮件目的', placeholder: '邀请对方合作/催款/约会议', required: true, default: '邀请对方进行商务合作' },
-      { key: 'detail', label: '关键信息', placeholder: '合作内容、时间、对方收益', multiline: true, default: '我们想邀请贵司联合举办一场线下活动，时间下月初，可带来品牌曝光' },
+      {
+        key: 'purpose',
+        label: '邮件目的',
+        placeholder: '邀请对方合作/催款/约会议',
+        required: true,
+        default: '邀请对方进行商务合作',
+      },
+      {
+        key: 'detail',
+        label: '关键信息',
+        placeholder: '合作内容、时间、对方收益',
+        multiline: true,
+        default: '我们想邀请贵司联合举办一场线下活动，时间下月初，可带来品牌曝光',
+      },
     ],
     template: `请帮我写一封商务邮件。
 
@@ -235,7 +331,13 @@ export const WRITING_PROMPTS: Prompt[] = [
     fun: false,
     desc: '一句入魂的品牌 slogan，多风格多备选。',
     variables: [
-      { key: 'brand', label: '品牌/产品', placeholder: '一款主打轻量的登山包', required: true, default: '一款主打轻量的登山包' },
+      {
+        key: 'brand',
+        label: '品牌/产品',
+        placeholder: '一款主打轻量的登山包',
+        required: true,
+        default: '一款主打轻量的登山包',
+      },
       { key: 'style', label: '风格', placeholder: '热血/文艺/极简/幽默', default: '热血' },
     ],
     template: `请为「{{brand}}」创作广告 slogan。
@@ -259,8 +361,20 @@ export const WRITING_PROMPTS: Prompt[] = [
     fun: false,
     desc: '规范的新闻通稿，倒金字塔结构，客观专业。',
     variables: [
-      { key: 'event', label: '事件', placeholder: '公司完成B轮融资5000万', required: true, default: '公司完成B轮融资5000万' },
-      { key: 'detail', label: '详情', placeholder: '投资方、用途、意义', multiline: true, default: '领投方为XX资本，资金用于产品研发和市场扩张' },
+      {
+        key: 'event',
+        label: '事件',
+        placeholder: '公司完成B轮融资5000万',
+        required: true,
+        default: '公司完成B轮融资5000万',
+      },
+      {
+        key: 'detail',
+        label: '详情',
+        placeholder: '投资方、用途、意义',
+        multiline: true,
+        default: '领投方为XX资本，资金用于产品研发和市场扩张',
+      },
     ],
     template: `请写一篇新闻通稿。
 
@@ -284,8 +398,19 @@ export const WRITING_PROMPTS: Prompt[] = [
     fun: false,
     desc: '有感染力的演讲稿，开场抓人、金句收尾。',
     variables: [
-      { key: 'topic', label: '主题', placeholder: '如何在不确定中找到确定性', required: true, default: '如何在不确定中找到确定性' },
-      { key: 'audience', label: '听众', placeholder: '公司全员/行业大会/毕业生', default: '公司全员' },
+      {
+        key: 'topic',
+        label: '主题',
+        placeholder: '如何在不确定中找到确定性',
+        required: true,
+        default: '如何在不确定中找到确定性',
+      },
+      {
+        key: 'audience',
+        label: '听众',
+        placeholder: '公司全员/行业大会/毕业生',
+        default: '公司全员',
+      },
       { key: 'minutes', label: '时长(分钟)', placeholder: '8', default: '8' },
     ],
     template: `请帮我写一篇约{{minutes}}分钟的演讲稿，主题「{{topic}}」，听众是{{audience}}。
@@ -308,7 +433,14 @@ export const WRITING_PROMPTS: Prompt[] = [
     fun: false,
     desc: '不是直译，是符合目标语言文化语境的本地化改写。',
     variables: [
-      { key: 'source', label: '原文', placeholder: 'Just do it', required: true, multiline: true, default: 'Think different' },
+      {
+        key: 'source',
+        label: '原文',
+        placeholder: 'Just do it',
+        required: true,
+        multiline: true,
+        default: 'Think different',
+      },
       { key: 'target', label: '目标语言', placeholder: '中文', default: '中文' },
     ],
     template: `请把下面这句文案本地化为{{target}}，不是直译，要符合目标语言的文化语境和传播习惯。
@@ -332,8 +464,20 @@ export const WRITING_PROMPTS: Prompt[] = [
     fun: false,
     desc: '结构化读书笔记，提炼金句+洞察+行动启发。',
     variables: [
-      { key: 'book', label: '书名', placeholder: '《纳瓦尔宝典》', required: true, default: '《纳瓦尔宝典》' },
-      { key: 'focus', label: '关注点', placeholder: '财富、幸福、决策', multiline: true, default: '财富与幸福的法则' },
+      {
+        key: 'book',
+        label: '书名',
+        placeholder: '《纳瓦尔宝典》',
+        required: true,
+        default: '《纳瓦尔宝典》',
+      },
+      {
+        key: 'focus',
+        label: '关注点',
+        placeholder: '财富、幸福、决策',
+        multiline: true,
+        default: '财富与幸福的法则',
+      },
     ],
     template: `请为「{{book}}」写一篇结构化的读书笔记/书评。
 

@@ -4,11 +4,13 @@
  * 记住用户上次选择的"提取色数"与"输出格式"，下次打开自动还原，免去重复设置。
  *
  * 设计与项目内其它 settings 模块一致：带 version 的 JSON blob，
- * 损坏/隐私模式时安全回退默认值。
+ * 读取经 core/utils/storage 统一容错，损坏/隐私模式时安全回退默认值。
  *
  * 存储形态（JSON）：
  *   { "version": 1, "colorCount": number, "format": OutputFormat }
  */
+
+import { readJSON, writeJSON, removeKey } from '@/core/utils/storage';
 
 import type { OutputFormat } from './palette-format';
 import { FORMAT_OPTIONS } from './palette-format';
@@ -50,35 +52,25 @@ export function clampColorCount(n: number): number {
  */
 export function loadPrefs(): ColorExtractorPrefs {
   const def = defaultPrefs();
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return def;
-    const parsed = JSON.parse(raw) as Partial<PrefsBlob>;
-    if (!parsed || typeof parsed !== 'object') return def;
+  const parsed = readJSON(STORAGE_KEY) as Partial<PrefsBlob> | null;
+  if (!parsed) return def;
 
-    const colorCount =
-      typeof parsed.colorCount === 'number' ? clampColorCount(parsed.colorCount) : def.colorCount;
+  const colorCount =
+    typeof parsed.colorCount === 'number' ? clampColorCount(parsed.colorCount) : def.colorCount;
 
-    const format =
-      typeof parsed.format === 'string' &&
-      (FORMAT_OPTIONS as readonly { id: OutputFormat }[]).some((f) => f.id === parsed.format)
-        ? (parsed.format as OutputFormat)
-        : def.format;
+  const format =
+    typeof parsed.format === 'string' &&
+    (FORMAT_OPTIONS as readonly { id: OutputFormat }[]).some((f) => f.id === parsed.format)
+      ? (parsed.format as OutputFormat)
+      : def.format;
 
-    return { colorCount, format };
-  } catch {
-    return def;
-  }
+  return { colorCount, format };
 }
 
 /** 持久化偏好（隐私模式 / 配额满时静默忽略） */
 export function savePrefs(prefs: ColorExtractorPrefs): void {
-  try {
-    const blob: PrefsBlob = { version: CURRENT_VERSION, ...prefs };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
-  } catch {
-    // 容量满 / 隐私模式禁用 localStorage：静默忽略，不影响功能
-  }
+  const blob: PrefsBlob = { version: CURRENT_VERSION, ...prefs };
+  writeJSON(STORAGE_KEY, blob);
 }
 
 // ─────────────────────────── 上次提取结果持久化 ───────────────────────────
@@ -106,43 +98,29 @@ interface ColorsBlob {
  * 逐条校验 hex 合法、ratio∈[0,1]、count 为正整数，过滤掉脏数据。
  */
 export function loadColors(): StoredColor[] | null {
-  try {
-    const raw = localStorage.getItem(COLORS_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<ColorsBlob>;
-    if (!parsed || !Array.isArray(parsed.colors) || parsed.colors.length === 0) return null;
-    const valid = parsed.colors.filter(
-      (c) =>
-        c &&
-        typeof c.hex === 'string' &&
-        /^#[0-9a-fA-F]{6}$/.test(c.hex) &&
-        typeof c.ratio === 'number' &&
-        c.ratio >= 0 &&
-        c.ratio <= 1 &&
-        typeof c.count === 'number' &&
-        c.count > 0,
-    );
-    return valid.length > 0 ? (valid as StoredColor[]) : null;
-  } catch {
-    return null;
-  }
+  const parsed = readJSON(COLORS_KEY) as Partial<ColorsBlob> | null;
+  if (!parsed || !Array.isArray(parsed.colors) || parsed.colors.length === 0) return null;
+  const valid = parsed.colors.filter(
+    (c) =>
+      c &&
+      typeof c.hex === 'string' &&
+      /^#[0-9a-fA-F]{6}$/.test(c.hex) &&
+      typeof c.ratio === 'number' &&
+      c.ratio >= 0 &&
+      c.ratio <= 1 &&
+      typeof c.count === 'number' &&
+      c.count > 0,
+  );
+  return valid.length > 0 ? (valid as StoredColor[]) : null;
 }
 
 /** 持久化提取结果（隐私模式 / 配额满时静默忽略） */
 export function saveColors(colors: StoredColor[]): void {
-  try {
-    const blob: ColorsBlob = { version: CURRENT_VERSION, colors };
-    localStorage.setItem(COLORS_KEY, JSON.stringify(blob));
-  } catch {
-    // 静默忽略
-  }
+  const blob: ColorsBlob = { version: CURRENT_VERSION, colors };
+  writeJSON(COLORS_KEY, blob);
 }
 
 /** 清除提取结果（如用户想从头开始） */
 export function clearColors(): void {
-  try {
-    localStorage.removeItem(COLORS_KEY);
-  } catch {
-    // 静默忽略
-  }
+  removeKey(COLORS_KEY);
 }

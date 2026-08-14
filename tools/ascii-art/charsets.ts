@@ -19,7 +19,11 @@ export interface CharsetPreset {
 
 export const CHARSET_PRESETS: CharsetPreset[] = [
   { id: 'classic', name: '经典灰度', chars: ' .:-=+*#%@' },
-  { id: 'dense', name: '高密度', chars: " .'`^\",:;Il!i><~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$" },
+  {
+    id: 'dense',
+    name: '高密度',
+    chars: ' .\'`^",:;Il!i><~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$',
+  },
   { id: 'block', name: '块字符', chars: ' ░▒▓█' },
   { id: 'binary', name: '二值', chars: ' 01' },
   { id: 'dots', name: '点阵', chars: ' ·∙●' },

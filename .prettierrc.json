@@ -1,0 +1,13 @@
+{
+  "singleQuote": true,
+  "semi": true,
+  "printWidth": 100,
+  "trailingComma": "all",
+  "endOfLine": "lf",
+  "overrides": [
+    {
+      "files": ["*.md", "*.json", "*.html"],
+      "options": { "printWidth": 120 }
+    }
+  ]
+}

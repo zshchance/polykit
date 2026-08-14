@@ -5,7 +5,7 @@
  * 收益有限且容易和 canvas 渲染不一致；PNG（高清 1024）已满足所有实际用途。
  */
 
-import { downloadBlob } from '@/core/utils/clipboard';
+import { downloadBlob, sanitizeFilePart } from '@/core/utils/download';
 
 /** 下载 canvas 为 PNG */
 export function downloadCanvasPng(canvas: HTMLCanvasElement, filename: string): void {
@@ -33,8 +33,8 @@ export async function copyCanvasToClipboard(canvas: HTMLCanvasElement): Promise<
   }
 }
 
-/** 安全文件名：内容截断 + 加 .png */
+/** 安全文件名：内容截断 + 清洗 + 加 .png */
 export function safeFilename(text: string): string {
-  const base = text.trim().slice(0, 20).replace(/[\\/:*?"<>|]+/g, '_') || 'qrcode';
+  const base = sanitizeFilePart(text, 20) || 'qrcode';
   return `${base}.png`;
 }

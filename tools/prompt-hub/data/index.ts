@@ -75,6 +75,6 @@ export const FUN_PROMPTS_ONLY: Prompt[] = ALL_PROMPTS.filter((p) => p.fun);
 
 /** 今日推荐：固定的精选 id 列表（人工挑选有代表性的） */
 const FEATURED_IDS = ['xhs-zhongcao', 'ghibli-transform', 'explain-like-five', 'resume-wuxia'];
-export const FEATURED_PROMPTS: Prompt[] = FEATURED_IDS
-  .map((id) => getPromptById(id))
-  .filter((p): p is Prompt => !!p);
+export const FEATURED_PROMPTS: Prompt[] = FEATURED_IDS.map((id) => getPromptById(id)).filter(
+  (p): p is Prompt => !!p,
+);

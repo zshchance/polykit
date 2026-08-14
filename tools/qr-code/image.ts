@@ -30,6 +30,7 @@ export async function decodeImage(file: File): Promise<DecodedImage> {
   try {
     bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
   } catch {
+    URL.revokeObjectURL(previewUrl);
     throw new Error('图片解码失败，请换一张试试');
   }
   const w = bitmap.width;
@@ -41,9 +42,7 @@ export async function decodeImage(file: File): Promise<DecodedImage> {
   // OffscreenCanvas 与 HTMLCanvasElement 的 2d 上下文类型不同但 API 子集一致，
   // 统一用 CanvasRenderingContext2D 收窄（drawImage/getImageData 两者都支持）。
   const ctx = canvas.getContext('2d', { willReadFrequently: true }) as
-    | CanvasRenderingContext2D
-    | OffscreenCanvasRenderingContext2D
-    | null;
+    CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
   if (!ctx) {
     bitmap.close();
     URL.revokeObjectURL(previewUrl);

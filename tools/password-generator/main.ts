@@ -21,11 +21,7 @@ import {
   type StoredPassword,
 } from './history';
 import { loadOptions, saveOptions } from './settings';
-import {
-  buildAIPrompt,
-  PROMPT_STYLES,
-  type PromptStyleId,
-} from './ai-prompt';
+import { buildAIPrompt, PROMPT_STYLES, type PromptStyleId } from './ai-prompt';
 
 initTheme();
 
@@ -87,8 +83,11 @@ function renderPasswordGenerator() {
   }
 
   // —— 控件引用（先声明，generate / 动画在它们初始化后才会被调用）——
+  // eslint-disable-next-line prefer-const -- TDZ 前向声明：下方函数体引用，创建在后面
   let copyBtn: HTMLButtonElement;
+  // eslint-disable-next-line prefer-const -- 同上
   let refreshBtn: HTMLButtonElement;
+  // eslint-disable-next-line prefer-const -- 同上
   let generateBtn: HTMLButtonElement;
   const historyListWrap = h('div', { class: 'space-y-2' }, []);
 
@@ -136,9 +135,12 @@ function renderPasswordGenerator() {
     const lockStart = 650;
     const lockStep = 35;
     for (let i = 0; i < len; i++) {
-      const t = window.setTimeout(() => {
-        locked.add(i);
-      }, lockStart + i * lockStep);
+      const t = window.setTimeout(
+        () => {
+          locked.add(i);
+        },
+        lockStart + i * lockStep,
+      );
       scrambleTimers.push(t);
     }
 
@@ -161,7 +163,7 @@ function renderPasswordGenerator() {
       final = generatePassword(state);
     } catch (e) {
       output.replaceChildren();
-      output.textContent = (e as Error).message;
+      output.textContent = e instanceof Error ? e.message : String(e);
       output.classList.add('text-[var(--fg-muted)]');
       currentPassword = '';
       currentStrengthBits = 0;
@@ -227,7 +229,10 @@ function renderPasswordGenerator() {
 
   /** 把数字 span 替换为输入框并聚焦，供用户直接输入长度 */
   function enterLengthEdit(): void {
-    if (lengthValue.parentElement && lengthValue.parentElement.querySelector('input[data-len-edit]')) {
+    if (
+      lengthValue.parentElement &&
+      lengthValue.parentElement.querySelector('input[data-len-edit]')
+    ) {
       return; // 已在编辑态，避免重复创建
     }
     const editInput = h('input', {
@@ -429,7 +434,8 @@ function renderPasswordGenerator() {
         'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
       rows: 3,
       'aria-label': '需求或主题描述',
-      placeholder: '可选。描述你的需求或主题，例如：围绕「星空」给我好记的密码；或：我要给家庭 WiFi 设密码、希望家人能记住。',
+      placeholder:
+        '可选。描述你的需求或主题，例如：围绕「星空」给我好记的密码；或：我要给家庭 WiFi 设密码、希望家人能记住。',
     }) as HTMLTextAreaElement;
 
     // ② 风格（按钮组，单选）
@@ -514,7 +520,8 @@ function renderPasswordGenerator() {
     const promptWrap = h('div', { class: 'hidden space-y-2' }, [
       h('p', {
         class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
-        textContent: '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，AI 会直接返回几个可用口令。选一个你喜欢的即可，无需再回填本工具。',
+        textContent:
+          '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，AI 会直接返回几个可用口令。选一个你喜欢的即可，无需再回填本工具。',
       }),
       promptArea,
       h('div', { class: 'flex items-center justify-end' }, [
@@ -535,50 +542,69 @@ function renderPasswordGenerator() {
       flashOk('提示词已生成，复制后发给 AI 即可。');
     }
 
-    const card = h('div', {
-      role: 'dialog',
-      'aria-modal': 'true',
-      'aria-label': '用 AI 生成口令',
-      class:
-        'w-[min(92vw,42rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
-    }, [
-      h('div', { class: 'mb-1 flex items-center justify-between gap-2' }, [
-        h('span', { class: 'text-sm font-semibold text-[var(--fg)]', textContent: '💡 用 AI 生成口令' }),
-        h('button', {
-          type: 'button',
-          'aria-label': '关闭',
-          class: 'text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors',
-          textContent: '✕',
-          onclick: closeDialog,
+    const card = h(
+      'div',
+      {
+        role: 'dialog',
+        'aria-modal': 'true',
+        'aria-label': '用 AI 生成口令',
+        class:
+          'w-[min(92vw,42rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
+      },
+      [
+        h('div', { class: 'mb-1 flex items-center justify-between gap-2' }, [
+          h('span', {
+            class: 'text-sm font-semibold text-[var(--fg)]',
+            textContent: '💡 用 AI 生成口令',
+          }),
+          h('button', {
+            type: 'button',
+            'aria-label': '关闭',
+            class: 'text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors',
+            textContent: '✕',
+            onclick: closeDialog,
+          }),
+        ]),
+        h('div', { class: 'mt-2 space-y-2' }, [
+          h('label', {
+            class: 'block text-xs font-medium text-[var(--fg-muted)]',
+            textContent: '① 描述需求或主题（可选）',
+          }),
+          descInput,
+        ]),
+        h('div', { class: 'mt-3 space-y-2' }, [
+          h('label', {
+            class: 'block text-xs font-medium text-[var(--fg-muted)]',
+            textContent: '② 风格',
+          }),
+          styleRow,
+        ]),
+        h('div', { class: 'mt-3 space-y-2' }, [
+          h('label', {
+            class: 'block text-xs font-medium text-[var(--fg-muted)]',
+            textContent: '③ 携带页面设置',
+          }),
+          includeSettingsRow,
+        ]),
+        h('div', { class: 'mt-3 flex items-center justify-end' }, [
+          h('button', {
+            type: 'button',
+            class:
+              'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+            textContent: '生成提示词',
+            onclick: generatePrompt,
+          }),
+        ]),
+        h('div', { class: 'mt-3' }, [promptWrap]),
+        statusRow,
+        h('p', {
+          class:
+            'mt-2 rounded-md bg-[var(--bg)] px-3 py-2 text-[11px] leading-relaxed text-[var(--fg-muted)]',
+          textContent:
+            '安全提示：AI 生成的口令会经过第三方服务、且非密码学随机，适合低敏感场景。重要账号请用上方「生成密码」（本地密码学随机，数据不出本机）。',
         }),
-      ]),
-      h('div', { class: 'mt-2 space-y-2' }, [
-        h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '① 描述需求或主题（可选）' }),
-        descInput,
-      ]),
-      h('div', { class: 'mt-3 space-y-2' }, [
-        h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '② 风格' }),
-        styleRow,
-      ]),
-      h('div', { class: 'mt-3 space-y-2' }, [
-        h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '③ 携带页面设置' }),
-        includeSettingsRow,
-      ]),
-      h('div', { class: 'mt-3 flex items-center justify-end' }, [
-        h('button', {
-          type: 'button',
-          class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
-          textContent: '生成提示词',
-          onclick: generatePrompt,
-        }),
-      ]),
-      h('div', { class: 'mt-3' }, [promptWrap]),
-      statusRow,
-      h('p', {
-        class: 'mt-2 rounded-md bg-[var(--bg)] px-3 py-2 text-[11px] leading-relaxed text-[var(--fg-muted)]',
-        textContent: '安全提示：AI 生成的口令会经过第三方服务、且非密码学随机，适合低敏感场景。重要账号请用上方「生成密码」（本地密码学随机，数据不出本机）。',
-      }),
-    ]);
+      ],
+    );
 
     dialogEl = mountDialog(card);
     requestAnimationFrame(() => descInput.focus());
@@ -663,32 +689,36 @@ function renderPasswordGenerator() {
 
     for (const it of list) {
       historyListWrap.append(
-        h('div', {
-          class:
-            'flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2',
-        }, [
-          h('code', {
-            class: 'flex-1 break-all font-mono text-sm text-[var(--fg)]',
-            textContent: it.value,
-          }),
-          // 每条快捷复制
-          createCopyButton(() => it.value, '复制', '已复制 ✓'),
-          // 单条删除
-          h(
-            'button',
-            {
-              type: 'button',
-              'aria-label': '删除此条',
-              class:
-                'shrink-0 rounded-md border border-[var(--border)] px-2 py-1.5 text-sm text-[var(--fg-muted)] hover:text-red-500 hover:border-red-400 transition-colors',
-              textContent: '✕',
-              onclick: () => {
-                renderHistory(removePassword(it.id));
+        h(
+          'div',
+          {
+            class:
+              'flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2',
+          },
+          [
+            h('code', {
+              class: 'flex-1 break-all font-mono text-sm text-[var(--fg)]',
+              textContent: it.value,
+            }),
+            // 每条快捷复制
+            createCopyButton(() => it.value, '复制', '已复制 ✓'),
+            // 单条删除
+            h(
+              'button',
+              {
+                type: 'button',
+                'aria-label': '删除此条',
+                class:
+                  'shrink-0 rounded-md border border-[var(--border)] px-2 py-1.5 text-sm text-[var(--fg-muted)] hover:text-red-500 hover:border-red-400 transition-colors',
+                textContent: '✕',
+                onclick: () => {
+                  renderHistory(removePassword(it.id));
+                },
               },
-            },
-            [],
-          ),
-        ]),
+              [],
+            ),
+          ],
+        ),
       );
     }
 
@@ -704,49 +734,53 @@ function renderPasswordGenerator() {
   renderHistory();
 
   // ────────── 组装：居中卡片 ──────────
-  const card = h('div', {
-    class:
-      'w-full max-w-2xl rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 sm:p-8 shadow-sm space-y-6',
-  }, [
-    // 结果区
-    h('div', { class: 'space-y-2' }, [
-      h('label', {
-        class: 'text-sm font-medium text-[var(--fg-muted)]',
-        textContent: '生成结果',
-      }),
-      output,
-      h('div', { class: 'flex items-center justify-between gap-2' }, [
-        strengthLabel,
-        h('div', { class: 'flex items-center gap-2' }, [copyBtn, refreshBtn]),
+  const card = h(
+    'div',
+    {
+      class:
+        'w-full max-w-2xl rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 sm:p-8 shadow-sm space-y-6',
+    },
+    [
+      // 结果区
+      h('div', { class: 'space-y-2' }, [
+        h('label', {
+          class: 'text-sm font-medium text-[var(--fg-muted)]',
+          textContent: '生成结果',
+        }),
+        output,
+        h('div', { class: 'flex items-center justify-between gap-2' }, [
+          strengthLabel,
+          h('div', { class: 'flex items-center gap-2' }, [copyBtn, refreshBtn]),
+        ]),
       ]),
-    ]),
-    // 长度
-    h('div', { class: 'space-y-1' }, [
-      h('div', { class: 'flex justify-between text-sm' }, [
-        h('label', { textContent: '长度', htmlFor: 'len' }),
-        lengthValue,
+      // 长度
+      h('div', { class: 'space-y-1' }, [
+        h('div', { class: 'flex justify-between text-sm' }, [
+          h('label', { textContent: '长度', htmlFor: 'len' }),
+          lengthValue,
+        ]),
+        lengthInput,
       ]),
-      lengthInput,
-    ]),
-    // 字符类型
-    h('div', { class: 'space-y-2' }, [
-      h('p', { class: 'text-sm font-medium', textContent: '字符类型' }),
-      checkboxWrap,
-    ]),
-    // 每类至少一个
-    h('label', { class: 'flex items-center gap-2 text-sm cursor-pointer' }, [
-      requireEachInput,
-      '每类字符至少出现一个',
-    ]),
-    // 操作
-    generateBtn,
-    aiBtn,
-    // 分隔
-    h('div', { class: 'border-t border-[var(--border)]' }, []),
-    // 历史
-    toggleBtn,
-    historyPanel,
-  ]);
+      // 字符类型
+      h('div', { class: 'space-y-2' }, [
+        h('p', { class: 'text-sm font-medium', textContent: '字符类型' }),
+        checkboxWrap,
+      ]),
+      // 每类至少一个
+      h('label', { class: 'flex items-center gap-2 text-sm cursor-pointer' }, [
+        requireEachInput,
+        '每类字符至少出现一个',
+      ]),
+      // 操作
+      generateBtn,
+      aiBtn,
+      // 分隔
+      h('div', { class: 'border-t border-[var(--border)]' }, []),
+      // 历史
+      toggleBtn,
+      historyPanel,
+    ],
+  );
 
   // 外层：垂直 + 水平居中
   content.append(h('div', { class: 'flex-1 flex items-center justify-center w-full' }, [card]));

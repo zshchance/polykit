@@ -10,7 +10,10 @@ import { pickQuoteFontSize, isLongQuote, LONG_PADDING } from './types';
 export const dark: CardTemplate = {
   id: 'dark',
   name: '暗夜',
-  preview: { background: 'radial-gradient(circle at 50% 30%,#1e293b,#0f172a)', iconColor: '#d4af37' },
+  preview: {
+    background: 'radial-gradient(circle at 50% 30%,#1e293b,#0f172a)',
+    iconColor: '#d4af37',
+  },
 
   render(el, quote) {
     const long = isLongQuote(quote.text);
@@ -39,14 +42,18 @@ export const dark: CardTemplate = {
       }),
       // 作者
       h('div', {
-        style: 'font-size:32px;color:#d4af37;font-weight:600;max-width:92%;word-break:break-word;overflow-wrap:anywhere;',
+        style:
+          'font-size:32px;color:#d4af37;font-weight:600;max-width:92%;word-break:break-word;overflow-wrap:anywhere;',
         textContent: quote.author,
       }),
       ...(quote.source
-        ? [h('div', {
-            style: 'margin-top:10px;font-size:24px;color:#94a3b8;max-width:92%;word-break:break-word;overflow-wrap:anywhere;',
-            textContent: quote.source,
-          })]
+        ? [
+            h('div', {
+              style:
+                'margin-top:10px;font-size:24px;color:#94a3b8;max-width:92%;word-break:break-word;overflow-wrap:anywhere;',
+              textContent: quote.source,
+            }),
+          ]
         : []),
     );
   },

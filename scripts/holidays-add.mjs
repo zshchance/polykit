@@ -29,7 +29,11 @@ const ROOT = resolve(__dirname, '..');
 const TARGET = resolve(ROOT, 'src/home/calendar/holidays.json');
 
 const VALID_TYPES = /** @type {const} */ (['legal', 'workday', 'festival']);
-const TYPE_HINTS = { legal: '法定假日（休）', workday: '调休上班（班）', festival: '传统节日/节气' };
+const TYPE_HINTS = {
+  legal: '法定假日（休）',
+  workday: '调休上班（班）',
+  festival: '传统节日/节气',
+};
 
 // —— argv 解析 ——
 const argv = process.argv.slice(2);
@@ -45,7 +49,9 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--source') sourceOverride = argv[++i] ?? null;
   else {
     console.error(`未知参数: ${a}`);
-    console.error('用法: npm run holidays:add [-- --file <path>] [-- --dry-run] [-- --source <来源>]');
+    console.error(
+      '用法: npm run holidays:add [-- --file <path>] [-- --dry-run] [-- --source <来源>]',
+    );
     process.exit(1);
   }
 }
@@ -67,7 +73,7 @@ function validateEntry(raw) {
   const back = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
   if (back !== date) throw new Error(`非法日期: "${date}"`);
 
-  const year = (raw.year ? String(raw.year).trim() : String(y));
+  const year = raw.year ? String(raw.year).trim() : String(y);
   if (!/^\d{4}$/.test(year)) throw new Error(`年份错误: "${year}"，需 4 位数字`);
 
   const type = String(raw.type ?? '').trim();
@@ -94,7 +100,7 @@ function parseBatchFile(obj) {
     try {
       entries.push(validateEntry({ date: k, ...(v || {}) }));
     } catch (e) {
-      console.error(`✗ ${k}: ${(/** @type {Error} */ (e)).message}`);
+      console.error(`✗ ${k}: ${/** @type {Error} */ (e).message}`);
       process.exit(1);
     }
   }
@@ -108,17 +114,18 @@ async function interactiveCollect() {
   const entries = [];
   console.log('逐条录入节假日（空日期回车结束）：');
   console.log(`  type 可选：${VALID_TYPES.map((t) => `${t}(${TYPE_HINTS[t]})`).join(' / ')}`);
-  // eslint-disable-next-line no-constant-condition
+
   while (true) {
     const date = (await rl.question('日期 YYYY-MM-DD（空=结束）: ')).trim();
     if (!date) break;
     try {
-      const typeRaw = (await rl.question(`type [${VALID_TYPES.join('/')}]（默认 legal）: `)).trim() || 'legal';
+      const typeRaw =
+        (await rl.question(`type [${VALID_TYPES.join('/')}]（默认 legal）: `)).trim() || 'legal';
       const name = (await rl.question('名称（如 春节/国庆节/立春）: ')).trim();
       entries.push(validateEntry({ date, type: typeRaw, name }));
       console.log(`  ✓ 已加入 ${date} = ${typeRaw} ${name}`);
     } catch (e) {
-      console.error(`  ✗ 录入无效：${(/** @type {Error} */ (e)).message}，请重输该条。`);
+      console.error(`  ✗ 录入无效：${/** @type {Error} */ (e).message}，请重输该条。`);
     }
   }
   rl.close();
@@ -214,7 +221,9 @@ ${yearBlocks.join(',\n')}
 }
 
 // —— 输出 diff ——
-console.log(`\n本次将 ${added > 0 ? `新增 ${added} 条` : ''}${added > 0 && changed > 0 ? '、' : ''}${changed > 0 ? `覆盖 ${changed} 条` : ''}：`);
+console.log(
+  `\n本次将 ${added > 0 ? `新增 ${added} 条` : ''}${added > 0 && changed > 0 ? '、' : ''}${changed > 0 ? `覆盖 ${changed} 条` : ''}：`,
+);
 for (const yr of Object.keys(log).sort()) {
   console.log(`  [${yr}]`);
   for (const item of log[yr]) {

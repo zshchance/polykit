@@ -1,4 +1,5 @@
 import type { DayInfo, HolidaysData } from '@/core/types';
+import { toDateKey } from '@/core/utils/date';
 // Vite 原生支持 JSON 导入；tsconfig 已开启 resolveJsonModule。
 import bundledHolidays from './holidays.json';
 
@@ -47,14 +48,6 @@ function loadMerged(): HolidaysData {
   return merged;
 }
 
-/** YYYY-MM-DD */
-function fmtKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
 /**
  * 查询某一天的信息。
  * 返回的 DayInfo 已考虑调休：法定 workday（补班）优先级高于自然周末判定。
@@ -64,7 +57,7 @@ export function getDayInfo(date: Date): DayInfo | null {
   const year = String(date.getFullYear());
   const yearMap = data.years[year];
   if (!yearMap) return null;
-  const key = fmtKey(date);
+  const key = toDateKey(date);
   const info = yearMap[key];
   if (info) return info;
 

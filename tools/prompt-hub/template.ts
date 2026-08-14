@@ -49,10 +49,7 @@ export function isEmpty(v: Variable, raw: string | undefined): boolean {
  * 同 key 的变量用 variant 的覆盖（default/placeholder/label 等），新增的追加。
  * 用于支持「黑话↔大白话」双向切换时，text 变量的 default 随方向变化。
  */
-export function mergeVariables(
-  base: Variable[],
-  override: Variable[] | undefined,
-): Variable[] {
+export function mergeVariables(base: Variable[], override: Variable[] | undefined): Variable[] {
   if (!override || override.length === 0) return base;
   const map = new Map<string, Variable>(base.map((v) => [v.key, { ...v }]));
   for (const ov of override) {
@@ -101,4 +98,3 @@ export function renderVariant(
   const tpl = resolveTemplate(prompt, variantId);
   return renderTemplate({ ...prompt, template: tpl }, values);
 }
-

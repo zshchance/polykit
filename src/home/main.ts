@@ -4,7 +4,7 @@ import { createThemeToggle, initTheme } from '@/core/components/ThemeToggle';
 import { createSiteFooter } from '@/core/components/SiteFooter';
 import { getRegisteredTools, getCategories } from './registry';
 import type { RegisteredTool } from '@/core/types';
-import { createSearchBar, searchBarContainer } from './components/SearchBar';
+import { createSearchBar } from './components/SearchBar';
 import { createCategoryChips } from './components/CategoryChips';
 import { createToolCard } from './components/ToolCard';
 import { observeStagger } from './components/stagger';
@@ -71,9 +71,7 @@ function renderHome(): void {
       if (onlyStarred && !isStarred(prefs, t.slug)) return false;
       if (query) {
         const q = query.toLowerCase();
-        const hay = [t.name, t.description, ...(t.keywords ?? [])]
-          .join(' ')
-          .toLowerCase();
+        const hay = [t.name, t.description, ...(t.keywords ?? [])].join(' ').toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -144,7 +142,7 @@ function renderHome(): void {
 
   // ────────── 搜索栏 ──────────
   const searchBar = createSearchBar();
-  const searchWrapper = searchBarContainer(searchBar.el);
+  const searchWrapper = searchBar.container;
   searchBar.onChange((q) => {
     query = q;
     rerenderGrid();
@@ -175,13 +173,12 @@ function renderHome(): void {
     },
   });
   starToggle.textContent = '⭐ 星标';
-  // chips 是 role=tablist（语义独立），星标开关是普通 toggle；
-  // 用 flex 容器并排，但 tablist 与 toggle 互不嵌套，避免 ARIA 语义混淆。
-  const filterRow = h(
-    'div',
-    { class: 'flex flex-wrap items-center gap-2' },
-    [chips.el, h('span', { class: 'mx-1 h-5 w-px bg-[var(--border)]' }), starToggle],
-  );
+  // chips 是 role=group 的切换按钮组，星标开关是独立 toggle；并排互不嵌套，语义清晰。
+  const filterRow = h('div', { class: 'flex flex-wrap items-center gap-2' }, [
+    chips.el,
+    h('span', { class: 'mx-1 h-5 w-px bg-[var(--border)]' }),
+    starToggle,
+  ]);
 
   // ────────── 工具网格容器（可替换内容） ──────────
   const gridContainer = h('div', {});
@@ -189,14 +186,6 @@ function renderHome(): void {
     class: 'py-16 text-center text-[var(--fg-muted)]',
     textContent: '没有匹配的工具。',
   });
-
-  /** 把卡片包进 relative wrapper（承载拖拽手柄），返回 wrapper */
-  function wrapCard(card: HTMLAnchorElement, slug: string, index: number): HTMLElement {
-    const wrapper = h('div', { class: 'tool-card-wrap relative h-full' }, [card]) as HTMLElement;
-    (wrapper as unknown as { _slug: string; _index: number })._slug = slug;
-    (wrapper as unknown as { _slug: string; _index: number })._index = index;
-    return wrapper;
-  }
 
   function rerenderGrid(): void {
     const list = filtered();
@@ -207,42 +196,42 @@ function renderHome(): void {
       return;
     }
 
+    // createToolCard 返回的 wrapper（.tool-card-wrap）即拖拽所需的 relative 容器，
+    // _slug/_index 由 enableDragReorder 统一注入，这里无需再包装一层。
     const grid = h(
       'div',
       {
         class: 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3',
       },
       list.map((t, i) =>
-        wrapCard(
-          createToolCard(t, {
-            index: i,
-            pinned: isPinned(prefs, t.slug),
-            starred: isStarred(prefs, t.slug),
-            onTogglePin: () => mutatePrefs(togglePin(prefs, t.slug)),
-            onToggleStar: () => mutatePrefs(toggleStar(prefs, t.slug)),
-          }),
-          t.slug,
-          i,
-        ),
+        createToolCard(t, {
+          index: i,
+          pinned: isPinned(prefs, t.slug),
+          starred: isStarred(prefs, t.slug),
+          onTogglePin: () => mutatePrefs(togglePin(prefs, t.slug)),
+          onToggleStar: () => mutatePrefs(toggleStar(prefs, t.slug)),
+        }),
       ),
     );
     gridContainer.replaceChildren(grid);
     observeStagger(grid);
 
-    // 拖拽排序：仅无筛选时启用
+    // 拖拽排序：仅无筛选时启用；传分组函数让置顶组只能组内拖拽
+    //（跨组落点会被排序规则"置顶在前"抹平，视觉无效还无提示，不如直接不允许）
     if (dragEnabled() && list.length > 1) {
-      enableDragReorder(grid, list.map((t) => t.slug), (newSlugs) => {
-        mutatePrefs(applyOrder(prefs, newSlugs));
-      });
+      enableDragReorder(
+        grid,
+        list.map((t) => t.slug),
+        (newSlugs) => {
+          mutatePrefs(applyOrder(prefs, newSlugs));
+        },
+        (slug) => (isPinned(prefs, slug) ? 'pinned' : 'normal'),
+      );
     }
   }
 
   // ────────── 主栏（搜索+分类+网格） ──────────
-  const mainCol = h('div', { class: 'space-y-5' }, [
-    searchWrapper,
-    filterRow,
-    gridContainer,
-  ]);
+  const mainCol = h('div', { class: 'space-y-5' }, [searchWrapper, filterRow, gridContainer]);
 
   // ────────── 侧栏：时钟 + 万年历 ──────────
   const calendarCard = h(
@@ -256,17 +245,20 @@ function renderHome(): void {
   renderCalendar(calendarCard);
 
   // 侧栏整体：时钟在上、日历在下；sticky 移到外层包裹，避免两元素各自粘连
-  const sideCol = h(
-    'div',
-    { class: 'space-y-4 lg:sticky lg:top-6' },
-    [createClock(), calendarCard],
-  );
+  const sideCol = h('div', { class: 'space-y-4 lg:sticky lg:top-6' }, [
+    createClock(),
+    calendarCard,
+  ]);
 
   // ────────── 两栏布局 ──────────
   const layout = h('div', { class: 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]' }, [
     mainCol,
     sideCol,
   ]);
+
+  // 设置浮层挂到 body 顶层（fixed 定位，脱离布局流）。
+  // 必须在下方「空工具」提前 return 之前挂载，否则零工具时 ⚙ 按钮点了浮层永远不可见。
+  document.body.append(popover);
 
   // 空工具提示
   if (tools.length === 0) {
@@ -282,8 +274,6 @@ function renderHome(): void {
   }
 
   app.append(hero, layout, createSiteFooter());
-  // 设置浮层挂到 body 顶层（fixed 定位，脱离布局流）
-  document.body.append(popover);
   rerenderGrid();
 }
 

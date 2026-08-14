@@ -18,7 +18,14 @@ export const PHILOSOPHY_PROMPTS: Prompt[] = [
     fun: true,
     desc: '抛出一个观点，AI 用苏格拉底式连环追问，逼你把想法想透彻。',
     variables: [
-      { key: 'claim', label: '你的观点', placeholder: '赚钱比读书重要', required: true, multiline: true, default: '赚钱比读书重要' },
+      {
+        key: 'claim',
+        label: '你的观点',
+        placeholder: '赚钱比读书重要',
+        required: true,
+        multiline: true,
+        default: '赚钱比读书重要',
+      },
     ],
     template: `请你扮演苏格拉底，对我下面这个观点进行"产婆术"式的连环追问。
 
@@ -41,7 +48,14 @@ export const PHILOSOPHY_PROMPTS: Prompt[] = [
     fun: true,
     desc: '用萨特/加缪的存在主义视角，给人生迷茫开一剂"荒诞而自由"的方子。',
     variables: [
-      { key: 'trouble', label: '你的迷茫/烦恼', placeholder: '不知道人生有什么意义，每天重复', required: true, multiline: true, default: '不知道人生有什么意义，每天重复同样的事' },
+      {
+        key: 'trouble',
+        label: '你的迷茫/烦恼',
+        placeholder: '不知道人生有什么意义，每天重复',
+        required: true,
+        multiline: true,
+        default: '不知道人生有什么意义，每天重复同样的事',
+      },
     ],
     template: `请用存在主义哲学（萨特、加缪）的视角，回应我的迷茫。
 
@@ -65,7 +79,14 @@ export const PHILOSOPHY_PROMPTS: Prompt[] = [
     fun: true,
     desc: '把你的低谷用尼采的锤子敲打——"杀不死我的"，热血又硬核。',
     variables: [
-      { key: 'situation', label: '你正在经历的', placeholder: '失恋/失业/被否定', required: true, multiline: true, default: '努力了很久的项目失败了，被否定' },
+      {
+        key: 'situation',
+        label: '你正在经历的',
+        placeholder: '失恋/失业/被否定',
+        required: true,
+        multiline: true,
+        default: '努力了很久的项目失败了，被否定',
+      },
     ],
     template: `请用尼采的哲学风格，给我一段硬核的"励志"回应。
 
@@ -88,7 +109,14 @@ export const PHILOSOPHY_PROMPTS: Prompt[] = [
     fun: true,
     desc: '用禅宗公案的机锋，给你的执念来一记当头棒喝。',
     variables: [
-      { key: 'obsession', label: '你正纠结的', placeholder: '反复纠结别人怎么看自己', required: true, multiline: true, default: '总是纠结别人怎么看自己' },
+      {
+        key: 'obsession',
+        label: '你正纠结的',
+        placeholder: '反复纠结别人怎么看自己',
+        required: true,
+        multiline: true,
+        default: '总是纠结别人怎么看自己',
+      },
     ],
     template: `请用禅宗公案的机锋方式，回应我的执念。
 
@@ -111,9 +139,16 @@ export const PHILOSOPHY_PROMPTS: Prompt[] = [
     fun: true,
     desc: '说出你的观点，AI 立刻站到对立面，用最强论据反驳你。',
     variables: [
-      { key: 'view', label: '你的观点', placeholder: '应该禁止短视频', required: true, multiline: true, default: '应该全面禁止短视频' },
+      {
+        key: 'view',
+        label: '你的观点',
+        placeholder: '应该禁止短视频',
+        required: true,
+        multiline: true,
+        default: '应该全面禁止短视频',
+      },
     ],
-    template: `请你扮演"魔鬼代言人"（devil\'s advocate），全力反驳我下面这个观点。
+    template: `请你扮演"魔鬼代言人"（devil's advocate），全力反驳我下面这个观点。
 
 【我的观点】{{view}}
 
@@ -158,7 +193,13 @@ export const PHILOSOPHY_PROMPTS: Prompt[] = [
     fun: true,
     desc: '基于你给的情境，AI 设计一个两难的思想实验，拷问你的道德直觉。',
     variables: [
-      { key: 'topic', label: '主题/领域', placeholder: 'AI、医疗、职场、自动驾驶', required: true, default: '人工智能' },
+      {
+        key: 'topic',
+        label: '主题/领域',
+        placeholder: 'AI、医疗、职场、自动驾驶',
+        required: true,
+        default: '人工智能',
+      },
     ],
     template: `请围绕「{{topic}}」这个主题，设计一个经典的伦理两难"思想实验"（类似电车难题）。
 
@@ -180,7 +221,14 @@ export const PHILOSOPHY_PROMPTS: Prompt[] = [
     fun: true,
     desc: '用斯多葛学派的"控制二分法"，帮你把焦虑拆成能管和不能管。',
     variables: [
-      { key: 'worry', label: '你正焦虑的事', placeholder: '担心面试表现、担心别人评价', required: true, multiline: true, default: '马上要面试，很怕表现不好被拒绝' },
+      {
+        key: 'worry',
+        label: '你正焦虑的事',
+        placeholder: '担心面试表现、担心别人评价',
+        required: true,
+        multiline: true,
+        default: '马上要面试，很怕表现不好被拒绝',
+      },
     ],
     template: `请用斯多葛学派（爱比克泰德、马可·奥勒留）的智慧，帮我应对这件焦虑的事。
 
@@ -204,7 +252,13 @@ export const PHILOSOPHY_PROMPTS: Prompt[] = [
     fun: true,
     desc: '给个概念，AI 发明一个烧脑的思想实验，挑战你的常识。',
     variables: [
-      { key: 'concept', label: '想探讨的概念', placeholder: '自由意志、记忆、自我、正义', required: true, default: '自由意志' },
+      {
+        key: 'concept',
+        label: '想探讨的概念',
+        placeholder: '自由意志、记忆、自我、正义',
+        required: true,
+        default: '自由意志',
+      },
     ],
     template: `请围绕「{{concept}}」这个概念，原创一个烧脑的"思想实验"。
 
@@ -225,7 +279,14 @@ export const PHILOSOPHY_PROMPTS: Prompt[] = [
     fun: true,
     desc: '让不同哲学家点评一件日常小事，看他们各执一词的滑稽与深刻。',
     variables: [
-      { key: 'thing', label: '一件日常小事', placeholder: '点奶茶要排队半小时', required: true, multiline: true, default: '为了一杯奶茶排队半小时' },
+      {
+        key: 'thing',
+        label: '一件日常小事',
+        placeholder: '点奶茶要排队半小时',
+        required: true,
+        multiline: true,
+        default: '为了一杯奶茶排队半小时',
+      },
     ],
     template: `请让 4 位不同流派的哲学家，各自点评这件日常小事。
 

@@ -124,7 +124,11 @@ const VALID_CURSORS: CursorStyle[] = ['none', '▋', '_', '█'];
 function isValidColor(v: unknown): v is string {
   if (typeof v !== 'string' || v.trim() === '') return false;
   const s = v.trim();
-  return /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s) || /^(rgb|hsl)a?\(/i.test(s) || /^[a-z]+$/i.test(s);
+  return (
+    /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s) ||
+    /^(rgb|hsl)a?\(/i.test(s) ||
+    /^[a-z]+$/i.test(s)
+  );
 }
 
 export interface AppearanceValidation {
@@ -142,8 +146,10 @@ export function validateAppearance(raw: Record<string, unknown>): AppearanceVali
   const base = DEFAULT_PRESET.config;
   const bg = typeof raw.bg === 'string' ? raw.bg : base.bg;
   const fg = typeof raw.fg === 'string' ? raw.fg : base.fg;
-  if (!isValidColor(bg)) return { ok: false, cleaned: makeDefault(), reason: `背景色不合法：${raw.bg}` };
-  if (!isValidColor(fg)) return { ok: false, cleaned: makeDefault(), reason: `文字色不合法：${raw.fg}` };
+  if (!isValidColor(bg))
+    return { ok: false, cleaned: makeDefault(), reason: `背景色不合法：${raw.bg}` };
+  if (!isValidColor(fg))
+    return { ok: false, cleaned: makeDefault(), reason: `文字色不合法：${raw.fg}` };
 
   const terminal = VALID_TERMINALS.includes(raw.terminal as TerminalType)
     ? (raw.terminal as TerminalType)
@@ -169,9 +175,15 @@ export function validateAppearance(raw: Record<string, unknown>): AppearanceVali
 function makeDefault(): StyleAppearance {
   const c = DEFAULT_PRESET.config;
   return {
-    bg: c.bg, fg: c.fg, terminal: c.terminal, title: c.title,
-    showFrame: c.showFrame, crtScanlines: c.crtScanlines, crtGlow: c.crtGlow,
-    crtCurve: c.crtCurve, cursor: c.cursor,
+    bg: c.bg,
+    fg: c.fg,
+    terminal: c.terminal,
+    title: c.title,
+    showFrame: c.showFrame,
+    crtScanlines: c.crtScanlines,
+    crtGlow: c.crtGlow,
+    crtCurve: c.crtCurve,
+    cursor: c.cursor,
   };
 }
 
@@ -261,15 +273,21 @@ export interface ParsedStyleAIOutput {
   preview: { bg: string; fg: string };
 }
 
-const NAME_LINE_RE = /^[ \t]*(?:(?:\/\/|#)\s*)?(?:名称|风格名(?:称)?|name)[ \t]*[:：][ \t]*(.+?)[ \t]*$/i;
-const BG_LINE_RE = /^[ \t]*(?:(?:\/\/|#)\s*)?(?:背景|缩略图背景|background|bg)[ \t]*[:：][ \t]*(.+?)[ \t]*$/i;
-const FG_LINE_RE = /^[ \t]*(?:(?:\/\/|#)\s*)?(?:文字色|前景色|缩略图文字色|foreground|fg)[ \t]*[:：][ \t]*(.+?)[ \t]*$/i;
+const NAME_LINE_RE =
+  /^[ \t]*(?:(?:\/\/|#)\s*)?(?:名称|风格名(?:称)?|name)[ \t]*[:：][ \t]*(.+?)[ \t]*$/i;
+const BG_LINE_RE =
+  /^[ \t]*(?:(?:\/\/|#)\s*)?(?:背景|缩略图背景|background|bg)[ \t]*[:：][ \t]*(.+?)[ \t]*$/i;
+const FG_LINE_RE =
+  /^[ \t]*(?:(?:\/\/|#)\s*)?(?:文字色|前景色|缩略图文字色|foreground|fg)[ \t]*[:：][ \t]*(.+?)[ \t]*$/i;
 
 /** 从一行匹配结果里提取干净的值（去引号，不去括号——颜色值不会有括号问题）。 */
 function cleanMetaValue(line: string, re: RegExp): string | null {
   const m = line.trim().match(re);
   if (!m) return null;
-  return m[1]!.trim().replace(/^["'「『]+|["'」』]+$/g, '').trim();
+  return m[1]!
+    .trim()
+    .replace(/^["'「『]+|["'」』]+$/g, '')
+    .trim();
 }
 
 /**
@@ -281,7 +299,7 @@ export function parseStyleAIOutput(raw: string): ParsedStyleAIOutput | null {
   if (!text) return null;
 
   // 1) 提取代码块（```json 优先，否则去 ``` 行）
-  let body = '';
+  let body: string;
   const fence = text.match(/```(?:json)?\s*\n([\s\S]*?)\n?```/i);
   if (fence) {
     body = fence[1]!.trim();
@@ -328,7 +346,7 @@ export function parseStyleAIOutput(raw: string): ParsedStyleAIOutput | null {
     .join('\n')
     .trim();
 
-  let parsedObj: Record<string, unknown> = {};
+  let parsedObj: Record<string, unknown>;
   try {
     parsedObj = JSON.parse(jsonText) as Record<string, unknown>;
   } catch {
@@ -342,10 +360,14 @@ export function parseStyleAIOutput(raw: string): ParsedStyleAIOutput | null {
       return m ? m[1] === 'true' : undefined;
     };
     parsedObj = {
-      bg: pickStr('bg'), fg: pickStr('fg'),
-      terminal: pickStr('terminal'), title: pickStr('title'),
-      showFrame: pickBool('showFrame'), crtScanlines: pickBool('crtScanlines'),
-      crtGlow: pickBool('crtGlow'), crtCurve: pickBool('crtCurve'),
+      bg: pickStr('bg'),
+      fg: pickStr('fg'),
+      terminal: pickStr('terminal'),
+      title: pickStr('title'),
+      showFrame: pickBool('showFrame'),
+      crtScanlines: pickBool('crtScanlines'),
+      crtGlow: pickBool('crtGlow'),
+      crtCurve: pickBool('crtCurve'),
       cursor: pickStr('cursor'),
     };
   }

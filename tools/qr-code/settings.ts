@@ -2,7 +2,8 @@
  * 二维码生成器 —— 用户偏好本地持久化（localStorage）。
  *
  * 记住用户上次的内容、点形状、纠错等级、配色、Logo 设置，重进自动还原。
- * 与项目其它 settings 模块一致：带 version 的 JSON blob，损坏/隐私模式安全回退。
+ * 与项目其它 settings 模块一致：带 version 的 JSON blob，读写经 core/utils/storage
+ * 统一容错，损坏/隐私模式安全回退。
  *
  * 除配置外，还持久化两张图（转 base64 dataURL，压缩到长边≤800）：
  *   - Logo 图（qr-code:logo-img）：重进恢复中心 Logo
@@ -10,6 +11,8 @@
  *     重进恢复识别下拉与选中项，免去重新上传
  * 图片用独立 key 存（base64 很大，与配置 JSON 分开，配置读写不被拖慢）。
  */
+
+import { readJSON, writeJSON, removeKey } from '@/core/utils/storage';
 
 import {
   DEFAULT_CONFIG,
@@ -60,44 +63,34 @@ function isHex(s: unknown): s is string {
  * 对每个字段单独校验，合法才采用，否则用默认值，保证向前兼容（新增字段旧草稿无则默认）。
  */
 export function loadConfig(): QrConfig {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_CONFIG };
-    const parsed = JSON.parse(raw) as Partial<ConfigBlob>;
-    if (!parsed || typeof parsed !== 'object') return { ...DEFAULT_CONFIG };
+  const parsed = readJSON(STORAGE_KEY) as Partial<ConfigBlob> | null;
+  if (!parsed) return { ...DEFAULT_CONFIG };
 
-    const c = parsed.config ?? {};
-    return {
-      text: typeof c.text === 'string' ? c.text : DEFAULT_CONFIG.text,
-      errorLevel: isErrorLevel(c.errorLevel) ? c.errorLevel : DEFAULT_CONFIG.errorLevel,
-      dotShape: isDotShape(c.dotShape) ? c.dotShape : DEFAULT_CONFIG.dotShape,
-      eyeShape: isEyeShape(c.eyeShape) ? c.eyeShape : DEFAULT_CONFIG.eyeShape,
-      fgColor: isHex(c.fgColor) ? c.fgColor : DEFAULT_CONFIG.fgColor,
-      bgColor: isHex(c.bgColor) ? c.bgColor : DEFAULT_CONFIG.bgColor,
-      withLogo: typeof c.withLogo === 'boolean' ? c.withLogo : DEFAULT_CONFIG.withLogo,
-      logoRatio:
-        typeof c.logoRatio === 'number' && c.logoRatio > 0 && c.logoRatio <= 0.4
-          ? c.logoRatio
-          : DEFAULT_CONFIG.logoRatio,
-      logoFit: isLogoFit(c.logoFit) ? c.logoFit : DEFAULT_CONFIG.logoFit,
-      activeStyleId:
-        c.activeStyleId === null || typeof c.activeStyleId === 'string'
-          ? c.activeStyleId
-          : DEFAULT_CONFIG.activeStyleId,
-    };
-  } catch {
-    return { ...DEFAULT_CONFIG };
-  }
+  const c = parsed.config ?? {};
+  return {
+    text: typeof c.text === 'string' ? c.text : DEFAULT_CONFIG.text,
+    errorLevel: isErrorLevel(c.errorLevel) ? c.errorLevel : DEFAULT_CONFIG.errorLevel,
+    dotShape: isDotShape(c.dotShape) ? c.dotShape : DEFAULT_CONFIG.dotShape,
+    eyeShape: isEyeShape(c.eyeShape) ? c.eyeShape : DEFAULT_CONFIG.eyeShape,
+    fgColor: isHex(c.fgColor) ? c.fgColor : DEFAULT_CONFIG.fgColor,
+    bgColor: isHex(c.bgColor) ? c.bgColor : DEFAULT_CONFIG.bgColor,
+    withLogo: typeof c.withLogo === 'boolean' ? c.withLogo : DEFAULT_CONFIG.withLogo,
+    logoRatio:
+      typeof c.logoRatio === 'number' && c.logoRatio > 0 && c.logoRatio <= 0.4
+        ? c.logoRatio
+        : DEFAULT_CONFIG.logoRatio,
+    logoFit: isLogoFit(c.logoFit) ? c.logoFit : DEFAULT_CONFIG.logoFit,
+    activeStyleId:
+      c.activeStyleId === null || typeof c.activeStyleId === 'string'
+        ? c.activeStyleId
+        : DEFAULT_CONFIG.activeStyleId,
+  };
 }
 
 /** 持久化配置（隐私模式 / 配额满时静默忽略） */
 export function saveConfig(cfg: QrConfig): void {
-  try {
-    const blob: ConfigBlob = { version: CURRENT_VERSION, config: cfg };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
-  } catch {
-    // 静默忽略
-  }
+  const blob: ConfigBlob = { version: CURRENT_VERSION, config: cfg };
+  writeJSON(STORAGE_KEY, blob);
 }
 
 // ─────────────────────────── Logo 图持久化 ───────────────────────────
@@ -141,42 +134,34 @@ export interface DetectedBlob {
 
 /** 读取识别态；无/损坏返回 null */
 export function loadDetectedImage(): DetectedBlob | null {
-  try {
-    const raw = localStorage.getItem(DETECTED_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<DetectedBlob>;
-    if (!parsed || typeof parsed !== 'object') return null;
-    if (typeof parsed.dataUrl !== 'string' || !parsed.dataUrl.startsWith('data:image/')) return null;
-    if (!Array.isArray(parsed.codes)) return null;
-    const codes = parsed.codes.filter(
-      (c) => c && typeof c.text === 'string' && c.box && typeof c.box.x === 'number',
-    );
-    if (codes.length === 0) return null;
-    const selectedIndex =
-      typeof parsed.selectedIndex === 'number' && parsed.selectedIndex >= 0 && parsed.selectedIndex < codes.length
-        ? parsed.selectedIndex
-        : 0;
-    return { version: CURRENT_VERSION, dataUrl: parsed.dataUrl, codes, selectedIndex };
-  } catch {
-    return null;
-  }
+  const parsed = readJSON(DETECTED_KEY) as Partial<DetectedBlob> | null;
+  if (!parsed) return null;
+  if (typeof parsed.dataUrl !== 'string' || !parsed.dataUrl.startsWith('data:image/')) return null;
+  if (!Array.isArray(parsed.codes)) return null;
+  const codes = parsed.codes.filter(
+    (c) => c && typeof c.text === 'string' && c.box && typeof c.box.x === 'number',
+  );
+  if (codes.length === 0) return null;
+  const selectedIndex =
+    typeof parsed.selectedIndex === 'number' &&
+    parsed.selectedIndex >= 0 &&
+    parsed.selectedIndex < codes.length
+      ? parsed.selectedIndex
+      : 0;
+  return { version: CURRENT_VERSION, dataUrl: parsed.dataUrl, codes, selectedIndex };
 }
 
 /** 存识别态。隐私模式 / 配额满时静默忽略。 */
-export function saveDetectedImage(dataUrl: string, codes: DetectedCode[], selectedIndex: number): void {
-  try {
-    const blob: DetectedBlob = { version: CURRENT_VERSION, dataUrl, codes, selectedIndex };
-    localStorage.setItem(DETECTED_KEY, JSON.stringify(blob));
-  } catch {
-    // 静默忽略（大图可能超配额）
-  }
+export function saveDetectedImage(
+  dataUrl: string,
+  codes: DetectedCode[],
+  selectedIndex: number,
+): void {
+  const blob: DetectedBlob = { version: CURRENT_VERSION, dataUrl, codes, selectedIndex };
+  writeJSON(DETECTED_KEY, blob);
 }
 
 /** 清除识别态（如用户想重新上传） */
 export function clearDetectedImage(): void {
-  try {
-    localStorage.removeItem(DETECTED_KEY);
-  } catch {
-    // 静默忽略
-  }
+  removeKey(DETECTED_KEY);
 }

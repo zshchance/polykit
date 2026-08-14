@@ -2,8 +2,11 @@
  * 历史记录持久化 —— 记住用户生成过的防检测字符，方便重新复制。
  *
  * 范式照搬 password-generator/history.ts：versioned blob + 脏数据过滤 +
- * 按业务值去重 + 置顶截断。所有数据仅在浏览器 localStorage，不上传。
+ * 按业务值去重 + 置顶截断，读写经 core/utils/storage 统一容错。
+ * 所有数据仅在浏览器 localStorage，不上传。
  */
+
+import { readJSON, writeJSON } from '@/core/utils/storage';
 
 const STORAGE_KEY = 'contact-obfuscator:history';
 const MAX_ITEMS = 30;
@@ -30,36 +33,26 @@ interface HistoryBlob {
 
 /** 读取全部历史；存储损坏/为空时返回 [] */
 export function loadHistory(): StoredResult[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Partial<HistoryBlob>;
-    if (!parsed || typeof parsed !== 'object') return [];
-    const items = parsed.items;
-    if (!Array.isArray(items)) return [];
-    // 逐条校验：字段类型齐全才保留
-    return items.filter(
-      (it): it is StoredResult =>
-        !!it &&
-        typeof it?.id === 'string' &&
-        typeof it?.input === 'string' &&
-        typeof it?.output === 'string' &&
-        typeof it?.note === 'string' &&
-        typeof it?.createdAt === 'number',
-    );
-  } catch {
-    return [];
-  }
+  const parsed = readJSON(STORAGE_KEY) as Partial<HistoryBlob> | null;
+  if (!parsed) return [];
+  const items = parsed.items;
+  if (!Array.isArray(items)) return [];
+  // 逐条校验：字段类型齐全才保留
+  return items.filter(
+    (it): it is StoredResult =>
+      !!it &&
+      typeof it?.id === 'string' &&
+      typeof it?.input === 'string' &&
+      typeof it?.output === 'string' &&
+      typeof it?.note === 'string' &&
+      typeof it?.createdAt === 'number',
+  );
 }
 
 /** 持久化全部历史（隐私模式 / 配额满时静默忽略） */
 function saveHistory(items: StoredResult[]): void {
-  try {
-    const blob: HistoryBlob = { version: CURRENT_VERSION, items };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
-  } catch {
-    // 容量满 / 隐私模式：静默忽略
-  }
+  const blob: HistoryBlob = { version: CURRENT_VERSION, items };
+  writeJSON(STORAGE_KEY, blob);
 }
 
 /**

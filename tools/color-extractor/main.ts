@@ -6,17 +6,9 @@ import { createCopyButton } from '@/core/components/CopyButton';
 import { copyText } from '@/core/utils/clipboard';
 import { extractPalette, type ExtractedColor } from './extractor';
 import { loadImage, revokeImage, type LoadedImage } from './image';
-import {
-  formatPalette,
-  FORMAT_OPTIONS,
-  formatName,
-  type OutputFormat,
-} from './palette-format';
+import { formatPalette, FORMAT_OPTIONS, formatName, type OutputFormat } from './palette-format';
 import { PROMPT_RECIPES } from './ai-prompts';
-import {
-  colorName,
-  readableForeground,
-} from './color-utils';
+import { colorName, readableForeground } from './color-utils';
 import {
   loadPrefs,
   savePrefs,
@@ -57,17 +49,27 @@ function renderColorExtractor(): void {
   }
 
   // ────────── 1. 拖拽/选择区 ──────────
-  const dropzone = h('div', {
-    role: 'button',
-    tabindex: '0',
-    'aria-label': '选择或拖入图片',
-    class:
-      'flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--bg-elevated)] px-6 py-12 text-center cursor-pointer transition-colors hover:border-[var(--accent)] focus:outline-none focus-visible:border-[var(--accent)]',
-  }, [
-    h('div', { class: 'text-3xl', textContent: '🖼️' }),
-    h('div', { class: 'text-sm font-medium text-[var(--fg)]', textContent: '点击选择图片，或拖拽到此处' }),
-    h('div', { class: 'text-xs text-[var(--fg-muted)]', textContent: '支持 PNG / JPG / WebP / GIF，图片仅在本地处理，不会上传' }),
-  ]);
+  const dropzone = h(
+    'div',
+    {
+      role: 'button',
+      tabindex: '0',
+      'aria-label': '选择或拖入图片',
+      class:
+        'flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--bg-elevated)] px-6 py-12 text-center cursor-pointer transition-colors hover:border-[var(--accent)] focus:outline-none focus-visible:border-[var(--accent)]',
+    },
+    [
+      h('div', { class: 'text-3xl', textContent: '🖼️' }),
+      h('div', {
+        class: 'text-sm font-medium text-[var(--fg)]',
+        textContent: '点击选择图片，或拖拽到此处',
+      }),
+      h('div', {
+        class: 'text-xs text-[var(--fg-muted)]',
+        textContent: '支持 PNG / JPG / WebP / GIF，图片仅在本地处理，不会上传',
+      }),
+    ],
+  );
 
   const fileInput = h('input', {
     type: 'file',
@@ -139,7 +141,10 @@ function renderColorExtractor(): void {
   }
 
   // ────────── 2. 控制条 ──────────
-  const countLabel = h('span', { class: 'text-sm font-medium text-[var(--fg)]', textContent: `${colorCount} 色` });
+  const countLabel = h('span', {
+    class: 'text-sm font-medium text-[var(--fg)]',
+    textContent: `${colorCount} 色`,
+  });
   const countSlider = h('input', {
     type: 'range',
     min: String(MIN_COLOR_COUNT),
@@ -182,13 +187,19 @@ function renderColorExtractor(): void {
   const controls = h('div', { class: 'flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6' }, [
     h('div', { class: 'flex-1' }, [
       h('div', { class: 'mb-1 flex items-center justify-between' }, [
-        h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '提取色数' }),
+        h('span', {
+          class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+          textContent: '提取色数',
+        }),
         countLabel,
       ]),
       countSlider,
     ]),
     h('div', { class: 'flex items-center gap-2' }, [
-      h('span', { class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '输出格式' }),
+      h('span', {
+        class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+        textContent: '输出格式',
+      }),
       formatSelect,
     ]),
   ]);
@@ -199,7 +210,8 @@ function renderColorExtractor(): void {
     class: 'grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4',
   });
   const emptyHint = h('div', {
-    class: 'rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-10 text-center text-sm text-[var(--fg-muted)]',
+    class:
+      'rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-10 text-center text-sm text-[var(--fg-muted)]',
     textContent: '上传图片后，这里会显示提取出的主色与多格式配色。',
   });
 
@@ -238,13 +250,20 @@ function renderColorExtractor(): void {
       return;
     }
     previewWrap.replaceChildren(
-      h('div', { class: 'overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]' }, [
-        h('img', {
-          src: image.previewUrl,
-          alt: '原图预览',
-          class: 'mx-auto max-h-72 w-auto',
-        }),
-      ]),
+      h(
+        'div',
+        {
+          class:
+            'overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]',
+        },
+        [
+          h('img', {
+            src: image.previewUrl,
+            alt: '原图预览',
+            class: 'mx-auto max-h-72 w-auto',
+          }),
+        ],
+      ),
     );
   }
 
@@ -283,15 +302,22 @@ function renderColorExtractor(): void {
         }, 1200);
       },
     });
-    return h('div', {
-      class: 'overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]',
-    }, [
-      swatch,
-      h('div', { class: 'flex items-center justify-between gap-1 px-2.5 py-1.5' }, [
-        h('span', { class: 'text-xs font-medium text-[var(--fg)]', textContent: colorName(c.rgb) }),
-        h('span', { class: 'text-[11px] text-[var(--fg-muted)]', textContent: pct }),
-      ]),
-    ]);
+    return h(
+      'div',
+      {
+        class: 'overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]',
+      },
+      [
+        swatch,
+        h('div', { class: 'flex items-center justify-between gap-1 px-2.5 py-1.5' }, [
+          h('span', {
+            class: 'text-xs font-medium text-[var(--fg)]',
+            textContent: colorName(c.rgb),
+          }),
+          h('span', { class: 'text-[11px] text-[var(--fg-muted)]', textContent: pct }),
+        ]),
+      ],
+    );
   }
 
   // ────────── 4. 多格式输出 ──────────
@@ -312,7 +338,10 @@ function renderColorExtractor(): void {
     outputArea.replaceChildren(
       h('div', { class: 'rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4' }, [
         h('div', { class: 'mb-2 flex items-center justify-between gap-2' }, [
-          h('span', { class: 'text-sm font-medium text-[var(--fg)]', textContent: formatName(format) }),
+          h('span', {
+            class: 'text-sm font-medium text-[var(--fg)]',
+            textContent: formatName(format),
+          }),
           createCopyButton(() => formatPalette(currentColors, format), '复制全部', '已复制 ✓'),
         ]),
         ta,
@@ -341,7 +370,9 @@ function renderColorExtractor(): void {
     const text = recipe.build(currentColors);
 
     // 芯片行
-    const chipRow = h('div', { class: 'flex flex-wrap gap-2' },
+    const chipRow = h(
+      'div',
+      { class: 'flex flex-wrap gap-2' },
       PROMPT_RECIPES.map((r) =>
         h('button', {
           type: 'button',
@@ -379,7 +410,8 @@ function renderColorExtractor(): void {
         preview,
         h('p', {
           class: 'mt-2 text-[11px] text-[var(--fg-muted)]',
-          textContent: '色值在浏览器本地提取，复制提示词后可丢给任意 AI（GLM / Kimi / 通义 / ChatGPT 等）。',
+          textContent:
+            '色值在浏览器本地提取，复制提示词后可丢给任意 AI（GLM / Kimi / 通义 / ChatGPT 等）。',
         }),
       ]),
     );
@@ -387,9 +419,7 @@ function renderColorExtractor(): void {
 
   // ────────── 反馈：加载态 / 错误提示 ──────────
   const statusLine = h('div', { class: 'min-h-[1.25rem] text-xs text-[var(--fg-muted)]' });
-  let statusTimer: number | undefined;
   function showStatus(msg: string, isError = false): void {
-    clearTimeout(statusTimer);
     statusLine.textContent = msg;
     statusLine.style.color = isError ? 'var(--holiday-legal)' : 'var(--fg-muted)';
   }
@@ -412,27 +442,40 @@ function renderColorExtractor(): void {
   content.append(
     h('p', {
       class: 'mb-5 text-sm text-[var(--fg-muted)]',
-      textContent: '上传一张图片，自动提取主色，并生成可直接粘贴到工程的 CSS 变量 / Tailwind / SCSS / JSON 配色。图片仅在浏览器本地处理。',
+      textContent:
+        '上传一张图片，自动提取主色，并生成可直接粘贴到工程的 CSS 变量 / Tailwind / SCSS / JSON 配色。图片仅在浏览器本地处理。',
     }),
     dropzone,
     fileInput,
     statusLine,
     h('div', { class: 'mt-6' }, [
-      h('div', { class: 'mb-2 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '原图预览' }),
+      h('div', {
+        class: 'mb-2 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+        textContent: '原图预览',
+      }),
       previewWrap,
     ]),
     h('div', { class: 'mt-6' }, [controls]),
     h('div', { class: 'mt-8' }, [
-      h('div', { class: 'mb-2 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '提取色板' }),
+      h('div', {
+        class: 'mb-2 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+        textContent: '提取色板',
+      }),
       colorsGrid,
       emptyHint,
     ]),
     h('div', { class: 'mt-8' }, [
-      h('div', { class: 'mb-2 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '多格式输出' }),
+      h('div', {
+        class: 'mb-2 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+        textContent: '多格式输出',
+      }),
       outputArea,
     ]),
     h('div', { class: 'mt-8' }, [
-      h('div', { class: 'mb-2 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]', textContent: '🎨 AI 玩法提示词' }),
+      h('div', {
+        class: 'mb-2 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
+        textContent: '🎨 AI 玩法提示词',
+      }),
       aiPromptArea,
     ]),
   );

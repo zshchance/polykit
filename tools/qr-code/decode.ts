@@ -39,11 +39,7 @@ const SCALE_TRIES = [1, 0.6, 0.4, 0.28];
  * 在"指定像素缓冲"上跑一次 jsQR（正反色都试）。
  * 返回原始结果（含四角位置），不命中返回 null。
  */
-function scanOnce(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number,
-): ReturnType<typeof jsQR> {
+function scanOnce(data: Uint8ClampedArray, width: number, height: number): ReturnType<typeof jsQR> {
   return jsQR(data, width, height, { inversionAttempts: 'attemptBoth' });
 }
 
@@ -81,11 +77,7 @@ function scaleDown(
  * 解码单个二维码（首个）。多尺度 + 反色重试，命中即返回。
  * @param data RGBA 一维像素（length = w*h*4）
  */
-export function decodeQr(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number,
-): DecodeResult {
+export function decodeQr(data: Uint8ClampedArray, width: number, height: number): DecodeResult {
   for (const scale of SCALE_TRIES) {
     const view = scaleDown(data, width, height, scale);
     if (!view) continue;
@@ -134,8 +126,18 @@ export function detectAllQr(
     // 注意：缩小档命中时，res.location 的坐标是缩小后的，需还原到原图坐标
     const f = 1 / usedScale;
     const loc = res.location;
-    const xs = [loc.topLeftCorner.x, loc.topRightCorner.x, loc.bottomRightCorner.x, loc.bottomLeftCorner.x];
-    const ys = [loc.topLeftCorner.y, loc.topRightCorner.y, loc.bottomRightCorner.y, loc.bottomLeftCorner.y];
+    const xs = [
+      loc.topLeftCorner.x,
+      loc.topRightCorner.x,
+      loc.bottomRightCorner.x,
+      loc.bottomLeftCorner.x,
+    ];
+    const ys = [
+      loc.topLeftCorner.y,
+      loc.topRightCorner.y,
+      loc.bottomRightCorner.y,
+      loc.bottomLeftCorner.y,
+    ];
     const minX = Math.min(...xs) * f;
     const maxX = Math.max(...xs) * f;
     const minY = Math.min(...ys) * f;

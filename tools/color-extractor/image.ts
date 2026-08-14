@@ -44,6 +44,7 @@ export async function loadImage(file: File): Promise<LoadedImage> {
   try {
     bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
   } catch {
+    URL.revokeObjectURL(previewUrl);
     throw new Error('图片解码失败，请换一张试试');
   }
 
@@ -63,9 +64,7 @@ export async function loadImage(file: File): Promise<LoadedImage> {
   // OffscreenCanvasRenderingContext2D | RenderingContext | null，其中 RenderingContext
   // 类型声明里没有 drawImage/getImageData（运行时实际都有）。断言收窄为统一的 2D 上下文。
   const ctx = canvas.getContext('2d', { willReadFrequently: true }) as
-    | CanvasRenderingContext2D
-    | OffscreenCanvasRenderingContext2D
-    | null;
+    CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
   if (!ctx) {
     bitmap.close?.();
     URL.revokeObjectURL(previewUrl);

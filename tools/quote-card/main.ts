@@ -4,7 +4,12 @@ import { renderToolLayout } from '@/core/components/ToolLayout';
 import { initTheme } from '@/core/components/ThemeToggle';
 import { on } from '@/core/utils/dom';
 import { searchQuotes, getRandomQuote, getQuoteCount, type QuoteRecord } from './data/quotes';
-import { defaultTemplate, getTemplate, getEffectiveTemplates, setCustomTemplateProvider } from './templates';
+import {
+  defaultTemplate,
+  getTemplate,
+  getEffectiveTemplates,
+  setCustomTemplateProvider,
+} from './templates';
 import type { QuoteData, CardTemplate } from './templates/types';
 import { renderCard } from './card';
 import { downloadCard, safeFilename } from './export';
@@ -40,7 +45,16 @@ import {
   buildTemplatePrompt,
 } from './custom-templates';
 import { createCopyButton } from '@/core/components/CopyButton';
-import { exportVideo, finishAllAnimations, VIDEO_RESOLUTIONS, getVideoResolution, type VideoResId, VIDEO_FPS, getVideoFps, type VideoFpsId } from './video-export';
+import {
+  exportVideo,
+  finishAllAnimations,
+  VIDEO_RESOLUTIONS,
+  getVideoResolution,
+  type VideoResId,
+  VIDEO_FPS,
+  getVideoFps,
+  type VideoFpsId,
+} from './video-export';
 
 initTheme();
 
@@ -80,7 +94,11 @@ function renderQuoteCard() {
     videoFps: VideoFpsId;
   } = {
     quote: restored
-      ? { text: restored.text || DEFAULT_QUOTE.text, author: restored.author || DEFAULT_QUOTE.author, source: restored.source }
+      ? {
+          text: restored.text || DEFAULT_QUOTE.text,
+          author: restored.author || DEFAULT_QUOTE.author,
+          source: restored.source,
+        }
       : { ...DEFAULT_QUOTE },
     templateId: restored?.templateId ?? defaultTemplate.id,
     aspectId: restored?.aspectId ?? '1:1',
@@ -150,7 +168,14 @@ function renderQuoteCard() {
   }
 
   // 画板外层容器（决定显示宽度，承载缩放后的画板）
-  const cardStage = h('div', { class: 'w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]' }, [cardEl]);
+  const cardStage = h(
+    'div',
+    {
+      class:
+        'w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]',
+    },
+    [cardEl],
+  );
 
   // 模板选择器（4 列缩略图网格 + 右上角 💡 AI 生成 + 自定义项 ✕ 删除）
   // 与动画选择器交互对称，但保留缩略图网格（模板风格靠色块预览最直观，折叠成文字按钮会丢这个价值）。
@@ -158,35 +183,50 @@ function renderQuoteCard() {
   const templateGrid = h('div', { class: 'grid grid-cols-4 gap-2' });
 
   function makeTemplateButton(t: CardTemplate): HTMLElement {
-    const btn = h('button', {
-      type: 'button',
-      'data-tpl': t.id,
-      class: [
-        'flex', 'flex-col', 'items-center', 'gap-1.5', 'rounded-lg', 'border-2', 'p-2', 'transition-all',
-        t.id === state.templateId
-          ? 'border-[var(--accent)]'
-          : 'border-[var(--border)] hover:border-[var(--accent)]',
-      ].join(' '),
-      onclick: () => {
-        state.templateId = t.id;
-        updateTemplateSelection();
-        rerenderCard();
-        persistDraft();
+    const btn = h(
+      'button',
+      {
+        type: 'button',
+        'data-tpl': t.id,
+        class: [
+          'flex',
+          'flex-col',
+          'items-center',
+          'gap-1.5',
+          'rounded-lg',
+          'border-2',
+          'p-2',
+          'transition-all',
+          t.id === state.templateId
+            ? 'border-[var(--accent)]'
+            : 'border-[var(--border)] hover:border-[var(--accent)]',
+        ].join(' '),
+        onclick: () => {
+          state.templateId = t.id;
+          updateTemplateSelection();
+          rerenderCard();
+          persistDraft();
+        },
       },
-    }, [
-      // 缩略图：用模板真实背景 + 小引号图标，准确预览实际风格
-      h('div', {
-        class: 'relative h-10 w-full overflow-hidden rounded',
-        style: `background:${t.preview.background};`,
-      }, [
-        h('span', {
-          class: 'absolute inset-0 flex items-center justify-center font-serif text-lg',
-          style: `color:${t.preview.iconColor};opacity:0.85;`,
-          textContent: '\u201C',
-        }),
-      ]),
-      h('span', { class: 'text-xs text-[var(--fg-muted)]', textContent: t.name }),
-    ]);
+      [
+        // 缩略图：用模板真实背景 + 小引号图标，准确预览实际风格
+        h(
+          'div',
+          {
+            class: 'relative h-10 w-full overflow-hidden rounded',
+            style: `background:${t.preview.background};`,
+          },
+          [
+            h('span', {
+              class: 'absolute inset-0 flex items-center justify-center font-serif text-lg',
+              style: `color:${t.preview.iconColor};opacity:0.85;`,
+              textContent: '\u201C',
+            }),
+          ],
+        ),
+        h('span', { class: 'text-xs text-[var(--fg-muted)]', textContent: t.name }),
+      ],
+    );
 
     // 自定义模板：右下角挂 ✕ 删除（阻止冒泡以免触发选择）
     if (isCustomTemplateId(t.id)) {
@@ -224,11 +264,20 @@ function renderQuoteCard() {
   function updateTemplateSelection(): void {
     for (const child of Array.from(templateGrid.children)) {
       // 容器可能是 div.relative(可删除) 或 button(普通)，取其内首个/自身 button 判态
-      const btn = (child.tagName === 'BUTTON' ? child : child.querySelector('button[data-tpl]')) as HTMLElement | null;
+      const btn = (
+        child.tagName === 'BUTTON' ? child : child.querySelector('button[data-tpl]')
+      ) as HTMLElement | null;
       if (!btn) continue;
       const isActive = btn.getAttribute('data-tpl') === state.templateId;
       btn.className = [
-        'flex', 'flex-col', 'items-center', 'gap-1.5', 'rounded-lg', 'border-2', 'p-2', 'transition-all',
+        'flex',
+        'flex-col',
+        'items-center',
+        'gap-1.5',
+        'rounded-lg',
+        'border-2',
+        'p-2',
+        'transition-all',
         isActive ? 'border-[var(--accent)]' : 'border-[var(--border)] hover:border-[var(--accent)]',
       ].join(' ');
     }
@@ -353,7 +402,9 @@ function renderQuoteCard() {
       currentLabel.textContent = item ? `：${item.name}` : '';
       for (const child of panel.children) {
         // 容器可能是 span(可删除) 或 button(普通)，取其首个/自身 button 判态
-        const btn = (child.tagName === 'BUTTON' ? child : child.querySelector('button[data-id]')) as HTMLElement | null;
+        const btn = (
+          child.tagName === 'BUTTON' ? child : child.querySelector('button[data-id]')
+        ) as HTMLElement | null;
         if (!btn) continue;
         const isActive = btn.getAttribute('data-id') === id;
         btn.className = isActive
@@ -497,7 +548,8 @@ function renderQuoteCard() {
         'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
       rows: 3,
       'aria-label': '想要的动画效果描述',
-      placeholder: '描述你想要的文字入场效果，例如：每个字从左边飞入并带轻微旋转，最后稳定；或：整段从模糊到清晰，文字像被聚焦。',
+      placeholder:
+        '描述你想要的文字入场效果，例如：每个字从左边飞入并带轻微旋转，最后稳定；或：整段从模糊到清晰，文字像被聚焦。',
     }) as HTMLTextAreaElement;
 
     // —— 步骤 2：生成的提示词（点「生成 AI 提示词」后才显示）——
@@ -511,7 +563,8 @@ function renderQuoteCard() {
     const step2 = h('div', { class: 'hidden space-y-2' }, [
       h('p', {
         class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
-        textContent: '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，AI 会返回一段「名称 + 代码」。把 AI 的整段回复粘到下面框里，点保存即可。',
+        textContent:
+          '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，AI 会返回一段「名称 + 代码」。把 AI 的整段回复粘到下面框里，点保存即可。',
       }),
       promptArea,
       h('div', { class: 'flex items-center justify-end' }, [
@@ -527,22 +580,28 @@ function renderQuoteCard() {
       rows: 8,
       spellcheck: false,
       'aria-label': '粘贴 AI 返回的代码（含名称注释）',
-      placeholder: '把 AI 的整段回复粘到这里（代码块首行形如「// 名称：雪花飘落」，后面是 ```js 代码）。工具会自动识别名称和代码。',
+      placeholder:
+        '把 AI 的整段回复粘到这里（代码块首行形如「// 名称：雪花飘落」，后面是 ```js 代码）。工具会自动识别名称和代码。',
     }) as HTMLTextAreaElement;
     const step3 = h('div', { class: 'hidden space-y-2' }, [
-      h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '③ 粘贴 AI 返回的代码（含名称注释）' }),
+      h('label', {
+        class: 'block text-xs font-medium text-[var(--fg-muted)]',
+        textContent: '③ 粘贴 AI 返回的代码（含名称注释）',
+      }),
       pasteInput,
       // 保存按钮放进 step3，跟随其显隐
       h('div', { class: 'flex items-center justify-end gap-2' }, [
         h('button', {
           type: 'button',
-          class: 'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors',
+          class:
+            'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors',
           textContent: '取消',
           onclick: closeDialog,
         }),
         h('button', {
           type: 'button',
-          class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+          class:
+            'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
           textContent: '保存并应用',
           onclick: save,
         }),
@@ -605,49 +664,63 @@ function renderQuoteCard() {
       setTimeout(closeDialog, 700);
     }
 
-    const card = h('div', {
-      role: 'dialog',
-      'aria-modal': 'true',
-      'aria-label': '用 AI 生成自定义动画效果',
-      class:
-        'w-[min(92vw,42rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
-    }, [
-      h('div', { class: 'mb-1 flex items-center justify-between gap-2' }, [
-        h('span', { class: 'text-sm font-semibold text-[var(--fg)]', textContent: '💡 用 AI 生成自定义动画' }),
-        h('button', {
-          type: 'button',
-          'aria-label': '关闭',
-          class: 'text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors',
-          textContent: '✕',
-          onclick: closeDialog,
-        }),
-      ]),
-      // 步骤 1
-      h('div', { class: 'mt-2 space-y-2' }, [
-        h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '① 描述你想要的效果' }),
-        descInput,
-        h('div', { class: 'flex items-center justify-end' }, [
+    const card = h(
+      'div',
+      {
+        role: 'dialog',
+        'aria-modal': 'true',
+        'aria-label': '用 AI 生成自定义动画效果',
+        class:
+          'w-[min(92vw,42rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
+      },
+      [
+        h('div', { class: 'mb-1 flex items-center justify-between gap-2' }, [
+          h('span', {
+            class: 'text-sm font-semibold text-[var(--fg)]',
+            textContent: '💡 用 AI 生成自定义动画',
+          }),
           h('button', {
             type: 'button',
-            class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
-            textContent: '生成 AI 提示词',
-            onclick: generate,
+            'aria-label': '关闭',
+            class: 'text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors',
+            textContent: '✕',
+            onclick: closeDialog,
           }),
         ]),
-      ]),
-      // 步骤 2（生成后显示）
-      h('div', { class: 'mt-3' }, [
-        h('label', { class: 'mb-1 block text-xs font-medium text-[var(--fg-muted)]', textContent: '② 复制提示词给 AI' }),
-        step2,
-      ]),
-      // 步骤 3（生成后显示，含保存按钮）
-      step3,
-      statusRow,
-      h('p', {
-        class: 'mt-3 text-center text-[11px] text-[var(--fg-muted)]',
-        textContent: '数据不出本地 · 代码仅在你自己的浏览器运行',
-      }),
-    ]);
+        // 步骤 1
+        h('div', { class: 'mt-2 space-y-2' }, [
+          h('label', {
+            class: 'block text-xs font-medium text-[var(--fg-muted)]',
+            textContent: '① 描述你想要的效果',
+          }),
+          descInput,
+          h('div', { class: 'flex items-center justify-end' }, [
+            h('button', {
+              type: 'button',
+              class:
+                'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+              textContent: '生成 AI 提示词',
+              onclick: generate,
+            }),
+          ]),
+        ]),
+        // 步骤 2（生成后显示）
+        h('div', { class: 'mt-3' }, [
+          h('label', {
+            class: 'mb-1 block text-xs font-medium text-[var(--fg-muted)]',
+            textContent: '② 复制提示词给 AI',
+          }),
+          step2,
+        ]),
+        // 步骤 3（生成后显示，含保存按钮）
+        step3,
+        statusRow,
+        h('p', {
+          class: 'mt-3 text-center text-[11px] text-[var(--fg-muted)]',
+          textContent: '数据不出本地 · 代码仅在你自己的浏览器运行',
+        }),
+      ],
+    );
 
     dialogEl = mountDialog(card);
     requestAnimationFrame(() => descInput.focus());
@@ -676,7 +749,8 @@ function renderQuoteCard() {
         'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
       rows: 3,
       'aria-label': '想要的卡片风格描述',
-      placeholder: '描述你想要的卡片风格，例如：深蓝星空背景，金色衬线大字，右下角一个抽象山脉 SVG 轮廓，整体高级沉稳；或：莫兰迪色系纸质感，手写体，左上角一束淡彩 SVG 花纹。',
+      placeholder:
+        '描述你想要的卡片风格，例如：深蓝星空背景，金色衬线大字，右下角一个抽象山脉 SVG 轮廓，整体高级沉稳；或：莫兰迪色系纸质感，手写体，左上角一束淡彩 SVG 花纹。',
     }) as HTMLTextAreaElement;
 
     // —— 步骤 2：生成的提示词 ——
@@ -690,7 +764,8 @@ function renderQuoteCard() {
     const step2 = h('div', { class: 'hidden space-y-2' }, [
       h('p', {
         class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
-        textContent: '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，AI 会返回一段「名称 + 背景 + 图标色 + 代码」。把 AI 的整段回复粘到下面框里，点保存即可。',
+        textContent:
+          '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，AI 会返回一段「名称 + 背景 + 图标色 + 代码」。把 AI 的整段回复粘到下面框里，点保存即可。',
       }),
       promptArea,
       h('div', { class: 'flex items-center justify-end' }, [
@@ -705,21 +780,27 @@ function renderQuoteCard() {
       rows: 10,
       spellcheck: false,
       'aria-label': '粘贴 AI 返回的代码（含名称/背景/图标色注释）',
-      placeholder: '把 AI 的整段回复粘到这里（代码块首三行形如「// 名称：星河」「// 背景：...」「// 图标色：...」，后面是 ```js 代码）。工具会自动识别并生成缩略图。',
+      placeholder:
+        '把 AI 的整段回复粘到这里（代码块首三行形如「// 名称：星河」「// 背景：...」「// 图标色：...」，后面是 ```js 代码）。工具会自动识别并生成缩略图。',
     }) as HTMLTextAreaElement;
     const step3 = h('div', { class: 'hidden space-y-2' }, [
-      h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '③ 粘贴 AI 返回的代码（含名称/背景/图标色注释）' }),
+      h('label', {
+        class: 'block text-xs font-medium text-[var(--fg-muted)]',
+        textContent: '③ 粘贴 AI 返回的代码（含名称/背景/图标色注释）',
+      }),
       pasteInput,
       h('div', { class: 'flex items-center justify-end gap-2' }, [
         h('button', {
           type: 'button',
-          class: 'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors',
+          class:
+            'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors',
           textContent: '取消',
           onclick: closeDialog,
         }),
         h('button', {
           type: 'button',
-          class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+          class:
+            'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
           textContent: '保存并应用',
           onclick: save,
         }),
@@ -754,7 +835,8 @@ function renderQuoteCard() {
       }
       // dryRun：在离屏 1080×1080 容器上试渲染（须挂载到文档，svg 才有真实 boundingBox）
       const sandbox = h('div', {
-        style: 'position:fixed;left:-99999px;top:0;width:1080px;height:1080px;box-sizing:border-box;',
+        style:
+          'position:fixed;left:-99999px;top:0;width:1080px;height:1080px;box-sizing:border-box;',
       });
       document.body.append(sandbox);
       let check: { ok: boolean; reason?: string };
@@ -777,46 +859,60 @@ function renderQuoteCard() {
       setTimeout(closeDialog, 700);
     }
 
-    const card = h('div', {
-      role: 'dialog',
-      'aria-modal': 'true',
-      'aria-label': '用 AI 生成自定义模板',
-      class:
-        'w-[min(92vw,42rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
-    }, [
-      h('div', { class: 'mb-1 flex items-center justify-between gap-2' }, [
-        h('span', { class: 'text-sm font-semibold text-[var(--fg)]', textContent: '💡 用 AI 生成自定义模板' }),
-        h('button', {
-          type: 'button',
-          'aria-label': '关闭',
-          class: 'text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors',
-          textContent: '✕',
-          onclick: closeDialog,
-        }),
-      ]),
-      h('div', { class: 'mt-2 space-y-2' }, [
-        h('label', { class: 'block text-xs font-medium text-[var(--fg-muted)]', textContent: '① 描述你想要的风格' }),
-        descInput,
-        h('div', { class: 'flex items-center justify-end' }, [
+    const card = h(
+      'div',
+      {
+        role: 'dialog',
+        'aria-modal': 'true',
+        'aria-label': '用 AI 生成自定义模板',
+        class:
+          'w-[min(92vw,42rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
+      },
+      [
+        h('div', { class: 'mb-1 flex items-center justify-between gap-2' }, [
+          h('span', {
+            class: 'text-sm font-semibold text-[var(--fg)]',
+            textContent: '💡 用 AI 生成自定义模板',
+          }),
           h('button', {
             type: 'button',
-            class: 'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
-            textContent: '生成 AI 提示词',
-            onclick: generate,
+            'aria-label': '关闭',
+            class: 'text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors',
+            textContent: '✕',
+            onclick: closeDialog,
           }),
         ]),
-      ]),
-      h('div', { class: 'mt-3' }, [
-        h('label', { class: 'mb-1 block text-xs font-medium text-[var(--fg-muted)]', textContent: '② 复制提示词给 AI' }),
-        step2,
-      ]),
-      step3,
-      statusRow,
-      h('p', {
-        class: 'mt-3 text-center text-[11px] text-[var(--fg-muted)]',
-        textContent: '数据不出本地 · 代码仅在你自己的浏览器运行 · 支持 AI 内嵌 SVG 图形',
-      }),
-    ]);
+        h('div', { class: 'mt-2 space-y-2' }, [
+          h('label', {
+            class: 'block text-xs font-medium text-[var(--fg-muted)]',
+            textContent: '① 描述你想要的风格',
+          }),
+          descInput,
+          h('div', { class: 'flex items-center justify-end' }, [
+            h('button', {
+              type: 'button',
+              class:
+                'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+              textContent: '生成 AI 提示词',
+              onclick: generate,
+            }),
+          ]),
+        ]),
+        h('div', { class: 'mt-3' }, [
+          h('label', {
+            class: 'mb-1 block text-xs font-medium text-[var(--fg-muted)]',
+            textContent: '② 复制提示词给 AI',
+          }),
+          step2,
+        ]),
+        step3,
+        statusRow,
+        h('p', {
+          class: 'mt-3 text-center text-[11px] text-[var(--fg-muted)]',
+          textContent: '数据不出本地 · 代码仅在你自己的浏览器运行 · 支持 AI 内嵌 SVG 图形',
+        }),
+      ],
+    );
 
     dialogEl = mountDialog(card);
     requestAnimationFrame(() => descInput.focus());
@@ -925,22 +1021,26 @@ function renderQuoteCard() {
 
   // 预览列：移动端置顶（order-first），桌面端在右（order 重置为 0）。
   // 模板仍是网格（视觉重要、常用，自带标题行 + 💡 AI 生成按钮）；宽高比/动画用折叠选择器，界面更干净。
-  const previewCol = h('div', { class: 'space-y-4 min-w-0 order-first lg:order-none lg:sticky lg:top-6' }, [
-    cardStage,
-    // 模板（常用，保持展开网格；templateSelector 内含标题行「模板」+ 💡 + 网格）
-    templateSelector,
-    // 宽高比（折叠）
-    aspectSelect.el,
-    // 动画效果（折叠）
-    animSelect.el,
-    // 视频清晰度（折叠，仅影响视频导出）
-    videoResSelect.el,
-    // 视频帧率（折叠，仅影响视频导出）
-    videoFpsSelect.el,
-    // 导出
-    exportRow,
-    exportHint,
-  ]);
+  const previewCol = h(
+    'div',
+    { class: 'space-y-4 min-w-0 order-first lg:order-none lg:sticky lg:top-6' },
+    [
+      cardStage,
+      // 模板（常用，保持展开网格；templateSelector 内含标题行「模板」+ 💡 + 网格）
+      templateSelector,
+      // 宽高比（折叠）
+      aspectSelect.el,
+      // 动画效果（折叠）
+      animSelect.el,
+      // 视频清晰度（折叠，仅影响视频导出）
+      videoResSelect.el,
+      // 视频帧率（折叠，仅影响视频导出）
+      videoFpsSelect.el,
+      // 导出
+      exportRow,
+      exportHint,
+    ],
+  );
 
   // ─────────────────────────── 输入区（左栏） ───────────────────────────
 
@@ -963,32 +1063,40 @@ function renderQuoteCard() {
     const matches = searchQuotes(q);
     if (matches.length === 0) {
       searchResults.replaceChildren(
-        h('p', { class: 'text-sm text-[var(--fg-muted)] py-2', textContent: '本地无匹配，可直接手动输入。' }),
+        h('p', {
+          class: 'text-sm text-[var(--fg-muted)] py-2',
+          textContent: '本地无匹配，可直接手动输入。',
+        }),
       );
       return;
     }
-    searchResults.replaceChildren(
-      ...matches.map((m) => resultItem(m)),
-    );
+    searchResults.replaceChildren(...matches.map((m) => resultItem(m)));
   }
 
   function resultItem(m: QuoteRecord): HTMLElement {
-    return h('button', {
-      type: 'button',
-      class:
-        'block w-full text-left rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-sm hover:border-[var(--accent)] transition-colors',
-      onclick: () => {
-        applyQuote({ text: m.text, author: m.author, source: m.source ?? undefined });
-        textInput.value = m.text;
-        authorInput.value = m.author;
-        sourceInput.value = m.source ?? '';
-        searchInput.value = '';
-        searchResults.replaceChildren();
+    return h(
+      'button',
+      {
+        type: 'button',
+        class:
+          'block w-full text-left rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-sm hover:border-[var(--accent)] transition-colors',
+        onclick: () => {
+          applyQuote({ text: m.text, author: m.author, source: m.source ?? undefined });
+          textInput.value = m.text;
+          authorInput.value = m.author;
+          sourceInput.value = m.source ?? '';
+          searchInput.value = '';
+          searchResults.replaceChildren();
+        },
       },
-    }, [
-      h('p', { class: 'line-clamp-2 text-[var(--fg)]', textContent: m.text }),
-      h('p', { class: 'mt-1 text-xs text-[var(--fg-muted)]', textContent: `— ${m.author}${m.source ? ` · ${m.source}` : ''}` }),
-    ]);
+      [
+        h('p', { class: 'line-clamp-2 text-[var(--fg)]', textContent: m.text }),
+        h('p', {
+          class: 'mt-1 text-xs text-[var(--fg-muted)]',
+          textContent: `— ${m.author}${m.source ? ` · ${m.source}` : ''}`,
+        }),
+      ],
+    );
   }
 
   // 防抖搜索
@@ -1174,45 +1282,48 @@ function renderQuoteCard() {
 
     for (const q of list) {
       historyPanel.append(
-        h('div', {
-          class:
-            'flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2',
-        }, [
-          // 点击正文区 → 加载这条到卡片
-          h(
-            'button',
-            {
-              type: 'button',
-              class:
-                'flex-1 min-w-0 text-left transition-colors',
-              title: '点击加载到卡片',
-              onclick: () => loadHistoryItem(q),
-            },
-            [
-              h('p', {
-                class: 'line-clamp-2 text-sm text-[var(--fg)]',
-                textContent: q.text,
-              }),
-              h('p', {
-                class: 'mt-0.5 truncate text-xs text-[var(--fg-muted)]',
-                textContent: `— ${q.author}${q.source ? ` · ${q.source}` : ''}`,
-              }),
-            ],
-          ),
-          // 单条删除
-          h(
-            'button',
-            {
-              type: 'button',
-              'aria-label': '删除此条',
-              class:
-                'shrink-0 rounded-md border border-[var(--border)] px-2 py-1.5 text-sm text-[var(--fg-muted)] hover:text-red-500 hover:border-red-400 transition-colors',
-              textContent: '✕',
-              onclick: () => renderQuoteHistory(removeQuote(q.id)),
-            },
-            [],
-          ),
-        ]),
+        h(
+          'div',
+          {
+            class:
+              'flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2',
+          },
+          [
+            // 点击正文区 → 加载这条到卡片
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 'flex-1 min-w-0 text-left transition-colors',
+                title: '点击加载到卡片',
+                onclick: () => loadHistoryItem(q),
+              },
+              [
+                h('p', {
+                  class: 'line-clamp-2 text-sm text-[var(--fg)]',
+                  textContent: q.text,
+                }),
+                h('p', {
+                  class: 'mt-0.5 truncate text-xs text-[var(--fg-muted)]',
+                  textContent: `— ${q.author}${q.source ? ` · ${q.source}` : ''}`,
+                }),
+              ],
+            ),
+            // 单条删除
+            h(
+              'button',
+              {
+                type: 'button',
+                'aria-label': '删除此条',
+                class:
+                  'shrink-0 rounded-md border border-[var(--border)] px-2 py-1.5 text-sm text-[var(--fg-muted)] hover:text-red-500 hover:border-red-400 transition-colors',
+                textContent: '✕',
+                onclick: () => renderQuoteHistory(removeQuote(q.id)),
+              },
+              [],
+            ),
+          ],
+        ),
       );
     }
 
@@ -1228,7 +1339,10 @@ function renderQuoteCard() {
   renderQuoteHistory();
 
   // 库信息提示
-  const libInfo = h('p', { class: 'text-xs text-[var(--fg-muted)]', textContent: `本地名言库：${getQuoteCount()} 条 · 数据不出本地` });
+  const libInfo = h('p', {
+    class: 'text-xs text-[var(--fg-muted)]',
+    textContent: `本地名言库：${getQuoteCount()} 条 · 数据不出本地`,
+  });
 
   const inputCol = h('div', { class: 'space-y-5 min-w-0' }, [
     // 搜索
@@ -1260,10 +1374,11 @@ function renderQuoteCard() {
   //
   // 关键：网格列必须用 minmax(0,...) 收缩到 0，否则画板 1080px 的固定宽度
   // 会把网格轨道撑到 1080px、撑破窄屏出现横向滚动条（grid 项默认 min-width:auto 不收缩）。
-  const layout = h('div', { class: 'grid gap-6 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]' }, [
-    inputCol,
-    previewCol,
-  ]);
+  const layout = h(
+    'div',
+    { class: 'grid gap-6 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]' },
+    [inputCol, previewCol],
+  );
 
   content.append(layout);
 

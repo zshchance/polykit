@@ -1,4 +1,5 @@
 import { h } from '@/core/components/element';
+import { toDateKey } from '@/core/utils/date';
 import { getDayInfo, getHolidaysMeta } from './holidays';
 import { checkForUpdates, getLastCheckedAt, type UpdateResult } from './update';
 
@@ -17,17 +18,23 @@ import { checkForUpdates, getLastCheckedAt, type UpdateResult } from './update';
 
 const WEEK_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
 const MONTH_LABELS = [
-  '1月', '2月', '3月', '4月', '5月', '6月',
-  '7月', '8月', '9月', '10月', '11月', '12月',
+  '1月',
+  '2月',
+  '3月',
+  '4月',
+  '5月',
+  '6月',
+  '7月',
+  '8月',
+  '9月',
+  '10月',
+  '11月',
+  '12月',
 ];
 
 /** 当前展示的月份；模块级，组件实例间共享 */
 let cursor = new Date();
-let cursorDate = new Date(
-  cursor.getFullYear(),
-  cursor.getMonth(),
-  1,
-);
+let cursorDate = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
 
 /** 选中的日期（点击日格后高亮），null 表示未选 */
 let selectedKey: string | null = null;
@@ -67,13 +74,12 @@ function buildChildren(): Node[] {
       }),
       h('button', {
         type: 'button',
-        class:
-          'text-xs text-[var(--fg-muted)] hover:text-[var(--accent)] transition-colors mt-0.5',
+        class: 'text-xs text-[var(--fg-muted)] hover:text-[var(--accent)] transition-colors mt-0.5',
         textContent: '回到今天',
         onclick: () => {
           cursor = new Date();
           cursorDate = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
-          selectedKey = dateKey(today);
+          selectedKey = toDateKey(today);
           redraw();
         },
       }),
@@ -114,6 +120,13 @@ function buildChildren(): Node[] {
     class: 'mt-3 min-h-[1.5rem] text-sm text-[var(--fg)]',
     textContent: '点击日期查看详情',
   });
+  // 重绘按 selectedKey 恢复详情——点击日期/「回到今天」只需设 selectedKey 再 redraw，
+  // 不能在 redraw 之前写 detailEl（旧节点会被 replaceChildren 整体丢弃）。
+  if (selectedKey !== null) {
+    const parts = selectedKey.split('-');
+    const date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    showDetail(date, getDayInfo(date));
+  }
 
   // —— 数据来源 + 检查更新 ——
   statusEl = h('div', {
@@ -161,9 +174,9 @@ function buildDayCells(today: Date): HTMLElement[] {
 
 /** 单个日期格 */
 function dayCell(date: Date, dimmed: boolean, today: Date): HTMLElement {
-  const key = dateKey(date);
+  const key = toDateKey(date);
   const info = getDayInfo(date);
-  const isToday = key === dateKey(today);
+  const isToday = key === toDateKey(today);
   const isSelected = key === selectedKey;
   const dow = date.getDay();
 
@@ -193,7 +206,11 @@ function dayCell(date: Date, dimmed: boolean, today: Date): HTMLElement {
   else if (dow === 0 || dow === 6) dayColor = 'var(--accent)';
 
   const children: (Node | string)[] = [
-    h('span', { class: 'font-medium', style: `color:${dayColor}`, textContent: String(date.getDate()) }),
+    h('span', {
+      class: 'font-medium',
+      style: `color:${dayColor}`,
+      textContent: String(date.getDate()),
+    }),
   ];
   // 节假日标记小角标
   if (info) {
@@ -221,7 +238,6 @@ function dayCell(date: Date, dimmed: boolean, today: Date): HTMLElement {
       title: info?.name ?? '',
       onclick: () => {
         selectedKey = key;
-        showDetail(date, info);
         redraw();
       },
     },
@@ -292,9 +308,10 @@ function refreshStatus(): void {
           ? `✓ 已更新到 ${result.version}`
           : `✓ 已是最新（${result.version}）`
         : `× ${result.reason}，使用本地数据`;
-      flashStatus(msg);
-      refreshStatus();
+      // redraw 会刷新网格节假日标记并重建状态行（内部自带 refreshStatus）；
+      // 提示必须在 redraw 之后挂载，否则会随 replaceChildren 一起被清掉。
       redraw();
+      flashStatus(msg);
     },
   });
 
@@ -317,12 +334,4 @@ function flashStatus(msg: string): void {
   });
   statusEl.parentElement?.append(tip);
   setTimeout(() => tip.remove(), 3500);
-}
-
-/** 日期 → YYYY-MM-DD */
-function dateKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
 }

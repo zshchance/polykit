@@ -37,7 +37,8 @@ export interface LogoCfg {
 }
 
 /** Canvas 字体栈：等宽优先，中文回退（保证中文能渲染）。导出供 find-word 复用。 */
-export const LOGO_FONT_STACK = '"JetBrains Mono", ui-monospace, Menlo, Consolas, "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif';
+export const LOGO_FONT_STACK =
+  '"JetBrains Mono", ui-monospace, Menlo, Consolas, "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif';
 
 /** 亮像素 alpha 阈值。 */
 const ALPHA_THRESHOLD = 128;
@@ -68,7 +69,10 @@ export function textToLogoCells(cfg: LogoCfg): Rendered {
   ctx.textAlign = 'left';
 
   // 按行处理（\n 分隔），每行渲染成一个 logo 块
-  const lines = text.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+  const lines = text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
   if (lines.length === 0) return [];
 
   const blocks: Rendered = []; // 每个 block 是一行的 logo 网格
@@ -186,7 +190,10 @@ function trimEmptyColumns(dot: boolean[][]): boolean[][] {
   let lastLit = -1;
   for (let x = 0; x < w; x++) {
     for (let y = 0; y < dot.length; y++) {
-      if (dot[y]![x]!) { lastLit = x; break; }
+      if (dot[y]![x]!) {
+        lastLit = x;
+        break;
+      }
     }
   }
   if (lastLit === -1) return [[false]]; // 全空字符（如空格），保留 1 列

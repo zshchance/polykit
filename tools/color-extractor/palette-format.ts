@@ -37,9 +37,7 @@ export function formatPalette(colors: ExtractedColor[], fmt: OutputFormat): stri
         .map((c, i) => `  --${key(i)}: ${c.hex}; /* ${(c.ratio * 100).toFixed(1)}% */`)
         .join('\n')}\n}`;
     case 'tailwind':
-      return `colors: {\n${colors
-        .map((c, i) => `  '${key(i)}': '${c.hex}',`)
-        .join('\n')}\n}`;
+      return `colors: {\n${colors.map((c, i) => `  '${key(i)}': '${c.hex}',`).join('\n')}\n}`;
     case 'scss':
       return colors.map((c, i) => `$${key(i)}: ${c.hex};`).join('\n');
     case 'json':

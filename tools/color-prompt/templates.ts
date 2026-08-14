@@ -82,7 +82,11 @@ ${colorLines}
  */
 export function buildPromptEn(p: Palette, scene: 'slide' | 'web' | 'both' = 'both'): string {
   const sceneText =
-    scene === 'slide' ? 'a slide deck' : scene === 'web' ? 'a website front-end page' : 'slide decks and website front-end pages';
+    scene === 'slide'
+      ? 'a slide deck'
+      : scene === 'web'
+        ? 'a website front-end page'
+        : 'slide decks and website front-end pages';
   const moodText = p.moods.join(', ');
   const colorLines = ROLES.map((r) => {
     const hex = colorOf(p, r);

@@ -82,10 +82,7 @@ export function getRegisteredTools(): RegisteredTool[] {
 }
 
 /** 在 glob 结果里找出属于指定 slug 的资源 URL */
-function pickAsset(
-  glob: Record<string, string>,
-  slug: string,
-): string | undefined {
+function pickAsset(glob: Record<string, string>, slug: string): string | undefined {
   for (const [path, url] of Object.entries(glob)) {
     if (slugFromPath(path) === slug) return url;
   }

@@ -7,8 +7,10 @@
  * 与项目其它 settings 模块一致：
  *   - 带 version 的 JSON blob
  *   - 逐字段校验（合法才采用，否则默认，保证旧草稿向前兼容）
- *   - 隐私模式 / 配额满 / 存储损坏 → 静默回退，不阻塞功能
+ *   - 隐私模式 / 配额满 / 存储损坏 → 经 core/utils/storage 统一容错，静默回退，不阻塞功能
  */
+
+import { readJSON, writeJSON } from '@/core/utils/storage';
 
 import {
   DEFAULT_CONFIG,
@@ -45,31 +47,21 @@ function isCompareMode(s: unknown): s is CompareMode {
  * 对每个字段单独校验，合法才采用，否则用默认值。
  */
 export function loadConfig(): CompressConfig {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_CONFIG };
-    const parsed = JSON.parse(raw) as Partial<ConfigBlob>;
-    if (!parsed || typeof parsed !== 'object') return { ...DEFAULT_CONFIG };
+  const parsed = readJSON(STORAGE_KEY) as Partial<ConfigBlob> | null;
+  if (!parsed) return { ...DEFAULT_CONFIG };
 
-    const c = parsed.config ?? {};
-    return {
-      format: isOutputFormat(c.format) ? c.format : DEFAULT_CONFIG.format,
-      quality: clampQuality(c.quality),
-      maxLongEdge: clampLongEdge(c.maxLongEdge),
-      icoSizes: normalizeIcoSizes(c.icoSizes),
-      mode: isCompareMode(c.mode) ? c.mode : DEFAULT_CONFIG.mode,
-    };
-  } catch {
-    return { ...DEFAULT_CONFIG };
-  }
+  const c = parsed.config ?? {};
+  return {
+    format: isOutputFormat(c.format) ? c.format : DEFAULT_CONFIG.format,
+    quality: clampQuality(c.quality),
+    maxLongEdge: clampLongEdge(c.maxLongEdge),
+    icoSizes: normalizeIcoSizes(c.icoSizes),
+    mode: isCompareMode(c.mode) ? c.mode : DEFAULT_CONFIG.mode,
+  };
 }
 
 /** 持久化参数（隐私模式 / 配额满时静默忽略） */
 export function saveConfig(cfg: CompressConfig): void {
-  try {
-    const blob: ConfigBlob = { version: CURRENT_VERSION, config: cfg };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
-  } catch {
-    // 静默忽略
-  }
+  const blob: ConfigBlob = { version: CURRENT_VERSION, config: cfg };
+  writeJSON(STORAGE_KEY, blob);
 }
