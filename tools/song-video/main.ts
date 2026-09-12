@@ -532,7 +532,10 @@ function render(): void {
   // ──────────────── 文件选择 ────────────────
   const audioPicker = makeFilePicker({
     label: '🎵 音乐文件（必需）',
-    accept: '.mp3,.wav,audio/mpeg,audio/wav',
+    // 扩展名 + 各平台常见 MIME 全量列出：部分系统文件框只认其中一种写法，
+    // 只写 audio/mpeg,audio/wav 时会出现 mp3 灰色不可选的情况
+    accept:
+      '.mp3,.wav,.mpga,.mp2,audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/wave,audio/vnd.wav',
     hint: 'MP3 / WAV',
     onFile: async (f) => {
       const loaded = await loadAudioFile(f);

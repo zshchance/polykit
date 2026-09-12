@@ -51,21 +51,59 @@ export async function loadAudioFile(file: File): Promise<LoadedAudio> {
   } catch {
     throw new Error('读取音频文件失败，请重试');
   }
-  try {
-    // 用 OfflineAudioContext 解码：不受浏览器自动播放策略影响
-    // （共享 AudioContext 在无手势时可能 suspended，个别浏览器此时拒绝解码）。
-    // callback 形式包 Promise：兼容个别只支持回调式 decodeAudioData 的旧 Safari。
-    const offline = new OfflineAudioContext(1, 1, 44100);
-    const buffer = await new Promise<AudioBuffer>((resolve, reject) => {
-      // 副本解码：个别浏览器 decode 后会 detach 原始 buffer，留原件便于重试
-      offline.decodeAudioData(raw.slice(0), resolve, (e) =>
-        reject(e instanceof Error ? e : new Error('decode failed')),
+
+  const errors: string[] = [];
+
+  // 通道 1：共享 AudioContext 解码（主流浏览器都支持；选文件属用户手势，context 可被恢复）。
+  // 通道 2：OfflineAudioContext 兜底（个别浏览器 suspended 状态下拒绝在前者解码）。
+  // 两通道都用 callback 形式调 decodeAudioData —— promise 形式在旧 Safari 上不存在。
+  for (const ctx of [getSharedAudioContext(), makeOfflineCtx()]) {
+    if (!ctx) continue;
+    if (ctx === sharedCtx) void resumeAudioContext();
+    try {
+      // 副本解码：个别浏览器 decode 后会 detach 原始 buffer，留原件供下一通道重试
+      const buffer = await decodeWith(ctx, raw.slice(0));
+      if (buffer && buffer.length > 0) {
+        return { buffer, duration: buffer.duration, name: stripExt(file.name) };
+      }
+      errors.push('解码结果为空');
+    } catch (e) {
+      errors.push(e instanceof Error ? e.message : 'decode failed');
+    }
+  }
+
+  throw new Error(
+    `无法解码「${file.name}」${file.type ? `（类型 ${file.type}）` : ''}，` +
+      '请确认是 MP3 或 WAV 格式且文件未损坏',
+  );
+}
+
+/** callback 形式的 decodeAudioData 包装（兼容仅支持回调式解码的旧浏览器） */
+function decodeWith(ctx: BaseAudioContext, raw: ArrayBuffer): Promise<AudioBuffer> {
+  return new Promise((resolve, reject) => {
+    try {
+      ctx.decodeAudioData(
+        raw,
+        (buf) => resolve(buf),
+        (e) => reject(e instanceof Error ? e : new Error('decode failed')),
       );
-    });
-    if (!buffer || buffer.length === 0) throw new Error('empty');
-    return { buffer, duration: buffer.duration, name: stripExt(file.name) };
+    } catch (e) {
+      // 个别浏览器（如旧 Safari 的 OfflineAudioContext）没有该方法：同步抛 TypeError
+      reject(e instanceof Error ? e : new Error('decodeAudioData unavailable'));
+    }
+  });
+}
+
+/** 1 秒的离线 context（仅用于解码兜底；解码不依赖其时长，length 取非零即可） */
+function makeOfflineCtx(): BaseAudioContext | null {
+  try {
+    const Ctor =
+      window.OfflineAudioContext ??
+      (window as unknown as { webkitOfflineAudioContext?: typeof OfflineAudioContext })
+        .webkitOfflineAudioContext;
+    return Ctor ? new Ctor(1, 44100, 44100) : null;
   } catch {
-    throw new Error('无法解码该音频，请确认是 MP3 或 WAV 格式且文件未损坏');
+    return null;
   }
 }
 
