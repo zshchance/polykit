@@ -710,7 +710,9 @@ function drawLyrics(
     const line = lyrics[i];
     if (!line) continue;
     const d = i - listScroll; // 相对当前行的连续行距
-    const y = curY + (i - idx) * lineH;
+    // 行位置锚定连续滚动位置 listScroll（而非整数 idx）：切换动画期间整块
+    // 随缓动插值平移，滚到位后各行恰好落在 curY 上/下方的整数行槽位上
+    const y = curY + (i - listScroll) * lineH;
     // 超出可用带的行不绘制（当前行 idx 始终保留）
     if (i !== idx && (y < boundTop - lineH * 0.4 || y > boundBottom + lineH * 0.4)) continue;
     const active = i === idx;
