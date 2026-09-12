@@ -403,11 +403,12 @@ export const DEFAULT_OPTIONS: SongVideoOptions = {
  *   [intro, intro + audio)        主段（音频播放，可视化/歌词/进度条）
  *   [intro + audio, total)        结尾段（音频已结束，淡出 + 片尾字幕）
  *
- * 片尾字幕开启时，结尾段时长自动延长到「动画时长」与「字幕所需时长」的较大值。
- * 字幕所需时长按显示方式估算（与 renderer.drawEndRoll 的区域/节奏保持一致）：
- *   滚动      行数 × 0.55s + 缓冲（滚至中央停止时行程减半，所需更短，仍按贯穿预留，保证充裕）
- *   淡入淡出  页数 × 2.5s（每屏淡入 + 停留 + 淡出）
- *   无动画    页数 × 2.0s（每屏停留）
+ * 结尾段时长：
+ *   未启用片尾字幕 → 0：音乐结束即视频结束，总时长贴合歌曲长度（开场段仍按设置保留）；
+ *   启用片尾字幕 → max(结尾定格时长, 字幕展示所需时长)，即「按字幕能够展示的时间追加」：
+ *     滚动      行数 × 0.55s + 缓冲（滚至中央停止时行程减半，仍按贯穿预留，保证充裕）
+ *     淡入淡出  页数 × 2.5s（每屏淡入 + 停留 + 淡出）
+ *     无动画    页数 × 2.0s（每屏停留）
  */
 export interface Timeline {
   intro: number;
@@ -442,19 +443,20 @@ export function computeTimeline(
   aspect?: { w: number; h: number },
 ): Timeline {
   const intro = opts.introDur;
-  const lines = opts.endRollEnabled ? opts.endRollText.split('\n').filter((l) => l.trim()) : [];
   let rollNeed = 0;
-  if (lines.length > 0) {
+  if (opts.endRollEnabled) {
+    const lines = opts.endRollText.split('\n').filter((l) => l.trim());
     if (opts.endRollMode === 'fade' || opts.endRollMode === 'cut') {
       const pages = Math.max(
         1,
         Math.ceil(lines.length / endRollLinesPerScreen(aspect)),
       );
-      rollNeed = pages * END_ROLL_PAGE_SEC[opts.endRollMode];
+      rollNeed = lines.length > 0 ? pages * END_ROLL_PAGE_SEC[opts.endRollMode] : 0;
     } else {
       rollNeed = lines.length * ROLL_SEC_PER_LINE + 1.6;
     }
   }
-  const outro = Math.max(opts.outroDur, rollNeed);
+  // 未启用片尾字幕：不追加结尾段（音乐结束即结束）；启用：按字幕展示时间追加
+  const outro = opts.endRollEnabled ? Math.max(opts.outroDur, rollNeed) : 0;
   return { intro, audio: audioDur, outro, total: intro + audioDur + outro };
 }

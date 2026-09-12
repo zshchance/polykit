@@ -1006,6 +1006,11 @@ function render(): void {
       endRollModeWrap.classList.toggle('opacity-40', !opts.endRollEnabled);
       endRollStopLabel.classList.toggle('opacity-40', !opts.endRollEnabled);
       endRollText.disabled = !opts.endRollEnabled;
+      // 勾选/取消会改变总时长（取消时缩短）：校正预览位置并刷新时间显示
+      const total = totalDuration();
+      if (pausedAt > total) pausedAt = Math.max(0, total - 0.01);
+      if (!playing) drawPreview(pausedAt);
+      syncTimeUI(pausedAt);
     },
   }) as HTMLInputElement;
 
@@ -1075,7 +1080,13 @@ function render(): void {
   const advancedToggleLabel = '高级选项（动画 / 颜色 / 署名 / 片尾字幕）';
   const advancedPanel = h('div', { class: 'hidden space-y-4 pt-1' }, [
     row('开场动画', h('div', { class: 'space-y-2' }, [introSeg.wrap, introDurSel.wrap])),
-    row('结尾动画', h('div', { class: 'space-y-2' }, [outroSeg.wrap, outroDurSel.wrap])),
+    h('div', { class: 'space-y-2' }, [
+      row('结尾动画', h('div', { class: 'space-y-2' }, [outroSeg.wrap, outroDurSel.wrap])),
+      h('p', {
+        class: 'text-[11px] leading-relaxed text-[var(--fg-muted)]',
+        textContent: '未勾选片尾字幕时，音乐结束即视频结束（结尾段不占时长）；勾选后按字幕展示需要自动延长。',
+      }),
+    ]),
     h('label', { class: 'flex items-center gap-2 text-sm cursor-pointer' }, [
       coverSpinInput,
       '专辑封面旋转（唱片效果）',
