@@ -701,7 +701,15 @@ function drawLyrics(
   curY = Math.max(curY, boundTop + opts.lyricAbove * lineH);
   curY = Math.min(Math.max(curY, boundTop), boundBottom);
   const listBase = ctx.globalAlpha;
+  // 可用带裁剪 + 双重渐隐：行从带边缘/配置窗口边缘平滑滑入滑出。
+  // 修复「切换瞬间闪现一行」：此前绘制圈比配置窗口多一行余量，行进入可见区
+  // 只靠硬性 y 阈值瞬时出现/消失（回弹过冲时尤其明显），无裁剪无渐变。
+  const clipTop = boundTop - lineH * 0.55;
+  const clipH = boundBottom - boundTop + lineH * 1.1;
   ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, clipTop, W, clipH);
+  ctx.clip();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const from = Math.max(0, Math.floor(listScroll) - opts.lyricAbove - 1);
@@ -712,12 +720,22 @@ function drawLyrics(
     const d = i - listScroll; // 相对当前行的连续行距
     // 行位置锚定连续滚动位置 listScroll（而非整数 idx）：切换动画期间整块
     // 随缓动插值平移，滚到位后各行恰好落在 curY 上/下方的整数行槽位上
-    const y = curY + (i - listScroll) * lineH;
-    // 超出可用带的行不绘制（当前行 idx 始终保留）
-    if (i !== idx && (y < boundTop - lineH * 0.4 || y > boundBottom + lineH * 0.4)) continue;
+    const y = curY + d * lineH;
+    if (i !== idx && (y < clipTop - lineH * 0.1 || y > clipTop + clipH + lineH * 0.1)) continue;
+    // 带边缘渐隐：贴近可用带边缘的行淡出（配合裁剪 = 滑入滑出，不空降）
+    const edgeFade = Math.min(
+      clamp01((y - clipTop) / (lineH * 0.95)),
+      clamp01((clipTop + clipH - y) / (lineH * 0.95)),
+    );
+    // 窗口渐隐：超出「上 above / 下 below」配置窗口的行（动画余量扫过的边缘行）渐隐至 0
+    const winFade = Math.min(
+      clamp01(d + opts.lyricAbove + 0.5),
+      clamp01(opts.lyricBelow + 0.5 - d),
+    );
     const active = i === idx;
     const dist = Math.min(1, Math.abs(d) / (opts.lyricAbove + opts.lyricBelow + 1));
-    ctx.globalAlpha = listBase * (active ? 1 : 0.55 * (1 - dist * 0.7));
+    ctx.globalAlpha =
+      listBase * (active ? 1 : 0.55 * (1 - dist * 0.7)) * edgeFade * winFade;
     ctx.fillStyle = active ? theme.accent : theme.fg;
     ctx.font = fontOf(active ? '700' : '500', S * (active ? 0.038 : 0.03));
     ctx.fillText(line.text, W / 2, y, W * 0.86);
