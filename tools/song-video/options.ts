@@ -42,7 +42,7 @@ export function getAspect(id: string | undefined): Aspect {
 // ─────────────────────────── 分辨率 ───────────────────────────
 
 /** 导出分辨率档位：短边目标像素（录制 canvas 按短边等比缩放） */
-export type ResolutionId = '540' | '720' | '1080';
+export type ResolutionId = '540' | '720' | '1080' | '1440';
 
 export interface Resolution {
   id: ResolutionId;
@@ -53,7 +53,8 @@ export interface Resolution {
 export const RESOLUTIONS: Resolution[] = [
   { id: '540', label: '540p 流畅（文件小）', shortSide: 540 },
   { id: '720', label: '720p 高清（推荐）', shortSide: 720 },
-  { id: '1080', label: '1080p 全高清（较慢）', shortSide: 1080 },
+  { id: '1080', label: '1080p 全高清', shortSide: 1080 },
+  { id: '1440', label: '1440p 2K（较慢）', shortSide: 1440 },
 ];
 
 const DEFAULT_RESOLUTION: Resolution = RESOLUTIONS[1]!;
@@ -106,12 +107,19 @@ export function normalizeLyricMode(id: unknown): LyricModeId {
   return LYRIC_MODES.some((m) => m.id === id) ? (id as LyricModeId) : 'fade';
 }
 
+// ─────────────────────────── 歌词列表行数 ───────────────────────────
+
+/** 滚动列表模式：当前句上方/下方显示的行数（默认上 1 下 3，上少下多更符合歌词阅读重心） */
+export const LYRIC_ABOVE_CHOICES = [0, 1, 2] as const;
+export const LYRIC_BELOW_CHOICES = [1, 2, 3, 4] as const;
+
 // ─────────────────────────── 主题配色 ───────────────────────────
 
 export type ThemeId = 'midnight' | 'sunset' | 'mint' | 'mono';
 
 export interface Theme {
-  id: ThemeId;
+  /** 内置主题为 ThemeId；自定义主题为 custom: 前缀 id */
+  id: string;
   label: string;
   /** 预览小色块（CSS 渐变，仅 UI 展示） */
   swatch: string;
@@ -168,6 +176,66 @@ export const THEMES: Theme[] = [
     muted: 'rgba(250,250,250,0.5)',
     light: false,
   },
+  {
+    id: 'ocean',
+    label: '海雾青',
+    swatch: 'linear-gradient(135deg,#04201e,#0f766e)',
+    bg: ['#04201e', '#0f766e'],
+    fg: '#ecfdf5',
+    accent: '#2dd4bf',
+    muted: 'rgba(236,253,245,0.55)',
+    light: false,
+  },
+  {
+    id: 'sakura',
+    label: '樱花粉',
+    swatch: 'linear-gradient(135deg,#fff1f2,#f9a8d4)',
+    bg: ['#fff1f2', '#f9a8d4'],
+    fg: '#9d174d',
+    accent: '#db2777',
+    muted: 'rgba(157,23,77,0.6)',
+    light: true,
+  },
+  {
+    id: 'violet',
+    label: '幻夜紫',
+    swatch: 'linear-gradient(135deg,#17082e,#6d28d9)',
+    bg: ['#17082e', '#6d28d9'],
+    fg: '#f5f3ff',
+    accent: '#c084fc',
+    muted: 'rgba(245,243,255,0.55)',
+    light: false,
+  },
+  {
+    id: 'forest',
+    label: '森屿绿',
+    swatch: 'linear-gradient(135deg,#0a1f12,#15803d)',
+    bg: ['#0a1f12', '#15803d'],
+    fg: '#f0fdf4',
+    accent: '#4ade80',
+    muted: 'rgba(240,253,244,0.55)',
+    light: false,
+  },
+  {
+    id: 'latte',
+    label: '拿铁棕',
+    swatch: 'linear-gradient(135deg,#fdf6ee,#d6b08c)',
+    bg: ['#fdf6ee', '#d6b08c'],
+    fg: '#5b3a1a',
+    accent: '#b45309',
+    muted: 'rgba(91,58,26,0.6)',
+    light: true,
+  },
+  {
+    id: 'aurora',
+    label: '极光蓝绿',
+    swatch: 'linear-gradient(135deg,#020617,#0369a1)',
+    bg: ['#020617', '#0369a1'],
+    fg: '#e0f2fe',
+    accent: '#34d399',
+    muted: 'rgba(224,242,254,0.55)',
+    light: false,
+  },
 ];
 
 const DEFAULT_THEME: Theme = THEMES[0]!;
@@ -176,10 +244,16 @@ export function getTheme(id: string | undefined): Theme {
   return THEMES.find((t) => t.id === id) ?? DEFAULT_THEME;
 }
 
-/** 按 id 严格归一化主题 id，非法回退默认 */
-export function normalizeTheme(id: unknown): ThemeId {
-  return THEMES.some((t) => t.id === id) ? (id as ThemeId) : DEFAULT_THEME.id;
+/** 按 id 严格归一化主题 id，非法回退默认（自定义 custom: id 由 custom-themes 层解析） */
+export function normalizeTheme(id: unknown): string {
+  return THEMES.some((t) => t.id === id) ? (id as string) : DEFAULT_THEME.id;
 }
+
+// 让 TS 确保 THEMES 覆盖 ThemeId 全集（新增内置主题时漏改 ThemeId 会在此报错）
+const _themeIdCheck: Record<ThemeId, true> = Object.fromEntries(
+  THEMES.map((t) => [t.id, true as const]),
+) as Record<ThemeId, true>;
+void _themeIdCheck;
 
 // ─────────────────────────── 开场 / 结尾动画 ───────────────────────────
 
@@ -236,12 +310,16 @@ export interface SongVideoOptions {
   visualizer: VisualizerId;
   /** 歌词滚动模式（无歌词文件时自动等效 none） */
   lyricMode: LyricModeId;
+  /** 滚动列表模式：当前句上方行数（0-2） */
+  lyricAbove: number;
+  /** 滚动列表模式：当前句下方行数（1-4，默认大于上方行数） */
+  lyricBelow: number;
   /** 单行淡入模式下，在当前句上方显示前一句（滚动列表模式天然多行，不生效） */
   showPrevLyric: boolean;
   /** 单行淡入模式下，在当前句下方显示后一句 */
   showNextLyric: boolean;
-  /** 主题配色 */
-  theme: ThemeId;
+  /** 主题配色：内置 ThemeId，或自定义主题 id（custom: 前缀，主题本体存 custom-themes.ts） */
+  theme: string;
   /** 自定义主色（覆盖主题 accent；null=跟随主题） */
   accentColor: string | null;
   /** 是否显示标题 */
@@ -273,6 +351,8 @@ export const DEFAULT_OPTIONS: SongVideoOptions = {
   resolution: '720',
   visualizer: 'bars',
   lyricMode: 'fade',
+  lyricAbove: 1,
+  lyricBelow: 3,
   showPrevLyric: false,
   showNextLyric: false,
   theme: 'midnight',

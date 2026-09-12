@@ -18,6 +18,8 @@ import {
   ASPECTS,
   DEFAULT_OPTIONS,
   INTRO_DUR_CHOICES,
+  LYRIC_ABOVE_CHOICES,
+  LYRIC_BELOW_CHOICES,
   OUTRO_DUR_CHOICES,
   RESOLUTIONS,
   normalizeIntroAnim,
@@ -42,7 +44,7 @@ function validColor(v: unknown): string | null {
   return typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : null;
 }
 
-/** 时长档位合法值（浮点比较用容差） */
+/** 时长/行数档位合法值（浮点比较用容差） */
 function inChoices(v: unknown, choices: readonly number[]): number | null {
   if (typeof v !== 'number' || !Number.isFinite(v)) return null;
   return choices.some((c) => Math.abs(c - v) < 1e-6) ? v : null;
@@ -75,9 +77,17 @@ export function loadOptions(): SongVideoOptions {
     resolution,
     visualizer: normalizeVisualizer(o.visualizer),
     lyricMode: normalizeLyricMode(o.lyricMode),
+    lyricAbove: inChoices(o.lyricAbove, LYRIC_ABOVE_CHOICES) ?? d.lyricAbove,
+    lyricBelow: inChoices(o.lyricBelow, LYRIC_BELOW_CHOICES) ?? d.lyricBelow,
     showPrevLyric: typeof o.showPrevLyric === 'boolean' ? o.showPrevLyric : d.showPrevLyric,
     showNextLyric: typeof o.showNextLyric === 'boolean' ? o.showNextLyric : d.showNextLyric,
-    theme: normalizeTheme(o.theme),
+    // 主题 id：内置合法 id，或自定义主题 id（custom: 前缀；主题本体在 custom-themes.ts 校验）
+    theme:
+      typeof o.theme === 'string' &&
+      o.theme.length <= 32 &&
+      (o.theme.startsWith('custom:') || normalizeTheme(o.theme) === o.theme)
+        ? o.theme
+        : d.theme,
     accentColor: validColor(o.accentColor),
     showTitle: typeof o.showTitle === 'boolean' ? o.showTitle : d.showTitle,
     titleText: typeof o.titleText === 'string' ? o.titleText.slice(0, 80) : d.titleText,

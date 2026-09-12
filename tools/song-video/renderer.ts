@@ -253,7 +253,7 @@ export function drawFrame(
   drawVisualizer(ctx, W, H, S, layout, input, bands, wave);
 
   // —— 7. 歌词 ——
-  drawLyrics(ctx, W, H, S, input, ta, dt);
+  drawLyrics(ctx, W, H, S, layout, input, ta, dt);
 
   // —— 8. 进度条 ——
   drawProgress(ctx, W, H, S, input, t);
@@ -429,13 +429,15 @@ function drawVisualizer(
   const accent = theme.accent;
   const v = (i: number): number =>
     bands && i < bands.length ? (bands[i] ?? 0) / 255 : 0;
+  // 滚动列表歌词模式下可视化整体压扁让位（与 drawLyrics 的 visTopRatio 边界保持一致）
+  const listYield = opts.lyricMode === 'list' && !!input.lyrics && input.lyrics.length > 0;
 
   if (opts.visualizer === 'bars') {
     const n = bands?.length ?? 48;
     const zoneW = W * 0.78;
     const x0 = (W - zoneW) / 2;
-    const baseY = H * 0.92;
-    const maxH = H * 0.2;
+    const baseY = H * (listYield ? 0.905 : 0.9);
+    const maxH = H * (listYield ? 0.115 : 0.17);
     const gap = zoneW * 0.24 * (1 / n);
     const bw = (zoneW - gap * (n - 1)) / n;
     const grad = ctx.createLinearGradient(0, baseY - maxH, 0, baseY);
@@ -454,8 +456,9 @@ function drawVisualizer(
     const n = bands?.length ?? 48;
     const zoneW = W * 0.8;
     const x0 = (W - zoneW) / 2;
-    const midY = H * 0.72;
-    const maxH = H * 0.13;
+    // 镜像中轴整体下移（0.80H），给歌词带让出 0.715H 以上的空间（fade/list 都受益）
+    const midY = H * 0.8;
+    const maxH = H * 0.085;
     const gap = zoneW * 0.22 * (1 / n);
     const bw = (zoneW - gap * (n - 1)) / n;
     // 以当前 globalAlpha 为基准（内容层淡入/淡出时随整体缩放）
@@ -475,16 +478,20 @@ function drawVisualizer(
   }
 
   if (opts.visualizer === 'circle') {
-    // 放射状频谱：环绕封面圆盘，内外两层（外长内短）营造节奏感
+    // 放射状频谱：环绕封面圆盘，内外两层（外长内短）营造节奏感。
+    // 跳过正下方 ±40° 扇区：封面下沿中央让位给歌词带，避免放射线与歌词文字干涉。
     const n = bands?.length ?? 64;
     const innerR = layout.coverR * 1.1;
     const base = ctx.globalAlpha;
     ctx.strokeStyle = accent;
     ctx.lineCap = 'round';
     ctx.lineWidth = S * 0.009;
+    const skip = (40 * Math.PI) / 180; // 正下方 = 90°，跳过 50°~130°
     for (let i = 0; i < n; i++) {
       const ang = (i / n) * Math.PI * 2 - Math.PI / 2;
-      const len = S * 0.012 + v(i) * S * 0.075;
+      const down = Math.sin(ang); // >0 表示朝画面下方
+      if (down > Math.sin(Math.PI / 2 - skip)) continue; // 底部扇区跳过
+      const len = S * 0.012 + v(i) * S * 0.06;
       const cos = Math.cos(ang);
       const sin = Math.sin(ang);
       ctx.globalAlpha = base * 0.95;
@@ -505,8 +512,8 @@ function drawVisualizer(
 
   // wave：双层描边营造辉光（避免 canvas shadow 的性能开销）
   const n = 96;
-  const baseY = H * 0.78;
-  const amp = H * 0.07;
+  const baseY = H * (listYield ? 0.865 : 0.8);
+  const amp = H * (listYield ? 0.05 : 0.065);
   ctx.save();
   ctx.beginPath();
   for (let i = 0; i <= n; i++) {
@@ -536,6 +543,7 @@ function drawLyrics(
   W: number,
   H: number,
   S: number,
+  layout: Layout,
   input: RenderInput,
   ta: number,
   dt: number,
@@ -563,14 +571,14 @@ function drawLyrics(
     // 前一句 / 后一句（弱化小字，随当前句一起淡入淡出；跟随整体内容层 alpha）
     const layerAlpha = ctx.globalAlpha; // 内容层整体 alpha（开场/结尾动画）
     const contextAlpha = layerAlpha * a;
-    const contextY = H * 0.66;
+    const contextY = H * 0.655;
     if (opts.showPrevLyric && idx > 0) {
       const prev = lyrics[idx - 1];
       if (prev) {
         ctx.globalAlpha = contextAlpha * 0.42;
         ctx.fillStyle = theme.muted;
         ctx.font = fontOf('500', S * 0.028);
-        drawClippedText(ctx, prev.text, W / 2, contextY - S * 0.052, W * 0.82);
+        drawClippedText(ctx, prev.text, W / 2, contextY - S * 0.05, W * 0.82);
       }
     }
     if (opts.showNextLyric && idx < lyrics.length - 1) {
@@ -579,7 +587,7 @@ function drawLyrics(
         ctx.globalAlpha = contextAlpha * 0.42;
         ctx.fillStyle = theme.muted;
         ctx.font = fontOf('500', S * 0.028);
-        drawClippedText(ctx, next.text, W / 2, contextY + S * 0.052, W * 0.82);
+        drawClippedText(ctx, next.text, W / 2, contextY + S * 0.05, W * 0.82);
       }
     }
 
@@ -593,28 +601,50 @@ function drawLyrics(
   }
 
   // —— list 滚动列表 ——
-  const lineH = S * 0.062;
+  // 行数可配（上方 opts.lyricAbove 行 / 当前行 / 下方 opts.lyricBelow 行，默认上 1 下 3）。
+  // 布局让位：可用带 = [封面上限 0.55H, 可视化顶界 - 0.012H]，可视化在 list 模式
+  // 自动压缩（见 drawVisualizer）；行高按可用带自适应压缩（下限），仍放不下时
+  // 距当前行最远的行自动省略，保证歌词不与频谱/唱片干涉。
+  const isCircle = opts.visualizer === 'circle';
+  const visTopRatio = isCircle
+    ? 0 // circle 逐行计算（放射线绕盘，边界与盘底相关）
+    : opts.visualizer === 'bars'
+      ? 0.79
+      : opts.visualizer === 'mirror'
+        ? 0.715
+        : 0.815; // wave
+  const boundBottom = isCircle
+    ? layout.coverCy + layout.coverR + S * 0.06
+    : H * visTopRatio - H * 0.012;
+  const boundTop = H * 0.55;
+  const n = opts.lyricAbove + 1 + opts.lyricBelow;
+  const lineH = Math.max(S * 0.03, Math.min(S * 0.048, (boundBottom - boundTop) / n));
   const target = idx < 0 ? 0 : idx;
   // 帧率无关指数收敛
   listScroll += (target - listScroll) * Math.min(1, dt * 7);
-  const cy = H * 0.7;
-  const visible = 7; // 上下各显示 3 行
+  // 当前行基准：为下方 below 行留位，同时保证上方行/当前行不越上界
+  let curY = boundBottom - opts.lyricBelow * lineH;
+  curY = Math.max(curY, boundTop + opts.lyricAbove * lineH);
+  curY = Math.min(Math.max(curY, boundTop), boundBottom);
   const listBase = ctx.globalAlpha;
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  for (let i = Math.floor(listScroll) - 3; i <= Math.floor(listScroll) + 3; i++) {
-    if (i < 0 || i >= lyrics.length) continue;
+  const from = Math.max(0, Math.floor(listScroll) - opts.lyricAbove - 1);
+  const to = Math.min(lyrics.length - 1, Math.ceil(listScroll) + opts.lyricBelow + 1);
+  for (let i = from; i <= to; i++) {
     const line = lyrics[i];
     if (!line) continue;
-    const d = i - listScroll; // 相对当前行的行距
-    if (Math.abs(d) > visible / 2 + 0.5) continue;
+    const d = i - listScroll; // 相对当前行的连续行距
+    const y = curY + (i - idx) * lineH;
+    // 超出可用带的行不绘制（当前行 idx 始终保留）
+    if (i !== idx && (y < boundTop - lineH * 0.4 || y > boundBottom + lineH * 0.4)) continue;
     const active = i === idx;
-    const dist = Math.min(1, Math.abs(d) / 3);
+    const dist = Math.min(1, Math.abs(d) / (opts.lyricAbove + opts.lyricBelow + 1));
     ctx.globalAlpha = listBase * (active ? 1 : 0.55 * (1 - dist * 0.7));
     ctx.fillStyle = active ? theme.accent : theme.fg;
-    ctx.font = fontOf(active ? '700' : '500', S * (active ? 0.04 : 0.032));
-    ctx.fillText(line.text, W / 2, cy + d * lineH, W * 0.86);
+    ctx.font = fontOf(active ? '700' : '500', S * (active ? 0.038 : 0.03));
+    ctx.fillText(line.text, W / 2, y, W * 0.86);
   }
   ctx.restore();
 }
@@ -643,11 +673,11 @@ function drawProgress(
     return;
   }
 
-  // full：胶囊 + 两端时间
+  // full：胶囊条贴底（可视化的下方独立条带，不与频谱/歌词重叠），时间文字放条下方
   const marginX = W * 0.12;
   const barW = W - marginX * 2;
-  const y = H - S * 0.085;
-  const h = S * 0.013;
+  const y = H - S * 0.045;
+  const h = S * 0.012;
   ctx.fillStyle = 'rgba(128,128,128,0.3)';
   roundRectPath(ctx, marginX, y, barW, h, h / 2);
   ctx.fill();
@@ -662,12 +692,12 @@ function drawProgress(
     ctx.fill();
   }
   ctx.fillStyle = 'rgba(200,200,200,0.85)';
-  ctx.font = fontOf('500', S * 0.024);
+  ctx.font = fontOf('500', S * 0.02);
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
-  ctx.fillText(fmtTime(Math.max(0, ta)), marginX, y - S * 0.018);
+  ctx.fillText(fmtTime(Math.max(0, ta)), marginX, y + h + S * 0.024);
   ctx.textAlign = 'right';
-  ctx.fillText(fmtTime(timeline.audio), marginX + barW, y - S * 0.018);
+  ctx.fillText(fmtTime(timeline.audio), marginX + barW, y + h + S * 0.024);
 }
 
 /**

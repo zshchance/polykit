@@ -2,6 +2,7 @@ import '@/core/styles/main.css';
 import { h } from '@/core/components/element';
 import { renderToolLayout } from '@/core/components/ToolLayout';
 import { initTheme } from '@/core/components/ThemeToggle';
+import { createDialog, confirmDialog } from '@/core/components/Dialog';
 import { sanitizeFilePart } from '@/core/utils/download';
 
 import {
@@ -10,11 +11,14 @@ import {
   resumeAudioContext,
   type LoadedAudio,
 } from './audio';
+import { addCustomTheme, loadCustomThemes, removeCustomTheme, toRenderTheme } from './custom-themes';
 import { parseLyrics, type LyricLine } from './lyrics';
 import {
   ASPECTS,
   INTRO_ANIMS,
   INTRO_DUR_CHOICES,
+  LYRIC_ABOVE_CHOICES,
+  LYRIC_BELOW_CHOICES,
   LYRIC_MODES,
   OUTRO_ANIMS,
   OUTRO_DUR_CHOICES,
@@ -30,6 +34,7 @@ import {
   type LyricModeId,
   type ProgressBarId,
   type ResolutionId,
+  type Theme,
   type Timeline,
   type VisualizerId,
 } from './options';
@@ -290,8 +295,17 @@ function render(): void {
     return timelineCache;
   }
 
+  /** 按 id 解析主题：内置 10 套，或 localStorage 里的自定义主题（未知 id 回退默认） */
+  function resolveTheme(id: string): Theme {
+    const builtin = THEMES.find((t) => t.id === id);
+    if (builtin) return builtin;
+    const custom = loadCustomThemes().find((c) => c.id === id);
+    if (custom) return toRenderTheme(custom);
+    return getTheme(undefined);
+  }
+
   function buildRenderInput(): RenderInput {
-    const theme = getTheme(opts.theme);
+    const theme = resolveTheme(opts.theme);
     return {
       opts,
       theme: opts.accentColor ? { ...theme, accent: opts.accentColor } : theme,
@@ -669,37 +683,223 @@ function render(): void {
       updateOptions(() => (opts.showNextLyric = (e.target as HTMLInputElement).checked)),
   }) as HTMLInputElement;
 
-  // 主题：色块按钮
-  const themeBtns: HTMLButtonElement[] = [];
+  // 滚动列表模式：当前句上方/下方行数（上方默认小于下方；空间不足时自动少显）
+  const selCls =
+    'rounded-md border border-[var(--border)] bg-[var(--bg)] px-1.5 py-0.5 text-xs text-[var(--fg)] outline-none focus:border-[var(--accent)]';
+  const lyricAboveSel = h(
+    'select',
+    {
+      class: selCls,
+      'aria-label': '歌词列表上方行数',
+      onchange: (e) =>
+        updateOptions(() => (opts.lyricAbove = Number((e.target as HTMLSelectElement).value))),
+    },
+    LYRIC_ABOVE_CHOICES.map((c) =>
+      h('option', { value: String(c), selected: c === opts.lyricAbove }, [
+        c === 0 ? '不显示' : `上 ${c} 行`,
+      ]),
+    ),
+  ) as HTMLSelectElement;
+  const lyricBelowSel = h(
+    'select',
+    {
+      class: selCls,
+      'aria-label': '歌词列表下方行数',
+      onchange: (e) =>
+        updateOptions(() => (opts.lyricBelow = Number((e.target as HTMLSelectElement).value))),
+    },
+    LYRIC_BELOW_CHOICES.map((c) =>
+      h('option', { value: String(c), selected: c === opts.lyricBelow }, [`下 ${c} 行`]),
+    ),
+  ) as HTMLSelectElement;
+
+  // 主题：内置 10 套 + 用户自定义（存储参考名言卡片自定义模板：localStorage items 列表）
+  const themeWrap = h('div', { class: 'flex flex-wrap items-center gap-3' }, []);
   const paintTheme = (id: string): void => {
-    for (const b of themeBtns) {
-      const active = b.dataset.themeId === id;
-      b.style.outline = active ? '2px solid var(--accent)' : 'none';
-      b.style.outlineOffset = '2px';
+    for (const b of themeWrap.querySelectorAll('button[data-theme-id]')) {
+      const el = b as HTMLElement;
+      const active = el.dataset.themeId === id;
+      el.style.outline = active ? '2px solid var(--accent)' : 'none';
+      el.style.outlineOffset = '2px';
     }
   };
-  const themeWrap = h('div', { class: 'flex flex-wrap gap-3' }, []);
-  for (const th of THEMES) {
-    const btn = h(
+  function selectTheme(id: string): void {
+    updateOptions(() => (opts.theme = id));
+    paintTheme(id);
+  }
+
+  /** 主题编辑对话框：基于当前主题预填，四个色板 + 实时渐变预览 */
+  function openThemeEditor(): void {
+    const base = resolveTheme(opts.theme);
+    const dlg = createDialog({
+      panelClass: 'max-w-md',
+      label: '新建自定义主题',
+      closeOnBackdrop: false,
+    });
+    const inputCls =
+      'w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]';
+    const nameInput = h('input', {
+      type: 'text',
+      value: `我的主题 ${loadCustomThemes().length + 1}`,
+      class: inputCls,
+      'aria-label': '主题名称',
+      maxlength: '12',
+    }) as HTMLInputElement;
+    const colorCls = 'h-8 w-12 cursor-pointer rounded border border-[var(--border)] bg-[var(--bg)] p-0.5';
+    const bg1 = h('input', { type: 'color', value: base.bg[0], class: colorCls, 'aria-label': '背景起色' }) as HTMLInputElement;
+    const bg2 = h('input', { type: 'color', value: base.bg[1], class: colorCls, 'aria-label': '背景止色' }) as HTMLInputElement;
+    const fg = h('input', { type: 'color', value: base.fg, class: colorCls, 'aria-label': '文字颜色' }) as HTMLInputElement;
+    const accentC = h('input', { type: 'color', value: base.accent, class: colorCls, 'aria-label': '主强调色' }) as HTMLInputElement;
+    const swatch = h('div', {
+      class: 'h-12 w-full rounded-lg border border-[var(--border)]',
+      style: `background:linear-gradient(135deg,${base.bg[0]},${base.bg[1]})`,
+    });
+    const syncSwatch = (): void => {
+      swatch.style.background = `linear-gradient(135deg,${bg1.value},${bg2.value})`;
+    };
+    bg1.addEventListener('input', syncSwatch);
+    bg2.addEventListener('input', syncSwatch);
+
+    const colorRow = (label: string, input: HTMLElement): HTMLElement =>
+      h('div', { class: 'flex items-center justify-between gap-3' }, [
+        h('span', { class: 'text-sm text-[var(--fg-muted)]', textContent: label }),
+        input,
+      ]);
+    const cancelBtn = h(
       'button',
       {
         type: 'button',
-        'data-theme-id': th.id,
-        title: th.label,
-        'aria-label': `主题：${th.label}`,
-        class: 'h-9 w-14 rounded-lg border border-[var(--border)] transition-transform hover:scale-105',
-        style: `background:${th.swatch}`,
+        class:
+          'rounded-md border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--fg-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors',
+        textContent: '取消',
+        onclick: () => dlg.close(),
+      },
+      [],
+    );
+    const saveBtn = h(
+      'button',
+      {
+        type: 'button',
+        class:
+          'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+        textContent: '保存主题',
         onclick: () => {
-          updateOptions(() => (opts.theme = th.id));
-          paintTheme(th.id);
+          const items = addCustomTheme(
+            nameInput.value.trim() || `我的主题 ${loadCustomThemes().length + 1}`,
+            bg1.value,
+            bg2.value,
+            fg.value,
+            accentC.value,
+          );
+          const last = items[items.length - 1];
+          dlg.close();
+          rebuildThemeButtons();
+          if (last) selectTheme(last.id);
         },
       },
       [],
-    ) as HTMLButtonElement;
-    themeBtns.push(btn);
-    themeWrap.append(btn);
+    );
+    dlg.body.append(
+      h('h3', { class: 'text-base font-semibold text-[var(--fg)]', textContent: '新建自定义主题' }),
+      h('div', { class: 'mt-3 space-y-3' }, [
+        colorRow('主题名称', nameInput),
+        swatch,
+        colorRow('背景色（起）', bg1),
+        colorRow('背景色（止）', bg2),
+        colorRow('文字颜色', fg),
+        colorRow('主强调色', accentC),
+        h('p', {
+          class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
+          textContent:
+            '浅色/深色按背景亮度自动判断；主色用于频谱、进度条与高亮歌词。自定义主题保存在本浏览器，可在主题按钮悬停角标删除。',
+        }),
+      ]),
+      h('div', { class: 'mt-4 flex justify-end gap-2' }, [cancelBtn, saveBtn]),
+    );
+    dlg.open();
   }
-  paintTheme(opts.theme);
+
+  function rebuildThemeButtons(): void {
+    themeWrap.replaceChildren();
+    // 内置主题
+    for (const th of THEMES) {
+      themeWrap.append(
+        h(
+          'button',
+          {
+            type: 'button',
+            'data-theme-id': th.id,
+            title: th.label,
+            'aria-label': `主题：${th.label}`,
+            class: 'h-9 w-14 rounded-lg border border-[var(--border)] transition-transform hover:scale-105',
+            style: `background:${th.swatch}`,
+            onclick: () => selectTheme(th.id),
+          },
+          [],
+        ),
+      );
+    }
+    // 自定义主题（悬停显示删除角标）
+    for (const ct of loadCustomThemes()) {
+      const btn = h(
+        'button',
+        {
+          type: 'button',
+          'data-theme-id': ct.id,
+          title: `自定义主题：${ct.name}`,
+          'aria-label': `自定义主题：${ct.name}`,
+          class: 'h-9 w-14 rounded-lg border border-[var(--border)] transition-transform hover:scale-105',
+          style: `background:linear-gradient(135deg,${ct.bg1},${ct.bg2})`,
+          onclick: () => selectTheme(ct.id),
+        },
+        [],
+      );
+      const del = h(
+        'button',
+        {
+          type: 'button',
+          'aria-label': `删除主题 ${ct.name}`,
+          title: '删除此主题',
+          class:
+            'absolute -right-1.5 -top-1.5 hidden h-4.5 w-4.5 items-center justify-center rounded-full bg-red-500 text-[9px] leading-none text-white shadow group-hover:flex',
+          textContent: '✕',
+          onclick: (e) => {
+            e.stopPropagation();
+            void confirmDialog(`确定删除自定义主题「${ct.name}」吗？`, {
+              title: '删除主题',
+              danger: true,
+              confirmText: '删除',
+            }).then((ok) => {
+              if (!ok) return;
+              removeCustomTheme(ct.id);
+              if (opts.theme === ct.id) selectTheme(THEMES[0]!.id);
+              rebuildThemeButtons();
+            });
+          },
+        },
+        [],
+      );
+      themeWrap.append(h('div', { class: 'group relative' }, [btn, del]));
+    }
+    // 新建入口
+    themeWrap.append(
+      h(
+        'button',
+        {
+          type: 'button',
+          title: '新建自定义主题',
+          'aria-label': '新建自定义主题',
+          class:
+            'h-9 w-14 rounded-lg border border-dashed border-[var(--border)] text-lg text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+          textContent: '+',
+          onclick: () => openThemeEditor(),
+        },
+        [],
+      ),
+    );
+    paintTheme(opts.theme);
+  }
+  rebuildThemeButtons();
 
   const progressSeg = makeSegment<ProgressBarId>(
     PROGRESS_BARS.map((p) => ({ id: p.id, label: p.label })),
@@ -759,7 +959,7 @@ function render(): void {
 
   const accentColorInput = h('input', {
     type: 'color',
-    value: opts.accentColor ?? '#38bdf8',
+    value: opts.accentColor ?? resolveTheme(opts.theme).accent,
     class: 'h-8 w-10 cursor-pointer rounded border border-[var(--border)] bg-[var(--bg)] p-0.5',
     'aria-label': '自定义主色',
     oninput: (e) =>
@@ -774,7 +974,7 @@ function render(): void {
       textContent: '跟随主题',
       onclick: () => {
         updateOptions(() => (opts.accentColor = null));
-        accentColorInput.value = getTheme(opts.theme).accent;
+        accentColorInput.value = resolveTheme(opts.theme).accent;
       },
     },
     [],
@@ -1012,6 +1212,17 @@ function render(): void {
               nextLyricCheckbox,
               '显示后一句（单行淡入模式）',
             ]),
+          ]),
+          h('div', { class: 'flex flex-wrap items-center gap-x-4 gap-y-1.5' }, [
+            h('label', { class: 'flex items-center gap-1.5 text-xs text-[var(--fg-muted)]' }, [
+              h('span', { textContent: '列表上方' }),
+              lyricAboveSel,
+            ]),
+            h('label', { class: 'flex items-center gap-1.5 text-xs text-[var(--fg-muted)]' }, [
+              h('span', { textContent: '列表下方' }),
+              lyricBelowSel,
+            ]),
+            h('span', { class: 'text-[11px] text-[var(--fg-muted)]', textContent: '空间不足时自动少显' }),
           ]),
         ]),
         row('配色主题', themeWrap),
