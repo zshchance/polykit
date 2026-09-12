@@ -644,16 +644,23 @@ function drawLyrics(
 
   // —— list 滚动列表 ——
   // 行数可配（上方 opts.lyricAbove 行 / 当前行 / 下方 opts.lyricBelow 行，默认上 1 下 3）。
-  // 可用带以唱片下缘为锚（上界）到可视化顶界（下界，list 模式频谱自动压扁，
-  // 见 visMetrics）；行高按带高自适应压缩（下限），仍放不下时距当前行最远的行
-  // 自动省略，保证歌词不与频谱/唱片干涉。当前行基准取「块在带内居中」，
-  // 竖版中带较高时上下留白均衡，不会出现歌词远离唱片的观感。
+  // 可用带：环形频谱模式 = 唱片下方到胶囊进度条之间的整块空白（放射线已跳过正下方
+  // 扇区，上界只需避开左右两侧放射线的最低端点）；其余模式 = 唱片下缘到可视化顶界
+  // （list 模式频谱自动压扁，见 visMetrics）。行高按带高自适应压缩（下限），仍放不下
+  // 时距当前行最远的行自动省略。当前行基准取「块在带内居中」，上下留白均衡。
+  const isPortrait = H > S;
   const isCircle = opts.visualizer === 'circle';
   const coverBottom = layout.coverCy + layout.coverR;
-  const boundBottom = isCircle
-    ? coverBottom + S * 0.09
-    : visMetrics(input, H, S).top - H * 0.012;
-  const boundTop = coverBottom + (isCircle ? S * 0.02 : S * 0.03);
+  let boundBottom: number;
+  let boundTop: number;
+  if (isCircle) {
+    const progressY = H - S * (isPortrait ? 0.065 : 0.052);
+    boundTop = coverBottom + S * 0.035; // 左右放射线最低端点（±50°）之下
+    boundBottom = progressY - H * 0.02; // 胶囊进度条之上
+  } else {
+    boundBottom = visMetrics(input, H, S).top - H * 0.012;
+    boundTop = coverBottom + S * 0.03;
+  }
   const n = opts.lyricAbove + 1 + opts.lyricBelow;
   const lineH = Math.max(S * 0.03, Math.min(S * 0.048, (boundBottom - boundTop) / n));
   const target = idx < 0 ? 0 : idx;
