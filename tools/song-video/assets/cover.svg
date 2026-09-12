@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 120" fill="none">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="320" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0ea5e9"/>
+      <stop offset="1" stop-color="#6366f1"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="120" fill="url(#g)"/>
+  <!-- 频谱条 -->
+  <g fill="#ffffff" fill-opacity="0.85">
+    <rect x="30" y="66" width="10" height="24" rx="3"/>
+    <rect x="48" y="52" width="10" height="38" rx="3"/>
+    <rect x="66" y="70" width="10" height="20" rx="3"/>
+    <rect x="84" y="40" width="10" height="50" rx="3"/>
+    <rect x="102" y="58" width="10" height="32" rx="3"/>
+    <rect x="120" y="30" width="10" height="60" rx="3"/>
+    <rect x="138" y="50" width="10" height="40" rx="3"/>
+    <rect x="156" y="64" width="10" height="26" rx="3"/>
+    <rect x="174" y="44" width="10" height="46" rx="3"/>
+    <rect x="192" y="72" width="10" height="18" rx="3"/>
+    <rect x="210" y="36" width="10" height="54" rx="3"/>
+    <rect x="228" y="56" width="10" height="34" rx="3"/>
+    <rect x="246" y="68" width="10" height="22" rx="3"/>
+    <rect x="264" y="48" width="10" height="42" rx="3"/>
+    <rect x="282" y="62" width="10" height="28" rx="3"/>
+  </g>
+  <!-- 音符 -->
+  <path d="M96 14v13.5a6 6 0 1 1-2.5-4.9V18l14-3.7V26a6 6 0 1 1-2.5-4.9v-11a2 2 0 0 0-2.5-1.9l-8 2.1z" fill="#fff" fill-opacity="0.9"/>
+</svg>
