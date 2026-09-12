@@ -112,15 +112,32 @@ function roundRectPath(
   ctx.closePath();
 }
 
-// ─────────────────────────── 歌词列表滚动状态 ───────────────────────────
-// drawFrame 是纯参数驱动，但「滚动列表」需要跨帧平滑：这里保存上一帧的
-// 连续行位置，向目标行做帧率无关的指数收敛（seek 后约 0.3s 收敛，观感自然）。
+// ─────────────────────────── 歌词列表滚动动画 ───────────────────────────
+// drawFrame 是纯参数驱动，但「滚动列表」需要跨帧状态：每次当前句切换时，
+// 从当前位置向新目标行做一段固定时长的缓动滚动（ease-out 带轻微回弹，
+// 类音乐 App 的歌单滚动），到时后稳稳定格；seek/换歌时整体复位。
+// 帧率无关：以累计 dt 推进进度，预览与逐帧录制表现一致。
 
 let listScroll = 0;
+let animFrom = 0;
+let animTarget = 0;
+let animElapsed = Number.MAX_SAFE_INTEGER;
 
-/** 重置滚动状态（换歌/seek 到明显不同位置时调用，避免长距离滑动掠过） */
+/** 每次歌词切换的滚动时长（秒） */
+const LYRIC_SCROLL_DUR = 0.55;
+/** ease-out 带轻微回弹（back-out，过冲约 6%），比纯 cubic 更有滚动惯性 */
+function easeLyricScroll(p: number): number {
+  const s = 1.2;
+  const t = p - 1;
+  return 1 + t * t * ((s + 1) * t + s);
+}
+
+/** 重置滚动动画（换歌/seek 到明显不同位置时调用，避免长距离滑动掠过） */
 export function resetListScroll(): void {
   listScroll = 0;
+  animFrom = 0;
+  animTarget = 0;
+  animElapsed = Number.MAX_SAFE_INTEGER;
 }
 
 // ─────────────────────────── 主绘制函数 ───────────────────────────
@@ -663,9 +680,20 @@ function drawLyrics(
   }
   const n = opts.lyricAbove + 1 + opts.lyricBelow;
   const lineH = Math.max(S * 0.03, Math.min(S * 0.048, (boundBottom - boundTop) / n));
+  // —— 句间切换滚动动画：目标行变化时从当前位置缓动滚向新目标（带轻微回弹） ——
   const target = idx < 0 ? 0 : idx;
-  // 帧率无关指数收敛
-  listScroll += (target - listScroll) * Math.min(1, dt * 7);
+  if (target !== animTarget) {
+    animFrom = listScroll;
+    animTarget = target;
+    animElapsed = 0;
+  }
+  if (animElapsed < LYRIC_SCROLL_DUR) {
+    animElapsed += dt;
+    const p = clamp01(animElapsed / LYRIC_SCROLL_DUR);
+    listScroll = animFrom + (animTarget - animFrom) * easeLyricScroll(p);
+  } else {
+    listScroll = animTarget;
+  }
   // 当前行基准：整块在带内居中（上留白 = 下留白），并保证上/下方行各自有位
   let curY =
     boundTop + opts.lyricAbove * lineH + (boundBottom - boundTop - (n - 1) * lineH) / 2;
