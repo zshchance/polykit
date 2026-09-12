@@ -70,6 +70,53 @@ function pickMime(): PickedMime | null {
 /** 频段数量（bars/mirror/circle 共用一组对数分桶数据） */
 const BAND_COUNT = 64;
 
+// ─────────────────────────── 屏幕常亮(录制期间) ───────────────────────────
+// Screen Wake Lock API:阻止屏幕保护/熄屏/系统休眠(渲染是实时 rAF 驱动,熄屏必掉帧)。
+// 浏览器在页面转后台时会自动释放锁,回到前台自动重新申请;不支持的浏览器静默降级。
+
+interface WakeLockSentinelLike {
+  released: boolean;
+  release(): Promise<void>;
+}
+
+let wakeLock: WakeLockSentinelLike | null = null;
+let wakeLockActive = false; // 录制进行中(控制 visibilitychange 时是否重新申请)
+
+/** 是否支持屏幕常亮锁(用于 UI 提示) */
+export function isWakeLockSupported(): boolean {
+  return typeof navigator !== 'undefined' && 'wakeLock' in navigator;
+}
+
+async function acquireWakeLock(): Promise<void> {
+  if (!isWakeLockSupported()) return;
+  try {
+    const nav = navigator as Navigator & {
+      wakeLock: { request(type: 'screen'): Promise<WakeLockSentinelLike> };
+    };
+    wakeLock = await nav.wakeLock.request('screen');
+  } catch {
+    // 被系统策略拒绝(如低电量):静默降级,录制照常
+    wakeLock = null;
+  }
+}
+
+async function releaseWakeLock(): Promise<void> {
+  const lock = wakeLock;
+  wakeLock = null;
+  try {
+    await lock?.release();
+  } catch {
+    /* 忽略 */
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  // 页面回到前台且仍在录制:重新申请(浏览器在转后台时已自动释放)
+  if (document.visibilityState === 'visible' && wakeLockActive) {
+    void acquireWakeLock();
+  }
+});
+
 export function startRecording(o: RecordOptions): RecordHandle {
   const { buffer, input, W, H, fps, onProgress } = o;
 
@@ -144,6 +191,8 @@ export function startRecording(o: RecordOptions): RecordHandle {
 
   const cleanup = (): void => {
     cancelAnimationFrame(rafId);
+    wakeLockActive = false;
+    void releaseWakeLock();
     try {
       source.stop();
     } catch {
@@ -187,6 +236,9 @@ export function startRecording(o: RecordOptions): RecordHandle {
     try {
       recorder.start(250); // timeslice：定期产出 chunk，进度/取消更即时
       source.start(t0 + timeline.intro);
+      // 录制期间保持屏幕常亮（阻止屏保/熄屏/休眠）
+      wakeLockActive = true;
+      void acquireWakeLock();
     } catch (e) {
       finish({ ok: false, reason: e instanceof Error ? e.message : '启动录制失败' });
       return;

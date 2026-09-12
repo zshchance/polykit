@@ -41,7 +41,7 @@ import {
   type VisualizerId,
 } from './options';
 import { computeBands, drawFrame, resetListScroll, type ImageAsset, type RenderInput } from './renderer';
-import { startRecording, type RecordHandle } from './recorder';
+import { startRecording, isWakeLockSupported, type RecordHandle } from './recorder';
 import { loadOptions, saveOptions } from './settings';
 
 initTheme();
@@ -1170,6 +1170,15 @@ function render(): void {
 
   async function generate(): Promise<void> {
     if (!audio || recording) return;
+    // 生成前确认：实时渲染期间必须保持本页面前台，明确提醒避免成片掉帧
+    const ok = await confirmDialog(
+      `为保障视频质量，生成过程中请保持本页面在前台（切换标签页 / 最小化窗口会导致掉帧）。` +
+        `生成期间将自动阻止屏幕保护、熄屏与休眠` +
+        `${isWakeLockSupported() ? '' : '（当前浏览器不支持防休眠，请注意系统电源设置）'}。` +
+        `实时渲染约需 ${Math.ceil(totalDuration())} 秒，是否开始？`,
+      { title: '开始生成视频', confirmText: '开始生成' },
+    );
+    if (!ok) return;
     if (playing) stopPreview(false);
     statusEl.textContent = '';
     downloadWrap.classList.add('hidden');
