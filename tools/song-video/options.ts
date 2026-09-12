@@ -236,6 +236,10 @@ export interface SongVideoOptions {
   visualizer: VisualizerId;
   /** 歌词滚动模式（无歌词文件时自动等效 none） */
   lyricMode: LyricModeId;
+  /** 单行淡入模式下，在当前句上方显示前一句（滚动列表模式天然多行，不生效） */
+  showPrevLyric: boolean;
+  /** 单行淡入模式下，在当前句下方显示后一句 */
+  showNextLyric: boolean;
   /** 主题配色 */
   theme: ThemeId;
   /** 自定义主色（覆盖主题 accent；null=跟随主题） */
@@ -269,6 +273,8 @@ export const DEFAULT_OPTIONS: SongVideoOptions = {
   resolution: '720',
   visualizer: 'bars',
   lyricMode: 'fade',
+  showPrevLyric: false,
+  showNextLyric: false,
   theme: 'midnight',
   accentColor: null,
   showTitle: true,

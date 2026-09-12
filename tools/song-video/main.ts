@@ -308,7 +308,7 @@ function render(): void {
   const previewCanvas = h('canvas', { class: 'block h-full w-full' }) as HTMLCanvasElement;
   const canvasFrame = h(
     'div',
-    { class: 'overflow-hidden rounded-xl border border-[var(--border)] bg-black' },
+    { class: 'mx-auto overflow-hidden rounded-xl border border-[var(--border)] bg-black shadow-lg' },
     [previewCanvas],
   );
 
@@ -320,6 +320,10 @@ function render(): void {
     previewCanvas.width = w;
     previewCanvas.height = hgt;
     canvasFrame.style.aspectRatio = `${w} / ${hgt}`;
+    // 自适应视口：宽度取「列宽 100%」与「按可用视口高换算的等比宽度」中较小者，
+    // 保证任何比例（含 9:16 竖版）在窗口缩小/放大时预览都完整显示、不被裁切。
+    // 14rem ≈ 页头 + 预览工具栏 + 播放控制行 + 卡片内边距的预留高度。
+    canvasFrame.style.width = `min(100%, calc((100dvh - 14rem) * ${w} / ${hgt}))`;
   }
 
   // 预览音频链路：BufferSource → Analyser → 扬声器（录制用独立链路，互不影响）
@@ -649,6 +653,22 @@ function render(): void {
     (id) => updateOptions(() => (opts.lyricMode = id)),
   );
 
+  // 歌词上下句（仅单行淡入模式生效；滚动列表本身多行可见）
+  const prevLyricCheckbox = h('input', {
+    type: 'checkbox',
+    class: 'h-3.5 w-3.5 accent-[var(--accent)]',
+    checked: opts.showPrevLyric,
+    onchange: (e) =>
+      updateOptions(() => (opts.showPrevLyric = (e.target as HTMLInputElement).checked)),
+  }) as HTMLInputElement;
+  const nextLyricCheckbox = h('input', {
+    type: 'checkbox',
+    class: 'h-3.5 w-3.5 accent-[var(--accent)]',
+    checked: opts.showNextLyric,
+    onchange: (e) =>
+      updateOptions(() => (opts.showNextLyric = (e.target as HTMLInputElement).checked)),
+  }) as HTMLInputElement;
+
   // 主题：色块按钮
   const themeBtns: HTMLButtonElement[] = [];
   const paintTheme = (id: string): void => {
@@ -941,11 +961,13 @@ function render(): void {
   }
 
   // ──────────────── 组装布局 ────────────────
-  const previewCard = h(
+  // 布局对齐 ascii-art：左控制 + 右预览；预览列 sticky 吸顶
+  //（大屏 lg:top-6 悬浮、小屏顶部吸顶 order-first），滚动参数区时预览始终可见。
+  const previewCol = h(
     'div',
     {
       class:
-        'flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 shadow-sm sm:p-5',
+        'min-w-0 order-first lg:order-none sticky top-0 lg:top-6 z-10 bg-[var(--bg)] py-2 space-y-3',
     },
     [
       h('div', { class: 'flex items-center justify-between gap-2' }, [
@@ -956,59 +978,76 @@ function render(): void {
         }),
       ]),
       canvasFrame,
-      h('div', { class: 'flex items-center gap-3' }, [
-        playBtn,
-        seekSlider,
-        timeLabel,
-      ]),
-      h('div', { class: 'space-y-3 border-t border-[var(--border)] pt-4' }, [
-        generateBtn,
-        progressWrap,
-        progressLabel,
-        downloadWrap,
-        statusEl,
-      ]),
+      h('div', { class: 'flex items-center gap-3' }, [playBtn, seekSlider, timeLabel]),
     ],
   );
 
-  const settingsCard = h(
+  const settingsCol = h('div', { class: 'min-w-0 space-y-5' }, [
+    h(
+      'div',
+      {
+        class:
+          'space-y-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 shadow-sm sm:p-5',
+      },
+      [
+        h('div', { class: 'space-y-3' }, [
+          audioPicker.wrap,
+          lyricPicker.wrap,
+          bgPicker.wrap,
+          coverPicker.wrap,
+        ]),
+        h('div', { class: 'border-t border-[var(--border)]' }, []),
+        row('画面比例', aspectSeg.wrap),
+        row('导出画质', resolutionSel),
+        row('音频可视化', visualizerSeg.wrap),
+        h('div', { class: 'space-y-2' }, [
+          fieldLabel('歌词显示'),
+          lyricSeg.wrap,
+          h('div', { class: 'flex flex-wrap gap-x-5 gap-y-1.5 pt-0.5' }, [
+            h('label', { class: 'flex items-center gap-2 text-xs cursor-pointer text-[var(--fg-muted)]' }, [
+              prevLyricCheckbox,
+              '显示前一句（单行淡入模式）',
+            ]),
+            h('label', { class: 'flex items-center gap-2 text-xs cursor-pointer text-[var(--fg-muted)]' }, [
+              nextLyricCheckbox,
+              '显示后一句（单行淡入模式）',
+            ]),
+          ]),
+        ]),
+        row('配色主题', themeWrap),
+        row('进度条', progressSeg.wrap),
+        h('div', { class: 'space-y-1.5' }, [
+          h('label', { class: 'flex items-center gap-2 text-sm cursor-pointer' }, [
+            titleCheckbox,
+            '显示标题',
+          ]),
+          titleInput,
+        ]),
+        h('div', { class: 'border-t border-[var(--border)]' }, []),
+        advancedToggle,
+        advancedPanel,
+      ],
+    ),
+    h(
+      'div',
+      {
+        class:
+          'space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 shadow-sm sm:p-5',
+      },
+      [generateBtn, progressWrap, progressLabel, downloadWrap, statusEl],
+    ),
+  ]);
+
+  const layout = h(
     'div',
     {
-      class:
-        'space-y-5 self-start rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 shadow-sm sm:p-5',
+      class: 'grid items-start gap-6 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)]',
     },
-    [
-      h('div', { class: 'space-y-3' }, [
-        audioPicker.wrap,
-        lyricPicker.wrap,
-        bgPicker.wrap,
-        coverPicker.wrap,
-      ]),
-      h('div', { class: 'border-t border-[var(--border)]' }, []),
-      row('画面比例', aspectSeg.wrap),
-      row('导出画质', resolutionSel),
-      row('音频可视化', visualizerSeg.wrap),
-      row('歌词显示', lyricSeg.wrap),
-      row('配色主题', themeWrap),
-      row('进度条', progressSeg.wrap),
-      h('div', { class: 'space-y-1.5' }, [
-        h('label', { class: 'flex items-center gap-2 text-sm cursor-pointer' }, [
-          titleCheckbox,
-          '显示标题',
-        ]),
-        titleInput,
-      ]),
-      h('div', { class: 'border-t border-[var(--border)]' }, []),
-      advancedToggle,
-      advancedPanel,
-    ],
+    [settingsCol, previewCol],
   );
 
   content.append(
-    h('div', { class: 'grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]' }, [
-      previewCard,
-      settingsCard,
-    ]),
+    layout,
     h('p', {
       class: 'pt-1 text-center text-xs text-[var(--fg-muted)]',
       textContent:

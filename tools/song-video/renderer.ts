@@ -177,6 +177,16 @@ export function drawFrame(
     ctx.restore();
     ctx.fillStyle = theme.light ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
     ctx.fillRect(0, 0, W, H);
+  } else if (input.coverImage) {
+    // 无背景图时：用专辑封面做毛玻璃播放背景（放大裁剪 + 高斯模糊 + 压暗）
+    ctx.save();
+    // 四周外扩绘制：避免模糊边缘露出底色；ctx.filter 不支持时直接铺原图（遮罩兜底）
+    const supportsFilter = typeof ctx.filter === 'string';
+    if (supportsFilter) ctx.filter = `blur(${Math.round(S * 0.06)}px)`;
+    drawImageCover(ctx, input.coverImage, -S * 0.1, -S * 0.1, W + S * 0.2, H + S * 0.2);
+    ctx.restore();
+    ctx.fillStyle = theme.light ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.52)';
+    ctx.fillRect(0, 0, W, H);
   }
 
   // —— 2. 内容层入场/退场变换 ——
@@ -278,7 +288,7 @@ function drawClippedText(
   }
 }
 
-/** 黑胶唱片式封面圆盘（盘面随唱片旋转；环形频谱在 drawVisualizer 中叠加） */
+/** 黑胶唱片式封面圆盘（盘面随唱片旋转；高光/阴影固定不转，玻璃罩质感） */
 function drawCoverDisc(
   ctx: CanvasRenderingContext2D,
   layout: Layout,
@@ -290,31 +300,47 @@ function drawCoverDisc(
   const spin = input.opts.coverSpin ? t * 0.9 : 0; // 唱片转速（rad/s）
   const accent = theme.accent;
 
+  // —— a. 落地软阴影（双层：大范围柔影 + 近距实影，营造悬浮厚度） ——
   ctx.save();
-  // 盘底阴影
-  ctx.beginPath();
-  ctx.arc(cx, cy, R * 1.02, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.fill();
-
-  // 黑胶外圈
+  ctx.shadowColor = 'rgba(0,0,0,0.42)';
+  ctx.shadowBlur = R * 0.32;
+  ctx.shadowOffsetY = R * 0.1;
   ctx.beginPath();
   ctx.arc(cx, cy, R, 0, Math.PI * 2);
-  const vinyl = ctx.createRadialGradient(cx, cy, R * 0.5, cx, cy, R);
-  vinyl.addColorStop(0, 'rgba(30,32,38,0.96)');
-  vinyl.addColorStop(1, 'rgba(10,11,14,0.96)');
+  ctx.fillStyle = '#101114';
+  ctx.fill();
+  ctx.restore();
+
+  // —— b. 胶盘主体：左上受光的径向渐变 + 边缘亮环（金属厚度感） ——
+  const vinyl = ctx.createRadialGradient(
+    cx - R * 0.4,
+    cy - R * 0.45,
+    R * 0.08,
+    cx,
+    cy,
+    R * 1.02,
+  );
+  vinyl.addColorStop(0, '#33363f');
+  vinyl.addColorStop(0.55, '#1a1c22');
+  vinyl.addColorStop(1, '#0a0b0e');
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
   ctx.fillStyle = vinyl;
   ctx.fill();
-  // 唱片细纹
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-  ctx.lineWidth = Math.max(1, R * 0.006);
+  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+  ctx.lineWidth = Math.max(1, R * 0.008);
+  ctx.stroke();
+
+  // —— 唱片细纹（同心圆，弱反射纹理） ——
+  ctx.strokeStyle = 'rgba(255,255,255,0.045)';
+  ctx.lineWidth = Math.max(1, R * 0.005);
   for (let i = 1; i <= 4; i++) {
     ctx.beginPath();
     ctx.arc(cx, cy, R * (0.72 + i * 0.065), 0, Math.PI * 2);
     ctx.stroke();
   }
 
-  // 盘面内容（旋转坐标系：封面/首字随唱片转，频谱环不转）
+  // —— c. 盘面内容（旋转坐标系：封面/首字随唱片转） ——
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(spin);
@@ -338,18 +364,53 @@ function drawCoverDisc(
     ctx.textBaseline = 'middle';
     ctx.fillText(ch, 0, R * 0.04);
   }
+  // 封面玻璃感：对角高光（左上亮、右下暗），模拟覆盖在封面上的弧面玻璃
+  const glass = ctx.createLinearGradient(-R * 0.66, -R * 0.66, R * 0.66, R * 0.66);
+  glass.addColorStop(0, 'rgba(255,255,255,0.30)');
+  glass.addColorStop(0.32, 'rgba(255,255,255,0.06)');
+  glass.addColorStop(0.62, 'rgba(0,0,0,0)');
+  glass.addColorStop(1, 'rgba(0,0,0,0.22)');
+  ctx.fillStyle = glass;
+  ctx.fillRect(-R, -R, R * 2, R * 2);
   ctx.restore();
 
-  // 中轴孔
+  // 封面与胶盘交界的内缘环：外亮内暗两圈细线（凹陷层次）
   ctx.beginPath();
-  ctx.arc(cx, cy, R * 0.045, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(12,12,14,0.95)';
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(cx, cy, R * 0.045, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-  ctx.lineWidth = Math.max(1, R * 0.01);
+  ctx.arc(cx, cy, R * 0.66, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.lineWidth = Math.max(1, R * 0.012);
   ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy, R * 0.66 + R * 0.012, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.09)';
+  ctx.lineWidth = Math.max(1, R * 0.004);
+  ctx.stroke();
+
+  // —— d. 中心金属孔：暗孔 + 双圈金属反光 ——
+  ctx.beginPath();
+  ctx.arc(cx, cy, R * 0.055, 0, Math.PI * 2);
+  ctx.fillStyle = '#08090b';
+  ctx.fill();
+  const hub = ctx.createLinearGradient(cx - R * 0.06, cy - R * 0.06, cx + R * 0.06, cy + R * 0.06);
+  hub.addColorStop(0, 'rgba(255,255,255,0.5)');
+  hub.addColorStop(0.5, 'rgba(255,255,255,0.08)');
+  hub.addColorStop(1, 'rgba(0,0,0,0.5)');
+  ctx.beginPath();
+  ctx.arc(cx, cy, R * 0.055, 0, Math.PI * 2);
+  ctx.strokeStyle = hub;
+  ctx.lineWidth = Math.max(1, R * 0.012);
+  ctx.stroke();
+
+  // —— e. 整体顶部反光（固定不随唱片转：像罩在唱片上的玻璃罩受顶光） ——
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.clip();
+  const sheen = ctx.createLinearGradient(cx, cy - R, cx, cy + R * 0.25);
+  sheen.addColorStop(0, 'rgba(255,255,255,0.13)');
+  sheen.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(cx - R, cy - R, R * 2, R * 1.25);
   ctx.restore();
 }
 
@@ -494,15 +555,38 @@ function drawLyrics(
     const a = easeOut(inP) * (1 - easeOut(outP));
     if (a <= 0.01) return;
     ctx.save();
-    // 与内容层淡入/淡出叠加（globalAlpha 是替换语义，必须显式相乘）
-    ctx.globalAlpha = ctx.globalAlpha * a;
-    ctx.fillStyle = theme.fg;
-    ctx.font = fontOf('600', S * 0.05);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.shadowColor = theme.light ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.5)';
     ctx.shadowBlur = S * 0.02;
-    const y = H * 0.66 + (1 - easeOut(inP)) * S * 0.02;
+
+    // 前一句 / 后一句（弱化小字，随当前句一起淡入淡出；跟随整体内容层 alpha）
+    const layerAlpha = ctx.globalAlpha; // 内容层整体 alpha（开场/结尾动画）
+    const contextAlpha = layerAlpha * a;
+    const contextY = H * 0.66;
+    if (opts.showPrevLyric && idx > 0) {
+      const prev = lyrics[idx - 1];
+      if (prev) {
+        ctx.globalAlpha = contextAlpha * 0.42;
+        ctx.fillStyle = theme.muted;
+        ctx.font = fontOf('500', S * 0.028);
+        drawClippedText(ctx, prev.text, W / 2, contextY - S * 0.052, W * 0.82);
+      }
+    }
+    if (opts.showNextLyric && idx < lyrics.length - 1) {
+      const next = lyrics[idx + 1];
+      if (next) {
+        ctx.globalAlpha = contextAlpha * 0.42;
+        ctx.fillStyle = theme.muted;
+        ctx.font = fontOf('500', S * 0.028);
+        drawClippedText(ctx, next.text, W / 2, contextY + S * 0.052, W * 0.82);
+      }
+    }
+
+    ctx.globalAlpha = contextAlpha;
+    ctx.fillStyle = theme.fg;
+    ctx.font = fontOf('600', S * 0.05);
+    const y = contextY + (1 - easeOut(inP)) * S * 0.02;
     drawClippedText(ctx, line.text, W / 2, y, W * 0.88);
     ctx.restore();
     return;

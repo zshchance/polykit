@@ -75,6 +75,8 @@ export function loadOptions(): SongVideoOptions {
     resolution,
     visualizer: normalizeVisualizer(o.visualizer),
     lyricMode: normalizeLyricMode(o.lyricMode),
+    showPrevLyric: typeof o.showPrevLyric === 'boolean' ? o.showPrevLyric : d.showPrevLyric,
+    showNextLyric: typeof o.showNextLyric === 'boolean' ? o.showNextLyric : d.showNextLyric,
     theme: normalizeTheme(o.theme),
     accentColor: validColor(o.accentColor),
     showTitle: typeof o.showTitle === 'boolean' ? o.showTitle : d.showTitle,
