@@ -1009,11 +1009,14 @@ function render(): void {
     },
   }) as HTMLInputElement;
 
-  // 片尾字幕显示方式 + 滚动终止位置
+  // 片尾字幕显示方式 + 滚动终止位置 + 结束定格
   const endRollModeSeg = makeSegment<EndRollModeId>(
     END_ROLL_MODES.map((m) => ({ id: m.id, label: m.label, hint: m.hint })),
     opts.endRollMode,
-    (id) => updateOptions(() => (opts.endRollMode = id)),
+    (id) => {
+      updateOptions(() => (opts.endRollMode = id));
+      refreshEndFreezeState();
+    },
   );
   const endRollStopLabel = h('label', {
     class: 'flex items-center gap-2 text-xs cursor-pointer text-[var(--fg-muted)]',
@@ -1022,16 +1025,40 @@ function render(): void {
     type: 'checkbox',
     class: 'h-3.5 w-3.5 accent-[var(--accent)]',
     checked: opts.endRollStopCenter,
-    onchange: (e) =>
-      updateOptions(() => (opts.endRollStopCenter = (e.target as HTMLInputElement).checked)),
+    onchange: (e) => {
+      updateOptions(() => (opts.endRollStopCenter = (e.target as HTMLInputElement).checked));
+      refreshEndFreezeState();
+    },
   }) as HTMLInputElement;
   endRollStopLabel.append(
     endRollStopInput,
     document.createTextNode('滚动至屏幕正中央停止'),
   );
+  const endFreezeLabel = h('label', {
+    class: 'flex items-center gap-2 text-xs cursor-pointer text-[var(--fg-muted)]',
+  });
+  const endFreezeInput = h('input', {
+    type: 'checkbox',
+    class: 'h-3.5 w-3.5 accent-[var(--accent)]',
+    checked: opts.endFreeze,
+    onchange: (e) =>
+      updateOptions(() => (opts.endFreeze = (e.target as HTMLInputElement).checked)),
+  }) as HTMLInputElement;
+  endFreezeLabel.append(endFreezeInput, document.createTextNode('结束定格在字幕'));
+
+  /** 定格仅对「有最终静止字幕状态」的组合有意义：贯穿滚出（滚动+不停中央）时禁用 */
+  function refreshEndFreezeState(): void {
+    const meaningless = opts.endRollMode === 'roll' && !opts.endRollStopCenter;
+    endFreezeInput.disabled = meaningless;
+    endFreezeLabel.classList.toggle('opacity-40', meaningless);
+    endFreezeLabel.title = meaningless
+      ? '贯穿滚出模式字幕会滚出画面，无定格对象'
+      : '视频最后一帧保持显示最终字幕';
+  }
   const endRollModeWrap = h('div', { class: 'space-y-2' }, [
     endRollModeSeg.wrap,
     endRollStopLabel,
+    endFreezeLabel,
   ]);
 
   const endRollText = h('textarea', {
@@ -1310,6 +1337,7 @@ function render(): void {
   syncTimeUI(0);
   drawStaticFrame();
   updateGenerateState();
+  refreshEndFreezeState();
 }
 
 /** 时长档位下拉 */

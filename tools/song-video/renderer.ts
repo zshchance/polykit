@@ -753,6 +753,9 @@ function drawProgress(
  *         滚到「块中心与屏幕正中央对齐」后停住定格到结尾，否则贯穿滚出（原行为）
  *   fade  内容按每屏行数分页，每屏淡入 → 停留 → 淡出
  *   cut   内容分屏直接切换，无动画
+ * endFreeze 开启（默认）时最终字幕状态保持显示到视频最后一帧：
+ *   滚动停在中央的块、淡入淡出/无动画的最后一屏都不再消失；贯穿滚出无定格意义。
+ * 关闭时维持原行为——结尾段结束前约 0.35s 字幕消失。
  * 时间轴已按显示方式预留时长（computeTimeline），节奏参数与其保持一致。
  */
 function drawEndRoll(
@@ -778,7 +781,11 @@ function drawEndRoll(
   const rollStart = 0.45;
   const rollEnd = Math.max(rollStart + 1, input.timeline.outro - 0.35);
   const span = rollEnd - rollStart;
-  if (t2 < rollStart || t2 > rollEnd + 0.2) return;
+  // 结束定格：开启时字幕的最终状态（停在中央 / 最后一屏）保持显示到视频最后一帧；
+  // 关闭时维持原行为——结尾段结束前约 0.35s 字幕消失（滚出/淡出后以空白收尾）。
+  const freeze = opts.endFreeze;
+  if (t2 < rollStart) return;
+  if (!freeze && t2 > rollEnd + 0.2) return;
 
   ctx.save();
   ctx.textAlign = 'center';
@@ -827,8 +834,10 @@ function drawEndRoll(
 
   let alpha = 1;
   if (opts.endRollMode === 'fade') {
-    // 每屏前后 18% 时长淡入淡出
-    alpha = Math.min(easeOut(clamp01(pp / 0.18)), clamp01((1 - pp) / 0.18));
+    // 每屏前后 18% 时长淡入淡出；定格开启时最后一屏淡入后保持，不再淡出
+    const lastPage = pageIdx >= pages - 1;
+    const fadeOut = lastPage && freeze ? 1 : clamp01((1 - pp) / 0.18);
+    alpha = Math.min(easeOut(clamp01(pp / 0.18)), fadeOut);
   }
   const contentH = pageLines.length * lineH;
   const startY = (regionTop + regionBottom) / 2 - contentH / 2 + lineH / 2;

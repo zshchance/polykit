@@ -104,6 +104,7 @@ export function loadOptions(): SongVideoOptions {
     endRollMode: normalizeEndRollMode(o.endRollMode),
     endRollStopCenter:
       typeof o.endRollStopCenter === 'boolean' ? o.endRollStopCenter : d.endRollStopCenter,
+    endFreeze: typeof o.endFreeze === 'boolean' ? o.endFreeze : d.endFreeze,
     endRollText:
       typeof o.endRollText === 'string' ? o.endRollText.slice(0, 2000) : d.endRollText,
   };

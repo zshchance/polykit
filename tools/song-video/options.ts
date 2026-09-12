@@ -346,6 +346,12 @@ export interface SongVideoOptions {
   endRollMode: EndRollModeId;
   /** 滚动模式专用：滚动到屏幕正中央即停止（内容超过一屏时自动退化为贯穿滚动） */
   endRollStopCenter: boolean;
+  /**
+   * 结束定格在字幕：视频最后一帧保持显示最终字幕状态（滚动停在中央 / 最后一屏不再淡出）。
+   * 关闭时字幕在结尾段结束前约 0.35s 消失（滚出/淡出后以空白收尾）。
+   * 仅滚动+不停止（贯穿滚出）组合无定格意义，该组合下此开关不生效。
+   */
+  endFreeze: boolean;
   /** 片尾字幕内容（每行一条） */
   endRollText: string;
 }
@@ -387,6 +393,7 @@ export const DEFAULT_OPTIONS: SongVideoOptions = {
   endRollEnabled: false,
   endRollMode: 'roll',
   endRollStopCenter: true,
+  endFreeze: true,
   endRollText: '',
 };
 
