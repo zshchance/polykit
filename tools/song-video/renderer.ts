@@ -748,8 +748,12 @@ function drawProgress(
 }
 
 /**
- * 片尾滚动字幕：文本从画面下方匀速滚入、上方滚出。
- * rollStart 起滚，保证在 outro 结束前 0.35s 滚完（时间轴已按行数预留，见 computeTimeline）。
+ * 片尾字幕。三种显示方式（opts.endRollMode）：
+ *   roll  整块从画面下方滚入；endRollStopCenter 开启且内容不超过一屏时，
+ *         滚到「块中心与屏幕正中央对齐」后停住定格到结尾，否则贯穿滚出（原行为）
+ *   fade  内容按每屏行数分页，每屏淡入 → 停留 → 淡出
+ *   cut   内容分屏直接切换，无动画
+ * 时间轴已按显示方式预留时长（computeTimeline），节奏参数与其保持一致。
  */
 function drawEndRoll(
   ctx: CanvasRenderingContext2D,
@@ -760,35 +764,80 @@ function drawEndRoll(
   t2: number,
   theme: Theme,
 ): void {
-  const lines = input.opts.endRollText
+  const { opts } = input;
+  const lines = opts.endRollText
     .split('\n')
     .map((l) => l.trim())
     .filter(Boolean);
   if (lines.length === 0) return;
+  const lineH = S * 0.045;
+  const regionTop = H * 0.15;
+  const regionBottom = H * 0.88;
+  const perScreen = Math.max(1, Math.floor((regionBottom - regionTop) / lineH));
+
   const rollStart = 0.45;
   const rollEnd = Math.max(rollStart + 1, input.timeline.outro - 0.35);
+  const span = rollEnd - rollStart;
   if (t2 < rollStart || t2 > rollEnd + 0.2) return;
-
-  const lineH = S * 0.062;
-  const contentH = lines.length * lineH;
-  // 从画面底部之外匀速滚入、顶部之外滚出（y 随时间递减 = 向上滚动）
-  const dist = H + contentH;
-  const yOff = H - (t2 - rollStart) * (dist / (rollEnd - rollStart));
 
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line) continue;
-    const y = yOff + i * lineH + lineH / 2;
-    if (y < -lineH || y > H + lineH) continue;
-    // 底部入口区渐入（进入画面后保持完全不透明）
-    const fadeIn = clamp01((H - y) / (H * 0.15));
-    ctx.globalAlpha = clamp01(Math.min(1, fadeIn));
+
+  /** 画一行（首行加粗放大，作为字幕标题） */
+  const drawLine = (text: string, y: number, i: number, alpha: number): void => {
+    if (y < -lineH || y > H + lineH) return;
+    ctx.globalAlpha = clamp01(alpha);
     ctx.fillStyle = theme.fg;
     ctx.font = fontOf(i === 0 ? '700' : '400', S * (i === 0 ? 0.038 : 0.03));
-    ctx.fillText(line, W / 2, y, W * 0.84);
+    ctx.fillText(text, W / 2, y, W * 0.84);
+  };
+
+  if (opts.endRollMode === 'roll') {
+    const contentH = lines.length * lineH;
+    const stopCenter = opts.endRollStopCenter && contentH <= regionBottom - regionTop;
+    if (stopCenter) {
+      // 滚到「块中心 = 屏幕正中央」后停住定格；ease-out 收尾更从容
+      const startCY = H + contentH / 2;
+      const cy = startCY + (H / 2 - startCY) * easeOut(clamp01((t2 - rollStart) / span));
+      lines.forEach((line, i) => drawLine(line, cy - contentH / 2 + i * lineH + lineH / 2, i, 1));
+    } else {
+      // 贯穿滚动：从画面底部之外匀速滚入、顶部之外滚出（y 随时间递减）
+      const dist = H + contentH;
+      const yOff = H - ((t2 - rollStart) * dist) / span;
+      lines.forEach((line, i) => {
+        const y = yOff + i * lineH + lineH / 2;
+        // 底部入口区渐入（进入画面后保持完全不透明）
+        const fadeIn = clamp01((H - y) / (H * 0.15));
+        drawLine(line, y, i, fadeIn);
+      });
+    }
+    ctx.restore();
+    return;
+  }
+
+  // —— fade / cut：分屏显示 ——
+  const pages = Math.max(1, Math.ceil(lines.length / perScreen));
+  const pageDur = span / pages;
+  const pageIdx = Math.min(pages - 1, Math.floor((t2 - rollStart) / pageDur));
+  const pp = (t2 - rollStart - pageIdx * pageDur) / pageDur;
+  const pageLines = lines.slice(pageIdx * perScreen, (pageIdx + 1) * perScreen);
+  // 屏号角标（多屏时提示进度，如 2/3）
+  const pageBadge = pages > 1 ? `${pageIdx + 1} / ${pages}` : '';
+
+  let alpha = 1;
+  if (opts.endRollMode === 'fade') {
+    // 每屏前后 18% 时长淡入淡出
+    alpha = Math.min(easeOut(clamp01(pp / 0.18)), clamp01((1 - pp) / 0.18));
+  }
+  const contentH = pageLines.length * lineH;
+  const startY = (regionTop + regionBottom) / 2 - contentH / 2 + lineH / 2;
+  pageLines.forEach((line, i) => drawLine(line, startY + i * lineH, i, alpha));
+  if (pageBadge) {
+    ctx.globalAlpha = alpha * 0.5;
+    ctx.fillStyle = theme.muted;
+    ctx.font = fontOf('400', S * 0.022);
+    ctx.fillText(pageBadge, W / 2, regionBottom + lineH * 0.8);
   }
   ctx.restore();
 }

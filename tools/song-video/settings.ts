@@ -22,6 +22,7 @@ import {
   LYRIC_BELOW_CHOICES,
   OUTRO_DUR_CHOICES,
   RESOLUTIONS,
+  normalizeEndRollMode,
   normalizeIntroAnim,
   normalizeLyricMode,
   normalizeOutroAnim,
@@ -100,6 +101,9 @@ export function loadOptions(): SongVideoOptions {
     publisher: typeof o.publisher === 'string' ? o.publisher.slice(0, 40) : d.publisher,
     endRollEnabled:
       typeof o.endRollEnabled === 'boolean' ? o.endRollEnabled : d.endRollEnabled,
+    endRollMode: normalizeEndRollMode(o.endRollMode),
+    endRollStopCenter:
+      typeof o.endRollStopCenter === 'boolean' ? o.endRollStopCenter : d.endRollStopCenter,
     endRollText:
       typeof o.endRollText === 'string' ? o.endRollText.slice(0, 2000) : d.endRollText,
   };

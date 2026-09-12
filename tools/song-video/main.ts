@@ -15,6 +15,7 @@ import { addCustomTheme, loadCustomThemes, removeCustomTheme, toRenderTheme } fr
 import { parseLyrics, type LyricLine } from './lyrics';
 import {
   ASPECTS,
+  END_ROLL_MODES,
   INTRO_ANIMS,
   INTRO_DUR_CHOICES,
   LYRIC_ABOVE_CHOICES,
@@ -31,6 +32,7 @@ import {
   getResolution,
   getTheme,
   type AspectId,
+  type EndRollModeId,
   type LyricModeId,
   type ProgressBarId,
   type ResolutionId,
@@ -291,7 +293,9 @@ function render(): void {
   }
 
   function getTimeline(): Timeline {
-    if (!timelineCache) timelineCache = computeTimeline(opts, audio?.duration ?? 0);
+    if (!timelineCache) {
+      timelineCache = computeTimeline(opts, audio?.duration ?? 0, getAspect(opts.aspect));
+    }
     return timelineCache;
   }
 
@@ -999,9 +1003,36 @@ function render(): void {
     checked: opts.endRollEnabled,
     onchange: (e) => {
       updateOptions(() => (opts.endRollEnabled = (e.target as HTMLInputElement).checked));
+      endRollModeWrap.classList.toggle('opacity-40', !opts.endRollEnabled);
+      endRollStopLabel.classList.toggle('opacity-40', !opts.endRollEnabled);
       endRollText.disabled = !opts.endRollEnabled;
     },
   }) as HTMLInputElement;
+
+  // 片尾字幕显示方式 + 滚动终止位置
+  const endRollModeSeg = makeSegment<EndRollModeId>(
+    END_ROLL_MODES.map((m) => ({ id: m.id, label: m.label, hint: m.hint })),
+    opts.endRollMode,
+    (id) => updateOptions(() => (opts.endRollMode = id)),
+  );
+  const endRollStopLabel = h('label', {
+    class: 'flex items-center gap-2 text-xs cursor-pointer text-[var(--fg-muted)]',
+  });
+  const endRollStopInput = h('input', {
+    type: 'checkbox',
+    class: 'h-3.5 w-3.5 accent-[var(--accent)]',
+    checked: opts.endRollStopCenter,
+    onchange: (e) =>
+      updateOptions(() => (opts.endRollStopCenter = (e.target as HTMLInputElement).checked)),
+  }) as HTMLInputElement;
+  endRollStopLabel.append(
+    endRollStopInput,
+    document.createTextNode('滚动至屏幕正中央停止'),
+  );
+  const endRollModeWrap = h('div', { class: 'space-y-2' }, [
+    endRollModeSeg.wrap,
+    endRollStopLabel,
+  ]);
 
   const endRollText = h('textarea', {
     class:
@@ -1022,13 +1053,17 @@ function render(): void {
       coverSpinInput,
       '专辑封面旋转（唱片效果）',
     ]),
-    row('自定义主色', h('div', { class: 'flex items-center gap-2' }, [accentColorInput, accentResetBtn])),
+    row(
+      '自定义主色',
+      h('div', { class: 'flex items-center gap-2' }, [accentColorInput, accentResetBtn]),
+    ),
     row('发行者署名', publisherInput),
     h('div', { class: 'space-y-2' }, [
       h('label', { class: 'flex items-center gap-2 text-sm cursor-pointer' }, [
         endRollInput,
-        '片尾滚动字幕',
+        '片尾字幕',
       ]),
+      endRollModeWrap,
       endRollText,
     ]),
   ]);
