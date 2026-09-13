@@ -316,6 +316,44 @@ function hexLuminance(hex: string): number {
 }
 
 /**
+ * 描边大字标题（短视频爆款封面风）：渐变填充 + 粗描边，描边先画在填充之下。
+ * 超宽自动缩字号。shadowBlur 会被调用方置 0，保证描边干净利落。
+ */
+function drawStrokedTitle(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  size: number,
+  maxW: number,
+  fillFrom: string,
+  fillTo: string,
+): void {
+  let s = size;
+  ctx.font = fontOf('900', s);
+  while (ctx.measureText(text).width > maxW && s > 12) {
+    s *= 0.92;
+    ctx.font = fontOf('900', s);
+  }
+  const w = ctx.measureText(text).width;
+  const grad = ctx.createLinearGradient(x - w / 2, y - s / 2, x + w / 2, y + s / 2);
+  grad.addColorStop(0, fillFrom);
+  grad.addColorStop(1, fillTo);
+  ctx.lineJoin = 'round';
+  ctx.miterLimit = 2;
+  ctx.strokeStyle = 'rgba(12,14,20,0.92)';
+  ctx.lineWidth = s * 0.16;
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = grad;
+  ctx.fillText(text, x, y);
+}
+
+/** 居中文本并返回其宽度（先设字体） */
+function centeredTextW(ctx: CanvasRenderingContext2D, text: string): number {
+  return ctx.measureText(text).width;
+}
+
+/**
  * 片头封面页：歌曲播放前的静态画面。背景与主画面一致（背景图/封面毛玻璃/主题渐变），
  * 内容按 coverStyle 布局：标题（空则跟随歌曲标题）、副标题、简介（多行），
  * 有专辑封面时按样式配图。首 0.25s 淡入、尾 0.35s 淡出，衔接开场动画。
@@ -372,6 +410,99 @@ function drawCoverPage(
     drawImageCover(ctx, input.coverImage, x, y, size, size);
     ctx.restore();
   };
+
+  if (opts.coverStyle === 'bold') {
+    // 爆款描边：渐变大字 + 粗黑描边（任何背景上都能立住），副标题装进主色胶囊
+    if (input.coverImage) {
+      const size = S * (isPortrait ? 0.3 : 0.22);
+      drawArtSquare((W - size) / 2, H * 0.13, size, size * 0.1);
+    }
+    const titleY = H * (input.coverImage ? 0.55 : 0.45);
+    ctx.save();
+    ctx.shadowBlur = 0; // 描边要干净，不吃环境阴影
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    drawStrokedTitle(
+      ctx,
+      title,
+      W / 2,
+      titleY,
+      S * (isPortrait ? 0.085 : 0.075),
+      W * 0.9,
+      '#ffe082',
+      '#ff8f00',
+    );
+    // 主色短横条
+    ctx.fillStyle = theme.accent;
+    roundRectPath(ctx, W / 2 - S * 0.07, titleY + S * 0.075, S * 0.14, S * 0.012, S * 0.006);
+    ctx.fill();
+    // 副标题胶囊（主色底 + 黑白自适应文字）
+    if (subtitle) {
+      ctx.font = fontOf('700', S * 0.028);
+      const tw = centeredTextW(ctx, subtitle);
+      const pillW = tw + S * 0.05;
+      const pillH = S * 0.048;
+      const pillY = titleY + S * 0.115;
+      ctx.fillStyle = theme.accent;
+      roundRectPath(ctx, W / 2 - pillW / 2, pillY - pillH / 2, pillW, pillH, pillH / 2);
+      ctx.fill();
+      ctx.fillStyle = hexLuminance(theme.accent) > 0.6 ? '#111' : '#fff';
+      ctx.fillText(subtitle, W / 2, pillY + S * 0.001);
+    }
+    ctx.restore();
+    drawDesc(W / 2, H * 0.88, 'center');
+    ctx.restore();
+    return;
+  }
+
+  if (opts.coverStyle === 'sticker') {
+    // 高亮贴纸：微倾斜主色块像贴纸一样贴住标题，四角小方块点缀
+    const blockY = H * (input.coverImage ? 0.52 : 0.45);
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // 先以目标字号量宽（自动缩放）
+    let fs = S * 0.062;
+    ctx.font = fontOf('900', fs);
+    while (centeredTextW(ctx, title) > W * 0.74 && fs > 12) {
+      fs *= 0.92;
+      ctx.font = fontOf('900', fs);
+    }
+    const tw = centeredTextW(ctx, title);
+    const padX = S * 0.035;
+    const padY = S * 0.022;
+    const bw = tw + padX * 2;
+    const bh = fs + padY * 2;
+    ctx.save();
+    ctx.translate(W / 2, blockY);
+    ctx.rotate(-0.035); // 轻微倾斜,贴纸感
+    ctx.shadowColor = 'rgba(0,0,0,0.35)';
+    ctx.shadowBlur = S * 0.02;
+    ctx.shadowOffsetY = S * 0.008;
+    ctx.fillStyle = theme.accent;
+    roundRectPath(ctx, -bw / 2, -bh / 2, bw, bh, S * 0.012);
+    ctx.fill();
+    // 角落小方块点缀(同色系错位)
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.fillStyle = theme.bg[1];
+    const dot = S * 0.018;
+    ctx.fillRect(-bw / 2 - dot * 0.7, -bh / 2 - dot * 0.7, dot, dot);
+    ctx.fillRect(bw / 2 - dot * 0.3, bh / 2 - dot * 0.3, dot, dot);
+    ctx.fillStyle = hexLuminance(theme.accent) > 0.6 ? '#111' : '#fff';
+    ctx.fillText(title, 0, S * 0.004);
+    ctx.restore();
+    if (subtitle) {
+      ctx.fillStyle = theme.fg;
+      ctx.font = fontOf('500', S * 0.03);
+      drawClippedText(ctx, subtitle, W / 2, blockY + S * 0.085, W * 0.8);
+    }
+    ctx.restore();
+    drawDesc(W / 2, H * 0.88, 'center');
+    ctx.restore();
+    return;
+  }
 
   if (opts.coverStyle === 'center') {
     const hasArt = !!input.coverImage;

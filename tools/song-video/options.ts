@@ -297,9 +297,11 @@ export function normalizeProgressBar(id: unknown): ProgressBarId {
 
 // ─────────────────────────── 片头封面页 ───────────────────────────
 
-export type CoverStyleId = 'center' | 'left' | 'band' | 'minimal';
+export type CoverStyleId = 'bold' | 'sticker' | 'center' | 'left' | 'band' | 'minimal';
 
 export const COVER_STYLES: { id: CoverStyleId; label: string; hint: string }[] = [
+  { id: 'bold', label: '描边大字', hint: '渐变大字 + 粗描边，短视频爆款封面风' },
+  { id: 'sticker', label: '高亮贴纸', hint: '倾斜主色贴纸块承载标题，吸睛' },
   { id: 'center', label: '居中海报', hint: '居中构图，配专辑封面' },
   { id: 'left', label: '左对齐', hint: '左侧文字 + 右侧封面，杂志风' },
   { id: 'band', label: '主色横幅', hint: '主色横幅承载标题' },
