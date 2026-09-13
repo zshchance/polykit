@@ -171,47 +171,28 @@ export function drawFrame(
   const { opts, theme, timeline } = input;
   const S = Math.min(W, H);
 
-  // —— 时间轴换算 ——
-  const ta = t - timeline.intro; // 音频时间（<0 = 开场段）
-  const outroStart = timeline.intro + timeline.audio;
-  const inOutro = timeline.audio > 0 && t >= outroStart;
-
-  // —— 1. 背景层：主题渐变 + 背景图（cover）+ 压暗遮罩 ——
-  const bgGrad = ctx.createLinearGradient(0, 0, W * 0.35, H);
-  bgGrad.addColorStop(0, theme.bg[0]);
-  bgGrad.addColorStop(1, theme.bg[1]);
-  ctx.fillStyle = bgGrad;
-  ctx.fillRect(0, 0, W, H);
-
-  if (input.bgImage) {
-    ctx.save();
-    // 轻微呼吸缩放（随第一频段脉动），让背景更有生命感
-    const pulse = 1 + ((bands?.[2] ?? 0) / 255) * 0.02;
-    ctx.translate(W / 2, H / 2);
-    ctx.scale(pulse, pulse);
-    ctx.translate(-W / 2, -H / 2);
-    drawImageCover(ctx, input.bgImage, -S * 0.02, -S * 0.02, W + S * 0.04, H + S * 0.04);
-    ctx.restore();
-    ctx.fillStyle = theme.light ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
-    ctx.fillRect(0, 0, W, H);
-  } else if (input.coverImage) {
-    // 无背景图时：用专辑封面做毛玻璃播放背景（放大裁剪 + 高斯模糊 + 压暗）
-    ctx.save();
-    // 四周外扩绘制：避免模糊边缘露出底色；ctx.filter 不支持时直接铺原图（遮罩兜底）
-    const supportsFilter = typeof ctx.filter === 'string';
-    if (supportsFilter) ctx.filter = `blur(${Math.round(S * 0.06)}px)`;
-    drawImageCover(ctx, input.coverImage, -S * 0.1, -S * 0.1, W + S * 0.2, H + S * 0.2);
-    ctx.restore();
-    ctx.fillStyle = theme.light ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.52)';
-    ctx.fillRect(0, 0, W, H);
+  // —— 0. 片头封面段：歌曲播放前的静态画面（含首尾轻微淡入淡出） ——
+  if (timeline.cover > 0 && t < timeline.cover) {
+    drawCoverPage(ctx, W, H, S, input, t);
+    return;
   }
+  // 封面段之后时间轴整体前移 cover（下方各段逻辑不变）
+  const tc = t - timeline.cover;
+
+  // —— 时间轴换算 ——
+  const ta = tc - timeline.intro; // 音频时间（<0 = 开场段）
+  const outroStart = timeline.intro + timeline.audio;
+  const inOutro = timeline.audio > 0 && tc >= outroStart;
+
+  // —— 1. 背景层 ——
+  paintBackground(ctx, W, H, S, input, bands);
 
   // —— 2. 内容层入场/退场变换 ——
   let alpha = 1;
   let scale = 1;
   let shiftY = 0;
-  if (timeline.intro > 0 && t < timeline.intro) {
-    const p = easeOut(clamp01(t / timeline.intro));
+  if (timeline.intro > 0 && tc < timeline.intro) {
+    const p = easeOut(clamp01(tc / timeline.intro));
     if (opts.introAnim === 'fade') alpha = p;
     if (opts.introAnim === 'zoom') {
       alpha = p;
@@ -222,7 +203,7 @@ export function drawFrame(
       shiftY = (1 - p) * S * 0.06;
     }
   } else if (inOutro) {
-    const t2 = t - outroStart;
+    const t2 = tc - outroStart;
     // 淡出固定在结尾段开头 0.8s 内完成；none 也需在滚动字幕前快速让位
     const fadeDur = opts.outroAnim === 'none' ? 0.5 : 0.8;
     const p = clamp01(t2 / fadeDur);
@@ -264,7 +245,7 @@ export function drawFrame(
 
   // —— 5. 专辑封面（黑胶圆盘）——
   const layout = layoutOf(W, H, S);
-  drawCoverDisc(ctx, layout, input, t, theme);
+  drawCoverDisc(ctx, layout, input, tc, theme);
 
   // —— 6. 音频可视化 ——
   drawVisualizer(ctx, W, H, S, layout, input, bands, wave);
@@ -273,14 +254,222 @@ export function drawFrame(
   drawLyrics(ctx, W, H, S, layout, input, ta, dt);
 
   // —— 8. 进度条 ——
-  drawProgress(ctx, W, H, S, input, t);
+  drawProgress(ctx, W, H, S, input, tc);
 
   ctx.restore(); // 内容层变换结束
 
   // —— 9. 片尾滚动字幕（不参与内容层动画；淡入绘制在背景之上） ——
   if (inOutro && opts.endRollEnabled) {
-    drawEndRoll(ctx, W, H, S, input, t - outroStart, theme);
+    drawEndRoll(ctx, W, H, S, input, tc - outroStart, theme);
   }
+}
+
+/** 背景层：主题渐变 + 背景图（随频段轻微脉动）或封面毛玻璃 + 压暗遮罩 */
+function paintBackground(
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  S: number,
+  input: RenderInput,
+  bands: Uint8Array | null,
+): void {
+  const { theme } = input;
+  const bgGrad = ctx.createLinearGradient(0, 0, W * 0.35, H);
+  bgGrad.addColorStop(0, theme.bg[0]);
+  bgGrad.addColorStop(1, theme.bg[1]);
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  if (input.bgImage) {
+    ctx.save();
+    // 轻微呼吸缩放（随第一频段脉动），让背景更有生命感
+    const pulse = 1 + ((bands?.[2] ?? 0) / 255) * 0.02;
+    ctx.translate(W / 2, H / 2);
+    ctx.scale(pulse, pulse);
+    ctx.translate(-W / 2, -H / 2);
+    drawImageCover(ctx, input.bgImage, -S * 0.02, -S * 0.02, W + S * 0.04, H + S * 0.04);
+    ctx.restore();
+    ctx.fillStyle = theme.light ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
+    ctx.fillRect(0, 0, W, H);
+  } else if (input.coverImage) {
+    // 无背景图时：用专辑封面做毛玻璃播放背景（放大裁剪 + 高斯模糊 + 压暗）
+    ctx.save();
+    // 四周外扩绘制：避免模糊边缘露出底色；ctx.filter 不支持时直接铺原图（遮罩兜底）
+    const supportsFilter = typeof ctx.filter === 'string';
+    if (supportsFilter) ctx.filter = `blur(${Math.round(S * 0.06)}px)`;
+    drawImageCover(ctx, input.coverImage, -S * 0.1, -S * 0.1, W + S * 0.2, H + S * 0.2);
+    ctx.restore();
+    ctx.fillStyle = theme.light ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.52)';
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+/** hex 颜色相对亮度（粗略），用于在主色横幅上选黑/白文字 */
+function hexLuminance(hex: string): number {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex);
+  if (!m) return 0.5;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+}
+
+/**
+ * 片头封面页：歌曲播放前的静态画面。背景与主画面一致（背景图/封面毛玻璃/主题渐变），
+ * 内容按 coverStyle 布局：标题（空则跟随歌曲标题）、副标题、简介（多行），
+ * 有专辑封面时按样式配图。首 0.25s 淡入、尾 0.35s 淡出，衔接开场动画。
+ */
+function drawCoverPage(
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  S: number,
+  input: RenderInput,
+  t: number,
+): void {
+  const { opts, theme } = input;
+  paintBackground(ctx, W, H, S, input, null);
+
+  const title = opts.coverTitle.trim() || input.title;
+  const subtitle = opts.coverSubtitle.trim();
+  const descLines = opts.coverDesc
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const isPortrait = H > W;
+  const alpha = Math.min(clamp01(t / 0.25), clamp01((input.timeline.cover - t) / 0.35));
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = theme.light ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.45)';
+  ctx.shadowBlur = S * 0.018;
+
+  /** 简介区：多行，自 anchorY 向下排列 */
+  const drawDesc = (x: number, anchorY: number, align: CanvasTextAlign): void => {
+    if (descLines.length === 0) return;
+    ctx.save();
+    ctx.textAlign = align;
+    ctx.fillStyle = theme.muted;
+    ctx.font = fontOf('400', S * 0.024);
+    const lineH = S * 0.036;
+    descLines.slice(0, 6).forEach((ln, i) => {
+      ctx.fillText(ln, x, anchorY + i * lineH, W * 0.8);
+    });
+    ctx.restore();
+  };
+
+  /** 圆角方形封面图 */
+  const drawArtSquare = (x: number, y: number, size: number, radius: number): void => {
+    if (!input.coverImage) return;
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = S * 0.03;
+    ctx.shadowOffsetY = S * 0.012;
+    roundRectPath(ctx, x, y, size, size, radius);
+    ctx.clip();
+    drawImageCover(ctx, input.coverImage, x, y, size, size);
+    ctx.restore();
+  };
+
+  if (opts.coverStyle === 'center') {
+    const hasArt = !!input.coverImage;
+    if (hasArt) {
+      const size = S * (isPortrait ? 0.44 : 0.32);
+      drawArtSquare((W - size) / 2, H * 0.14, size, size * 0.08);
+    }
+    const titleY = H * (hasArt ? 0.66 : 0.44);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = theme.fg;
+    ctx.font = fontOf('700', S * 0.062);
+    drawClippedText(ctx, title, W / 2, titleY, W * 0.86);
+    if (subtitle) {
+      ctx.fillStyle = theme.muted;
+      ctx.font = fontOf('500', S * 0.03);
+      drawClippedText(ctx, subtitle, W / 2, titleY + S * 0.062, W * 0.8);
+    }
+    drawDesc(W / 2, H * 0.84, 'center');
+    ctx.restore();
+    return;
+  }
+
+  if (opts.coverStyle === 'left') {
+    if (input.coverImage && !isPortrait) {
+      // 横版：右侧圆形封面；竖版：上方居中封面
+      const r = S * 0.17;
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.4)';
+      ctx.shadowBlur = S * 0.03;
+      ctx.beginPath();
+      ctx.arc(W * 0.78, H * 0.42, r, 0, Math.PI * 2);
+      ctx.clip();
+      drawImageCover(ctx, input.coverImage, W * 0.78 - r, H * 0.42 - r, r * 2, r * 2);
+      ctx.restore();
+    } else if (input.coverImage && isPortrait) {
+      const size = S * 0.4;
+      drawArtSquare((W - size) / 2, H * 0.16, size, size * 0.08);
+    }
+    // 主色短线 + 左对齐标题
+    ctx.fillStyle = theme.accent;
+    ctx.fillRect(W * 0.1, H * 0.38, S * 0.07, S * 0.008);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = theme.fg;
+    ctx.font = fontOf('700', S * 0.055);
+    drawClippedText(ctx, title, W * 0.1, H * (isPortrait ? 0.62 : 0.45), W * 0.62);
+    if (subtitle) {
+      ctx.fillStyle = theme.muted;
+      ctx.font = fontOf('500', S * 0.028);
+      drawClippedText(ctx, subtitle, W * 0.1, H * (isPortrait ? 0.68 : 0.51), W * 0.6);
+    }
+    drawDesc(W * 0.1, H * 0.86, 'left');
+    ctx.restore();
+    return;
+  }
+
+  if (opts.coverStyle === 'band') {
+    // 主色横幅承载标题；文字按主色亮度自动选黑/白
+    const bandY = H * 0.42;
+    const bandH = S * 0.14;
+    const grad = ctx.createLinearGradient(0, bandY, W, bandY + bandH);
+    grad.addColorStop(0, theme.accent);
+    grad.addColorStop(1, theme.bg[1]);
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.3)';
+    ctx.shadowBlur = S * 0.025;
+    ctx.shadowOffsetY = S * 0.008;
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, bandY, W, bandH);
+    ctx.restore();
+    const bandText = hexLuminance(theme.accent) > 0.6 ? '#111' : '#fff';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = bandText;
+    ctx.font = fontOf('700', S * 0.055);
+    drawClippedText(ctx, title, W / 2, bandY + bandH * 0.42, W * 0.84);
+    if (subtitle) {
+      ctx.fillStyle = theme.fg;
+      ctx.font = fontOf('500', S * 0.028);
+      drawClippedText(ctx, subtitle, W / 2, bandY + bandH + S * 0.05, W * 0.8);
+    }
+    drawDesc(W / 2, H * 0.86, 'center');
+    ctx.restore();
+    return;
+  }
+
+  // minimal：细线 + 标题 + 副标题，无配图
+  ctx.fillStyle = theme.accent;
+  ctx.fillRect(W / 2 - S * 0.05, H * 0.4, S * 0.1, Math.max(1, S * 0.004));
+  ctx.textAlign = 'center';
+  ctx.fillStyle = theme.fg;
+  ctx.font = fontOf('700', S * 0.052);
+  drawClippedText(ctx, title, W / 2, H * 0.46, W * 0.86);
+  if (subtitle) {
+    ctx.fillStyle = theme.muted;
+    ctx.font = fontOf('500', S * 0.028);
+    drawClippedText(ctx, subtitle, W / 2, H * 0.52, W * 0.8);
+  }
+  drawDesc(W / 2, H * 0.86, 'center');
+  ctx.restore();
 }
 
 // ─────────────────────────── 子绘制 ───────────────────────────

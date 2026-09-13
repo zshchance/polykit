@@ -16,12 +16,14 @@ import { readJSON, writeJSON } from '@/core/utils/storage';
 
 import {
   ASPECTS,
+  COVER_DUR_CHOICES,
   DEFAULT_OPTIONS,
   INTRO_DUR_CHOICES,
   LYRIC_ABOVE_CHOICES,
   LYRIC_BELOW_CHOICES,
   OUTRO_DUR_CHOICES,
   RESOLUTIONS,
+  normalizeCoverStyle,
   normalizeEndRollMode,
   normalizeIntroAnim,
   normalizeLyricMode,
@@ -107,6 +109,14 @@ export function loadOptions(): SongVideoOptions {
     endFreeze: typeof o.endFreeze === 'boolean' ? o.endFreeze : d.endFreeze,
     endRollText:
       typeof o.endRollText === 'string' ? o.endRollText.slice(0, 2000) : d.endRollText,
+    coverPageEnabled:
+      typeof o.coverPageEnabled === 'boolean' ? o.coverPageEnabled : d.coverPageEnabled,
+    coverTitle: typeof o.coverTitle === 'string' ? o.coverTitle.slice(0, 80) : d.coverTitle,
+    coverSubtitle:
+      typeof o.coverSubtitle === 'string' ? o.coverSubtitle.slice(0, 80) : d.coverSubtitle,
+    coverDesc: typeof o.coverDesc === 'string' ? o.coverDesc.slice(0, 500) : d.coverDesc,
+    coverStyle: normalizeCoverStyle(o.coverStyle),
+    coverDur: inChoices(o.coverDur, COVER_DUR_CHOICES) ?? d.coverDur,
   };
 }
 

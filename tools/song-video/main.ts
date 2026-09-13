@@ -15,6 +15,8 @@ import { addCustomTheme, loadCustomThemes, removeCustomTheme, toRenderTheme } fr
 import { parseLyrics, type LyricLine } from './lyrics';
 import {
   ASPECTS,
+  COVER_DUR_CHOICES,
+  COVER_STYLES,
   END_ROLL_MODES,
   INTRO_ANIMS,
   INTRO_DUR_CHOICES,
@@ -32,6 +34,7 @@ import {
   getResolution,
   getTheme,
   type AspectId,
+  type CoverStyleId,
   type EndRollModeId,
   type LyricModeId,
   type ProgressBarId,
@@ -671,8 +674,17 @@ function render(): void {
   const lyricSeg = makeSegment<LyricModeId>(
     LYRIC_MODES.map((m) => ({ id: m.id, label: m.label, hint: m.hint })),
     opts.lyricMode,
-    (id) => updateOptions(() => (opts.lyricMode = id)),
+    (id) => {
+      updateOptions(() => (opts.lyricMode = id));
+      refreshLyricVisibility();
+    },
   );
+
+  /** 条件显隐：单行淡入 → 显示前/后一句开关；滚动列表 → 显示上/下行数；不显示 → 都收起 */
+  function refreshLyricVisibility(): void {
+    lyricFadeRow.classList.toggle('hidden', opts.lyricMode !== 'fade');
+    lyricListRow.classList.toggle('hidden', opts.lyricMode !== 'list');
+  }
 
   // 歌词上下句（仅单行淡入模式生效；滚动列表本身多行可见）
   const prevLyricCheckbox = h('input', {
@@ -689,6 +701,20 @@ function render(): void {
     onchange: (e) =>
       updateOptions(() => (opts.showNextLyric = (e.target as HTMLInputElement).checked)),
   }) as HTMLInputElement;
+  const lyricFadeRow = h(
+    'div',
+    { class: 'flex flex-wrap gap-x-5 gap-y-1.5 pt-0.5' },
+    [
+      h('label', { class: 'flex items-center gap-2 text-xs cursor-pointer text-[var(--fg-muted)]' }, [
+        prevLyricCheckbox,
+        '显示前一句',
+      ]),
+      h('label', { class: 'flex items-center gap-2 text-xs cursor-pointer text-[var(--fg-muted)]' }, [
+        nextLyricCheckbox,
+        '显示后一句',
+      ]),
+    ],
+  );
 
   // 滚动列表模式：当前句上方/下方行数（上方默认小于下方；空间不足时自动少显）
   const selCls =
@@ -719,6 +745,21 @@ function render(): void {
       h('option', { value: String(c), selected: c === opts.lyricBelow }, [`下 ${c} 行`]),
     ),
   ) as HTMLSelectElement;
+  const lyricListRow = h(
+    'div',
+    { class: 'flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-0.5' },
+    [
+      h('label', { class: 'flex items-center gap-1.5 text-xs text-[var(--fg-muted)]' }, [
+        h('span', { textContent: '列表上方' }),
+        lyricAboveSel,
+      ]),
+      h('label', { class: 'flex items-center gap-1.5 text-xs text-[var(--fg-muted)]' }, [
+        h('span', { textContent: '列表下方' }),
+        lyricBelowSel,
+      ]),
+      h('span', { class: 'text-[11px] text-[var(--fg-muted)]', textContent: '空间不足时自动少显' }),
+    ],
+  );
 
   // 主题：内置 10 套 + 用户自定义（存储参考名言卡片自定义模板：localStorage items 列表）
   const themeWrap = h('div', { class: 'flex flex-wrap items-center gap-3' }, []);
@@ -938,6 +979,70 @@ function render(): void {
     },
   }) as HTMLInputElement;
 
+  // —— 片头封面页（歌曲播放前的静态画面；默认不含封面） ——
+  const textInputCls =
+    'w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]';
+  const coverTitleInput = h('input', {
+    type: 'text',
+    value: opts.coverTitle,
+    placeholder: '封面标题（默认取歌曲标题）',
+    class: textInputCls,
+    oninput: (e) => drawCoverFields(() => (opts.coverTitle = (e.target as HTMLInputElement).value)),
+  }) as HTMLInputElement;
+  const coverSubtitleInput = h('input', {
+    type: 'text',
+    value: opts.coverSubtitle,
+    placeholder: '副标题，如：2026 单曲 / 歌手名',
+    class: textInputCls,
+    oninput: (e) =>
+      drawCoverFields(() => (opts.coverSubtitle = (e.target as HTMLInputElement).value)),
+  }) as HTMLInputElement;
+  const coverDescInput = h('textarea', {
+    class:
+      'w-full resize-y rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+    rows: 3,
+    placeholder: '简介，每行一条，如：\n编曲 / 混音：某某\n出品：某某工作室',
+    value: opts.coverDesc,
+    oninput: (e) => drawCoverFields(() => (opts.coverDesc = (e.target as HTMLTextAreaElement).value)),
+  }) as HTMLTextAreaElement;
+  const coverStyleSeg = makeSegment<CoverStyleId>(
+    COVER_STYLES.map((s) => ({ id: s.id, label: s.label, hint: s.hint })),
+    opts.coverStyle,
+    (id) => drawCoverFields(() => (opts.coverStyle = id)),
+  );
+  const coverDurSel = makeDurSelect(COVER_DUR_CHOICES, opts.coverDur, (v) =>
+    updateOptions(() => (opts.coverDur = v)),
+  );
+
+  const coverPageInput = h('input', {
+    type: 'checkbox',
+    class: 'h-4 w-4 accent-[var(--accent)]',
+    checked: opts.coverPageEnabled,
+    onchange: (e) => {
+      updateOptions(() => (opts.coverPageEnabled = (e.target as HTMLInputElement).checked));
+      refreshCoverVisibility();
+      // 勾选后画一帧封面页给用户即时反馈（取消则回到常规静态帧）
+      if (opts.coverPageEnabled) drawPreview(getTimeline().cover / 2);
+      else drawStaticFrame();
+    },
+  }) as HTMLInputElement;
+  /** 条件显隐：勾选「片头封面页」才展开标题/副标题/简介/样式/时长 */
+  function refreshCoverVisibility(): void {
+    coverFields.classList.toggle('hidden', !opts.coverPageEnabled);
+  }
+  /** 封面字段专用更新：改完直接画封面页（而不是常规静态帧），所见即所得 */
+  function drawCoverFields(mutate: () => void): void {
+    updateOptions(mutate);
+    if (opts.coverPageEnabled) drawPreview(getTimeline().cover / 2);
+  }
+  const coverFields = h('div', { class: 'hidden space-y-3 pt-1' }, [
+    h('div', { class: 'space-y-1.5' }, [fieldLabel('封面标题'), coverTitleInput]),
+    h('div', { class: 'space-y-1.5' }, [fieldLabel('副标题'), coverSubtitleInput]),
+    h('div', { class: 'space-y-1.5' }, [fieldLabel('简介（每行一条）'), coverDescInput]),
+    h('div', { class: 'space-y-2' }, [fieldLabel('封面样式'), coverStyleSeg.wrap]),
+    h('div', { class: 'space-y-2' }, [fieldLabel('封面时长'), coverDurSel.wrap]),
+  ]);
+
   // —— 高级选项（默认折叠） ——
   const introSeg = makeSegment(
     INTRO_ANIMS.map((a) => ({ id: a.id, label: a.label })),
@@ -1003,9 +1108,8 @@ function render(): void {
     checked: opts.endRollEnabled,
     onchange: (e) => {
       updateOptions(() => (opts.endRollEnabled = (e.target as HTMLInputElement).checked));
-      endRollModeWrap.classList.toggle('opacity-40', !opts.endRollEnabled);
-      endRollStopLabel.classList.toggle('opacity-40', !opts.endRollEnabled);
       endRollText.disabled = !opts.endRollEnabled;
+      refreshEndRollVisibility();
       // 勾选/取消会改变总时长（取消时缩短）：校正预览位置并刷新时间显示
       const total = totalDuration();
       if (pausedAt > total) pausedAt = Math.max(0, total - 0.01);
@@ -1020,7 +1124,7 @@ function render(): void {
     opts.endRollMode,
     (id) => {
       updateOptions(() => (opts.endRollMode = id));
-      refreshEndFreezeState();
+      refreshEndRollVisibility();
     },
   );
   const endRollStopLabel = h('label', {
@@ -1032,7 +1136,7 @@ function render(): void {
     checked: opts.endRollStopCenter,
     onchange: (e) => {
       updateOptions(() => (opts.endRollStopCenter = (e.target as HTMLInputElement).checked));
-      refreshEndFreezeState();
+      refreshEndRollVisibility();
     },
   }) as HTMLInputElement;
   endRollStopLabel.append(
@@ -1041,6 +1145,7 @@ function render(): void {
   );
   const endFreezeLabel = h('label', {
     class: 'flex items-center gap-2 text-xs cursor-pointer text-[var(--fg-muted)]',
+    title: '视频最后一帧保持显示最终字幕',
   });
   const endFreezeInput = h('input', {
     type: 'checkbox',
@@ -1051,14 +1156,20 @@ function render(): void {
   }) as HTMLInputElement;
   endFreezeLabel.append(endFreezeInput, document.createTextNode('结束定格在字幕'));
 
-  /** 定格仅对「有最终静止字幕状态」的组合有意义：贯穿滚出（滚动+不停中央）时禁用 */
-  function refreshEndFreezeState(): void {
+  /**
+   * 片尾子选项条件显隐：
+   *   未勾选片尾字幕 → 子选项全部收起；勾选 → 按显示方式展开：
+   *   滚动 → 「滚至中央停止」+「结束定格」（贯穿滚出时定格隐藏）；
+   *   淡入淡出 / 无动画 → 只显示「结束定格」。
+   */
+  function refreshEndRollVisibility(): void {
+    const on = opts.endRollEnabled;
+    endRollModeWrap.classList.toggle('hidden', !on);
+    endRollText.classList.toggle('hidden', !on);
+    endRollStopLabel.classList.toggle('hidden', !on || opts.endRollMode !== 'roll');
     const meaningless = opts.endRollMode === 'roll' && !opts.endRollStopCenter;
+    endFreezeLabel.classList.toggle('hidden', !on || meaningless);
     endFreezeInput.disabled = meaningless;
-    endFreezeLabel.classList.toggle('opacity-40', meaningless);
-    endFreezeLabel.title = meaningless
-      ? '贯穿滚出模式字幕会滚出画面，无定格对象'
-      : '视频最后一帧保持显示最终字幕';
   }
   const endRollModeWrap = h('div', { class: 'space-y-2' }, [
     endRollModeSeg.wrap,
@@ -1285,31 +1396,7 @@ function render(): void {
         row('画面比例', aspectSeg.wrap),
         row('导出画质', resolutionSel),
         row('音频可视化', visualizerSeg.wrap),
-        h('div', { class: 'space-y-2' }, [
-          fieldLabel('歌词显示'),
-          lyricSeg.wrap,
-          h('div', { class: 'flex flex-wrap gap-x-5 gap-y-1.5 pt-0.5' }, [
-            h('label', { class: 'flex items-center gap-2 text-xs cursor-pointer text-[var(--fg-muted)]' }, [
-              prevLyricCheckbox,
-              '显示前一句（单行淡入模式）',
-            ]),
-            h('label', { class: 'flex items-center gap-2 text-xs cursor-pointer text-[var(--fg-muted)]' }, [
-              nextLyricCheckbox,
-              '显示后一句（单行淡入模式）',
-            ]),
-          ]),
-          h('div', { class: 'flex flex-wrap items-center gap-x-4 gap-y-1.5' }, [
-            h('label', { class: 'flex items-center gap-1.5 text-xs text-[var(--fg-muted)]' }, [
-              h('span', { textContent: '列表上方' }),
-              lyricAboveSel,
-            ]),
-            h('label', { class: 'flex items-center gap-1.5 text-xs text-[var(--fg-muted)]' }, [
-              h('span', { textContent: '列表下方' }),
-              lyricBelowSel,
-            ]),
-            h('span', { class: 'text-[11px] text-[var(--fg-muted)]', textContent: '空间不足时自动少显' }),
-          ]),
-        ]),
+        h('div', { class: 'space-y-2' }, [fieldLabel('歌词显示'), lyricSeg.wrap, lyricFadeRow, lyricListRow]),
         row('配色主题', themeWrap),
         row('进度条', progressSeg.wrap),
         h('div', { class: 'space-y-1.5' }, [
@@ -1318,6 +1405,17 @@ function render(): void {
             '显示标题',
           ]),
           titleInput,
+        ]),
+        h('div', { class: 'space-y-2' }, [
+          h('label', { class: 'flex items-center gap-2 text-sm cursor-pointer' }, [
+            coverPageInput,
+            '片头封面页',
+          ]),
+          h('p', {
+            class: 'text-[11px] text-[var(--fg-muted)]',
+            textContent: '歌曲播放前的静态画面（片头）',
+          }),
+          coverFields,
         ]),
         h('div', { class: 'border-t border-[var(--border)]' }, []),
         advancedToggle,
@@ -1351,13 +1449,15 @@ function render(): void {
     }),
   );
 
-  // 初始：应用画布比例 + 无音频画一帧静态示意 + 按钮态对齐
+  // 初始：应用画布比例 + 无音频画一帧静态示意 + 按钮态对齐 + 条件显隐初态
   applyAspectToCanvas();
   syncPlayBtn();
   syncTimeUI(0);
   drawStaticFrame();
   updateGenerateState();
-  refreshEndFreezeState();
+  refreshLyricVisibility();
+  refreshEndRollVisibility();
+  refreshCoverVisibility();
 }
 
 /** 时长档位下拉 */

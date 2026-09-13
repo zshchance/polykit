@@ -295,6 +295,24 @@ export function normalizeProgressBar(id: unknown): ProgressBarId {
   return PROGRESS_BARS.some((p) => p.id === id) ? (id as ProgressBarId) : 'line';
 }
 
+// ─────────────────────────── 片头封面页 ───────────────────────────
+
+export type CoverStyleId = 'center' | 'left' | 'band' | 'minimal';
+
+export const COVER_STYLES: { id: CoverStyleId; label: string; hint: string }[] = [
+  { id: 'center', label: '居中海报', hint: '居中构图，配专辑封面' },
+  { id: 'left', label: '左对齐', hint: '左侧文字 + 右侧封面，杂志风' },
+  { id: 'band', label: '主色横幅', hint: '主色横幅承载标题' },
+  { id: 'minimal', label: '极简', hint: '仅标题与细线' },
+];
+
+export function normalizeCoverStyle(id: unknown): CoverStyleId {
+  return COVER_STYLES.some((s) => s.id === id) ? (id as CoverStyleId) : 'center';
+}
+
+/** 片头封面时长档位（秒，静态画面） */
+export const COVER_DUR_CHOICES = [2, 3, 5, 8] as const;
+
 // ─────────────────────────── 完整选项 ───────────────────────────
 
 /** 开场 / 结尾动画时长档位（秒） */
@@ -336,6 +354,18 @@ export interface SongVideoOptions {
   outroAnim: OutroAnimId;
   /** 结尾定格时长（秒，片尾滚动字幕在此基础上延长） */
   outroDur: number;
+  /** 是否显示片头封面页（歌曲播放前的静态画面） */
+  coverPageEnabled: boolean;
+  /** 封面页标题（空 = 跟随歌曲标题） */
+  coverTitle: string;
+  /** 封面页副标题 */
+  coverSubtitle: string;
+  /** 封面页简介（每行一条） */
+  coverDesc: string;
+  /** 封面页样式 */
+  coverStyle: CoverStyleId;
+  /** 封面页时长（秒） */
+  coverDur: number;
   /** 专辑封面是否旋转（唱片效果） */
   coverSpin: boolean;
   /** 发行者署名（显示在画面角落；空=不显示） */
@@ -388,6 +418,12 @@ export const DEFAULT_OPTIONS: SongVideoOptions = {
   introDur: 2.5,
   outroAnim: 'fade',
   outroDur: 2.5,
+  coverPageEnabled: false,
+  coverTitle: '',
+  coverSubtitle: '',
+  coverDesc: '',
+  coverStyle: 'center',
+  coverDur: 3,
   coverSpin: true,
   publisher: '',
   endRollEnabled: false,
@@ -411,6 +447,8 @@ export const DEFAULT_OPTIONS: SongVideoOptions = {
  *     无动画    页数 × 2.0s（每屏停留）
  */
 export interface Timeline {
+  /** 片头封面段时长（秒，0=无封面页） */
+  cover: number;
   intro: number;
   /** 音频时长（秒） */
   audio: number;
@@ -458,5 +496,6 @@ export function computeTimeline(
   }
   // 未启用片尾字幕：不追加结尾段（音乐结束即结束）；启用：按字幕展示时间追加
   const outro = opts.endRollEnabled ? Math.max(opts.outroDur, rollNeed) : 0;
-  return { intro, audio: audioDur, outro, total: intro + audioDur + outro };
+  const cover = opts.coverPageEnabled ? opts.coverDur : 0;
+  return { cover, intro, audio: audioDur, outro, total: cover + intro + audioDur + outro };
 }

@@ -235,7 +235,7 @@ export function startRecording(o: RecordOptions): RecordHandle {
     const t0 = audioCtx.currentTime + 0.2; // 预调度缓冲，保证首帧不丢
     try {
       recorder.start(250); // timeslice：定期产出 chunk，进度/取消更即时
-      source.start(t0 + timeline.intro);
+      source.start(t0 + timeline.cover + timeline.intro); // 片头封面段之后音频才进入
       // 录制期间保持屏幕常亮（阻止屏保/熄屏/休眠）
       wakeLockActive = true;
       void acquireWakeLock();
