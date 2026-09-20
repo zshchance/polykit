@@ -265,7 +265,7 @@ function renderStyleAtlas(): void {
     renderSummary();
   }
 
-  // ────────── 3. 卡片网格 ──────────
+  // ────────── 3. 卡片网格（渐进渲染：首屏一批，滚动到底自动追加） ──────────
   const gridHeader = h('div', { class: 'flex items-center justify-between' }, []);
   const grid = h('div', { class: 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3' });
   const emptyHint = h('div', {
@@ -273,6 +273,43 @@ function renderStyleAtlas(): void {
       'rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg-elevated)] px-6 py-10 text-center text-sm text-[var(--fg-muted)]',
     textContent: '没有匹配的风格，换个关键词或减少筛选条件试试～',
   });
+  const loadMoreHint = h('div', { class: 'py-6 text-center text-xs text-[var(--fg-muted)]' });
+  const sentinel = h('div', { class: 'h-px', 'aria-hidden': 'true' });
+
+  /** 每批渲染的卡片数：304 张卡一次全渲染会导致首屏卡顿，改为分批 */
+  const PAGE_SIZE = 36;
+  const hasIO = typeof IntersectionObserver !== 'undefined';
+
+  let currentList: StyleEntry[] = [];
+  let visibleCount = 0;
+
+  function updateLoadMoreHint(): void {
+    loadMoreHint.textContent =
+      visibleCount < currentList.length
+        ? `已展示 ${visibleCount} / ${currentList.length} 种风格，继续下滑自动加载更多 ↓`
+        : '';
+  }
+
+  /** 追加下一批卡片（只增量 append，不重建整个网格） */
+  function loadMore(): void {
+    if (visibleCount >= currentList.length) return;
+    const next = Math.min(visibleCount + PAGE_SIZE, currentList.length);
+    const frag = document.createDocumentFragment();
+    for (let i = visibleCount; i < next; i++) frag.append(styleCard(currentList[i]!));
+    grid.append(frag);
+    visibleCount = next;
+    updateLoadMoreHint();
+  }
+
+  if (hasIO) {
+    // 哨兵进入视口前 600px 就预取下一批，滚动体感连贯
+    new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) loadMore();
+      },
+      { rootMargin: '600px 0px' },
+    ).observe(sentinel);
+  }
 
   function matches(s: StyleEntry): boolean {
     const kw = filter.keyword.trim().toLowerCase();
@@ -306,11 +343,13 @@ function renderStyleAtlas(): void {
   let firstPaint = true;
 
   function renderGrid(): void {
-    const list = ALL_STYLES.filter(matches);
+    currentList = ALL_STYLES.filter(matches);
+    // 无 IntersectionObserver 的环境一次渲染全部，避免无法触发追加
+    visibleCount = hasIO ? Math.min(PAGE_SIZE, currentList.length) : currentList.length;
     gridHeader.replaceChildren(
       h('span', {
         class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
-        textContent: list.length > 0 ? `共 ${list.length} 种风格` : '风格',
+        textContent: currentList.length > 0 ? `共 ${currentList.length} 种风格` : '风格',
       }),
       h('span', {
         class: 'text-xs text-[var(--fg-muted)]',
@@ -318,7 +357,7 @@ function renderStyleAtlas(): void {
       }),
     );
     grid.replaceChildren(
-      ...list.map((s, i) => {
+      ...currentList.slice(0, visibleCount).map((s, i) => {
         const card = styleCard(s);
         if (firstPaint) {
           card.classList.add('stagger-item');
@@ -331,8 +370,9 @@ function renderStyleAtlas(): void {
       grid.classList.add('stagger-ready');
       firstPaint = false;
     }
-    grid.style.display = list.length > 0 ? '' : 'none';
-    emptyHint.style.display = list.length > 0 ? 'none' : '';
+    grid.style.display = currentList.length > 0 ? '' : 'none';
+    emptyHint.style.display = currentList.length > 0 ? 'none' : '';
+    updateLoadMoreHint();
   }
 
   /** 双功能标签（借鉴音乐资料库）：左半文字=设为筛选条件，右半 ⧉=复制文字 */
@@ -726,7 +766,13 @@ function renderStyleAtlas(): void {
     summaryEl,
     h('div', { class: 'mt-4 flex flex-col gap-5 lg:flex-row lg:items-start' }, [
       asideWrap,
-      h('div', { class: 'min-w-0 flex-1 space-y-3' }, [gridHeader, grid, emptyHint]),
+      h('div', { class: 'min-w-0 flex-1 space-y-3' }, [
+        gridHeader,
+        grid,
+        emptyHint,
+        loadMoreHint,
+        sentinel,
+      ]),
     ]),
   );
   document.body.append(detailOverlay);
