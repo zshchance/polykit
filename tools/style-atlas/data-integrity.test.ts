@@ -30,8 +30,8 @@ describe('风格图鉴数据完整性', () => {
     }
   });
 
-  it('必备字段非空且规模达标（48 种风格 / 8 大类）', () => {
-    expect(ALL_STYLES.length).toBe(48);
+  it('必备字段非空且规模达标（300+ 种风格 / 全大类覆盖）', () => {
+    expect(ALL_STYLES.length).toBeGreaterThanOrEqual(300);
     expect(new Set(ALL_STYLES.map((s) => s.category)).size).toBe(CATEGORY_ORDER.length);
     for (const s of ALL_STYLES) {
       expect(s.desc.length, `${s.id} desc`).toBeGreaterThan(10);

@@ -9,7 +9,7 @@ export default {
   slug: 'style-atlas',
   name: '设计风格图鉴',
   description:
-    '48 种视觉风格 × 8 大谱系的多维图鉴：AI 生成参考图 + 特点手法 + 情绪场景 + 代表配色，AI 标签与提示词一键复制，边逛边学。',
+    '300+ 种视觉风格 × 24 大谱系的多维图鉴：AI 生成参考图 + 特点手法 + 情绪场景 + 代表配色，AI 标签与提示词一键复制，边逛边学。',
   category: '图像',
   icon: '🎨',
   keywords: [
@@ -40,6 +40,14 @@ export default {
     '日系胶片',
     '电影感',
     '扁平插画',
+    'CG原画',
+    '日系写真',
+    '肖像风格',
+    'Vlog封面',
+    '二次元',
+    '美食摄影',
+    '时尚大片',
+    '电影视觉',
   ],
   card: { accent: '#7c3aed' },
 } satisfies ToolConfig;
