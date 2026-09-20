@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 200">
+  <defs>
+    <linearGradient id="cov-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2e1065"/>
+      <stop offset="1" stop-color="#4c1d95"/>
+    </linearGradient>
+    <linearGradient id="cov-vw" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b967ff"/>
+      <stop offset="1" stop-color="#ff71ce"/>
+    </linearGradient>
+  </defs>
+  <rect width="480" height="200" fill="url(#cov-bg)"/>
+
+  <!--  tile 1 包豪斯 -->
+  <g transform="translate(20 36)">
+    <rect width="128" height="128" rx="10" fill="#f4efe4"/>
+    <circle cx="40" cy="42" r="24" fill="#d74026"/>
+    <path d="M84 96 L118 96 L118 40 Z" fill="#1f4fa3"/>
+    <path d="M40 66 A24 24 0 0 1 64 42 L64 66 Z" fill="#f2b705"/>
+    <rect x="16" y="104" width="60" height="7" fill="#1a1a1a" transform="rotate(-14 16 104)"/>
+  </g>
+
+  <!-- tile 2 瑞士国际主义 -->
+  <g transform="translate(160 36)">
+    <rect width="128" height="128" rx="10" fill="#ffffff"/>
+    <rect x="16" y="20" width="66" height="11" fill="#111111"/>
+    <rect x="16" y="40" width="44" height="7" fill="#8c8c8c"/>
+    <rect x="16" y="52" width="56" height="7" fill="#8c8c8c"/>
+    <rect x="16" y="64" width="36" height="7" fill="#8c8c8c"/>
+    <rect x="76" y="76" width="36" height="36" fill="#e30613"/>
+  </g>
+
+  <!-- tile 3 蒸汽波 -->
+  <g transform="translate(300 36)">
+    <rect width="128" height="128" rx="10" fill="url(#cov-vw)"/>
+    <circle cx="64" cy="52" r="26" fill="#fffb96"/>
+    <rect x="38" y="56" width="52" height="4" fill="#b967ff"/>
+    <rect x="38" y="66" width="52" height="3" fill="#b967ff"/>
+    <g stroke="#01cdfe" stroke-width="1.6">
+      <line x1="0" y1="88" x2="128" y2="88"/>
+      <line x1="10" y1="128" x2="50" y2="88"/><line x1="44" y1="128" x2="64" y2="88"/>
+      <line x1="84" y1="128" x2="78" y2="88"/><line x1="118" y1="128" x2="94" y2="88"/>
+      <line x1="0" y1="104" x2="128" y2="104"/><line x1="0" y1="118" x2="128" y2="118"/>
+    </g>
+  </g>
+
+  <!-- tile 4 赛博朋克（小尺寸放下移带） -->
+  <g transform="translate(392 36)">
+    <rect width="68" height="128" rx="10" fill="#0a0e1a"/>
+    <circle cx="34" cy="38" r="17" fill="none" stroke="#ff2a6d" stroke-width="4"/>
+    <rect x="10" y="66" width="14" height="52" fill="#1b2340"/>
+    <rect x="30" y="76" width="12" height="42" fill="#1b2340"/>
+    <rect x="48" y="60" width="12" height="58" fill="#1b2340"/>
+    <g fill="#05d9e8">
+      <rect x="14" y="74" width="3" height="5"/><rect x="34" y="84" width="3" height="5"/>
+      <rect x="52" y="68" width="3" height="5"/><rect x="52" y="92" width="3" height="5"/>
+    </g>
+    <rect x="14" y="96" width="3" height="5" fill="#f9f002"/>
+  </g>
+
+  <!-- 漂浮小元素：孟菲斯波浪线 + 圆点 -->
+  <g stroke="#ffd23f" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.9">
+    <path d="M86 178 q 8 -14 16 0 q 8 -14 16 0"/>
+  </g>
+  <circle cx="158" cy="24" r="4" fill="#3fd2c7"/>
+  <circle cx="296" cy="20" r="5" fill="#ff5c8a"/>
+  <circle cx="452" cy="180" r="4" fill="#01cdfe"/>
+</svg>

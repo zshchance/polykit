@@ -1,0 +1,296 @@
+import type { StyleEntry } from '../../types';
+
+/**
+ * 现代经典 —— 奠定现代平面设计根基的经典流派（1890s–1960s）。
+ * 共性：有明确的理论主张（形式追随功能 / 少即是多 / 网格秩序），
+ * 学它们=学现代设计的"语法"。
+ */
+export const CLASSIC_STYLES: StyleEntry[] = [
+  {
+    id: 'bauhaus',
+    name: '包豪斯',
+    nameEn: 'Bauhaus',
+    icon: '🔺',
+    category: '现代经典',
+    era: '1920s',
+    moods: ['前卫', '活力'],
+    scenes: ['海报', '品牌VI', '字体设计'],
+    traits: ['几何构成', '斜向动势', '高饱和撞色'],
+    techniques: [
+      '只用圆、方、三角三种基本几何形',
+      '红 / 黄 / 蓝三原色 + 黑白',
+      '元素沿对角线制造动势',
+      '无衬线字体直接参与构图',
+    ],
+    palette: [
+      { hex: '#d74026', name: '包豪斯红' },
+      { hex: '#f2b705', name: '原色黄' },
+      { hex: '#1f4fa3', name: '原色蓝' },
+      { hex: '#f4efe4', name: '米白' },
+      { hex: '#1a1a1a', name: '炭黑' },
+    ],
+    desc: '现代设计的原点：用最基本的圆、方、三角与三原色做构图，形式追随功能，理性而充满张力。',
+    background:
+      '1919 年创立于德国的包豪斯学校主张"艺术与技术的新统一"，把设计从装饰拉回功能。创作时先做减法：只保留几何基本形，用三原色区分信息层级，斜向构图打破呆板——它是后来极简、瑞士风格的共同源头。',
+    keywords: [
+      'Bauhaus style',
+      'geometric shapes',
+      'primary colors',
+      'circle triangle square',
+      'diagonal composition',
+      'modernist poster',
+      'functional design',
+      'minimal geometry',
+    ],
+    prompt:
+      'Bauhaus style poster, bold geometric composition of circles, triangles and squares, primary colors red yellow blue on cream background, diagonal dynamic layout, sans-serif typography, 1920s modernist print',
+    promptZh:
+      '包豪斯风格海报，圆、三角、方形的大胆几何构成，红黄蓝三原色配米白底色，对角线动势排版，无衬线字体，1920 年代现代主义印刷质感',
+  },
+  {
+    id: 'constructivism',
+    name: '构成主义',
+    nameEn: 'Constructivism',
+    icon: '🚩',
+    category: '现代经典',
+    era: '1920s',
+    moods: ['前卫', '叛逆', '活力'],
+    scenes: ['海报', '书籍装帧', '字体设计'],
+    traits: ['斜向动势', '几何构成', '强对比'],
+    techniques: [
+      '红与黑的高对比双色印刷',
+      '元素全部沿对角线倾斜排列',
+      '照片蒙太奇与几何块面叠加',
+      '粗体字块像建筑材料一样"搭建"画面',
+    ],
+    palette: [
+      { hex: '#c8372d', name: '革命红' },
+      { hex: '#1c1c1c', name: '印刷黑' },
+      { hex: '#e8dcc3', name: '旧纸米' },
+      { hex: '#f2ead6', name: '米色底' },
+      { hex: '#8c8474', name: '灰褐' },
+    ],
+    desc: '来自苏联的宣传海报语言：红与黑、对角线、照片蒙太奇，画面像一台轰鸣的印刷机器。',
+    background:
+      '十月革命后，罗德琴科等人把艺术视为"社会建设的工具"。构图拒绝平稳——一切元素沿对角线冲撞，红黑两色是印刷成本的限制，也成了最强烈的态度。想表现力量、动员感、工业气息时，构成主义是最直接的选择。',
+    keywords: [
+      'Russian constructivism',
+      'Rodchenko style',
+      'red and black poster',
+      'diagonal composition',
+      'photomontage',
+      'propaganda poster',
+      'bold typography',
+      'industrial aesthetic',
+    ],
+    prompt:
+      'Russian constructivist poster, bold red and black geometric shapes on aged beige paper, dramatic diagonal composition, photomontage style, heavy block typography, 1920s Soviet avant-garde print aesthetic',
+    promptZh:
+      '苏联构成主义海报，做旧米色纸上红黑几何块面，强烈的对角线构图，照片蒙太奇手法，粗重块状字体，1920 年代先锋派印刷质感',
+  },
+  {
+    id: 'art-deco',
+    name: '装饰艺术',
+    nameEn: 'Art Deco',
+    icon: '🏛',
+    category: '现代经典',
+    era: '1920s',
+    moods: ['奢华', '优雅', '复古'],
+    scenes: ['品牌VI', '包装', '海报', '书籍装帧'],
+    traits: ['对称构图', '几何构成', '肌理质感'],
+    techniques: [
+      '放射状太阳光芒线条',
+      '严格中轴对称 + 阶梯形收分',
+      '金 / 黑 / 深蓝的奢华配色',
+      '细长拉高的装饰字体',
+    ],
+    palette: [
+      { hex: '#101014', name: '曜石黑' },
+      { hex: '#c9a227', name: '鎏金' },
+      { hex: '#e8d9a0', name: '香槟金' },
+      { hex: '#1f3a5f', name: '午夜蓝' },
+      { hex: '#f2ead2', name: '象牙' },
+    ],
+    desc: '爵士时代的奢华：金色放射线、阶梯对称与几何纹样，《了不起的盖茨比》式的纸醉金迷。',
+    background:
+      '1925 年巴黎装饰艺术博览会得名，融合了机器时代的几何秩序与手工时代的奢华材质。创作关键词是"仪式感"：中轴对称带来庄重，放射线条制造辉煌，金色在深色底上发光。婚礼请柬、高端包装、酒店品牌都爱用它。',
+    keywords: [
+      'Art Deco',
+      '1920s Gatsby style',
+      'gold geometric pattern',
+      'sunburst rays',
+      'symmetrical frame',
+      'luxury packaging',
+      'jazz age',
+      'elegant vintage poster',
+    ],
+    prompt:
+      'Art Deco poster, golden sunburst rays and stepped geometric frames on deep navy background, symmetrical composition, champagne gold lines, 1920s Great Gatsby luxury style, elegant ornamental border',
+    promptZh:
+      '装饰艺术风格海报，深藏蓝底上的金色放射光芒与阶梯几何边框，中轴对称构图，香槟金线条，1920 年代盖茨比式奢华，优雅装饰框线',
+  },
+  {
+    id: 'art-nouveau',
+    name: '新艺术运动',
+    nameEn: 'Art Nouveau',
+    icon: '🌿',
+    category: '现代经典',
+    era: '1890s',
+    moods: ['优雅', '梦幻', '复古'],
+    scenes: ['海报', '包装', '书籍装帧', '插画'],
+    traits: ['有机曲线', '对称构图', '肌理质感'],
+    techniques: [
+      '"鞭线"——S 形流动的长曲线',
+      '花卉藤蔓等自然纹样抽象化',
+      '女性形象与装饰边框一体设计',
+      ' muted 灰绿、灰紫、米金色调',
+    ],
+    palette: [
+      { hex: '#5b7553', name: '橄榄绿' },
+      { hex: '#c8a86b', name: '麦芽金' },
+      { hex: '#e9dcc3', name: '亚麻米' },
+      { hex: '#8a5a72', name: '灰紫' },
+      { hex: '#2f4a3d', name: '深杉绿' },
+    ],
+    desc: '穆夏式的流动之美：藤蔓般的鞭线、花卉纹样与柔美人物，把海报变成一首视觉的抒情诗。',
+    background:
+      '19 世纪末对工业化粗造品的反叛，从自然中寻找形式——慕夏的戏剧海报是巅峰。核心是"曲线崇拜"：没有一根直线，头发、藤蔓、衣褶全部连成 S 形长弧线。适合香氛、茶饮、文创等强调自然与女性气质的主题。',
+    keywords: [
+      'Art Nouveau',
+      'Alphonse Mucha style',
+      'flowing organic lines',
+      'floral ornament',
+      'whiplash curve',
+      'vintage botanical poster',
+      'elegant woman portrait',
+      'decorative border',
+    ],
+    prompt:
+      'Art Nouveau poster in Alphonse Mucha style, elegant woman with flowing hair intertwined with floral vines, whiplash curves, muted olive and mauve palette, ornate circular halo frame, 1890s lithograph print',
+    promptZh:
+      '新艺术运动风格海报，穆夏式优雅女性，流动长发与花卉藤蔓缠绕，鞭形曲线，灰绿灰紫哑色调，环形装饰边框，1890 年代石版画质感',
+  },
+  {
+    id: 'swiss-style',
+    name: '瑞士国际主义',
+    nameEn: 'Swiss Style',
+    icon: '⊞',
+    category: '现代经典',
+    era: '1950s',
+    moods: ['宁静', '前卫'],
+    scenes: ['海报', '品牌VI', '书籍装帧', '网页设计'],
+    traits: ['网格排版', '大留白', '强对比'],
+    techniques: [
+      '严格的数学网格分栏',
+      '大量留白作为设计元素',
+      '非对称但视觉平衡的构图',
+      'Helvetica 字体 + 左对齐不齐行尾',
+    ],
+    palette: [
+      { hex: '#ffffff', name: '纸白' },
+      { hex: '#e30613', name: '瑞士红' },
+      { hex: '#111111', name: '墨黑' },
+      { hex: '#f2f2f2', name: '浅灰' },
+      { hex: '#8c8c8c', name: '中灰' },
+    ],
+    desc: '网格、留白、Helvetica——用数学秩序取代装饰，让信息本身成为最美的形式。',
+    background:
+      '1950 年代在瑞士苏黎世与巴塞尔成型，主张"设计是客观的传播，不是自我表现"。秘诀在看不见的网格：先用网格切分版面，文字图片严格对齐网格线，留白占版面一半以上。它是所有现代 UI / 画册排版的祖师爷。',
+    keywords: [
+      'Swiss International Style',
+      'grid layout',
+      'Helvetica typography',
+      'minimalist poster',
+      'white space',
+      'asymmetric balance',
+      'objective design',
+      'typographic poster',
+    ],
+    prompt:
+      'Swiss International Typographic Style poster, strict grid layout, large white space, bold Helvetica typography, single red square accent, black text asymmetric composition, 1950s modernist graphic design',
+    promptZh:
+      '瑞士国际主义风格海报，严格网格排版，大面积留白，粗体 Helvetica 字体，一枚红色方块点缀，黑色文字非对称构图，1950 年代现代主义平面设计',
+  },
+  {
+    id: 'mid-century',
+    name: '世纪中期现代',
+    nameEn: 'Mid-Century Modern',
+    icon: '🛋',
+    category: '现代经典',
+    era: '1950s',
+    moods: ['复古', '怀旧', '温暖'],
+    scenes: ['插画', '包装', '文创周边', '海报'],
+    traits: ['有机曲线', '复古配色', '肌理质感'],
+    techniques: [
+      '回旋镖 / 逗号形的有机抽象块面',
+      '芥末黄 + 橄榄绿 + 橘红的复古配色',
+      '原子星芒与细线条点缀',
+      '纸张颗粒肌理叠加',
+    ],
+    palette: [
+      { hex: '#e07a3f', name: '暖橘' },
+      { hex: '#d8b445', name: '芥末黄' },
+      { hex: '#6f8f5f', name: '橄榄绿' },
+      { hex: '#f0e4cd', name: '奶油底' },
+      { hex: '#3f5e5a', name: '灰湖绿' },
+    ],
+    desc: '50 年代的乐观主义：芥末黄与橄榄绿的有机块面、原子星芒，像老家具一样耐看。',
+    background:
+      '二战后经济腾飞期的美国设计，从家具（伊姆斯椅）蔓延到平面。它把现代主义的理性"焐热"了：几何形变成圆滚滚的有机块，配色取自自然矿物与植物。做咖啡、烘焙、家居类品牌时，这套语言自带"美好生活"滤镜。',
+    keywords: [
+      'Mid-Century Modern',
+      '1950s retro illustration',
+      'organic abstract shapes',
+      'mustard and olive palette',
+      'atomic starburst',
+      'vintage texture',
+      'retro poster',
+      'Eames era',
+    ],
+    prompt:
+      'Mid-century modern style illustration, abstract organic boomerang shapes in mustard yellow, olive green and burnt orange, atomic starburst accents, cream paper texture background, 1950s retro poster',
+    promptZh:
+      '世纪中期现代风插画，芥末黄、橄榄绿、暖橘色的有机回旋镖抽象块面，原子星芒点缀，奶油色纸纹背景，1950 年代复古海报',
+  },
+  {
+    id: 'minimalism',
+    name: '极简主义',
+    nameEn: 'Minimalism',
+    icon: '⚪',
+    category: '现代经典',
+    era: '1960s',
+    moods: ['宁静', '优雅', '前卫'],
+    scenes: ['品牌VI', 'UI界面', '包装', '网页设计'],
+    traits: ['大留白', '强对比', '几何构成'],
+    techniques: [
+      '一个画面只讲一件事',
+      '90% 留白 + 单一视觉焦点',
+      '黑、白 + 至多一个点缀色',
+      '把元素删减到"再删就坏掉"为止',
+    ],
+    palette: [
+      { hex: '#fafafa', name: '净白' },
+      { hex: '#111111', name: '纯黑' },
+      { hex: '#e5e5e5', name: '雾灰' },
+      { hex: '#c7432b', name: '朱砂点' },
+      { hex: '#9a9a9a', name: '石灰' },
+    ],
+    desc: '少即是多：一个红点、一根线、整面留白——把干扰全部删掉，留下来的才有力量。',
+    background:
+      '源自 60 年代极简艺术，深泽直人、原研哉把它推向东方语境。极简不是"没设计"，而是每根线都经过推敲：视线第一落点在哪、呼吸感够不够、删除哪个元素画面就散。初学者练构图最好的门派。',
+    keywords: [
+      'minimalist design',
+      'less is more',
+      'negative space',
+      'single focal point',
+      'black and white',
+      'clean layout',
+      'zen aesthetic',
+      'simple geometric',
+    ],
+    prompt:
+      'Minimalist poster design, vast white negative space with a single small red circle and one thin black line, extreme simplicity, zen aesthetic, generous margins, refined typography',
+    promptZh:
+      '极简主义海报，大面积白色负空间，一枚小红圆与一根细黑线，极致简约，禅意美学，宽裕边距，精致字体排印',
+  },
+];
