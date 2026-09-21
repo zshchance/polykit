@@ -321,7 +321,7 @@ function renderInstrumentAtlas(): void {
     renderSummary();
   }
 
-  // ────────── 3. 卡片网格 ──────────
+  // ────────── 3. 卡片网格（渐进渲染：首屏一批，滚动到底自动追加） ──────────
   const gridHeader = h('div', { class: 'flex items-center justify-between' }, []);
   const grid = h('div', { class: 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3' });
   const emptyHint = h('div', {
@@ -329,6 +329,43 @@ function renderInstrumentAtlas(): void {
       'rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg-elevated)] px-6 py-10 text-center text-sm text-[var(--fg-muted)]',
     textContent: '没有匹配的乐器，换个关键词或减少筛选条件试试～',
   });
+  const loadMoreHint = h('div', { class: 'py-6 text-center text-xs text-[var(--fg-muted)]' });
+  const sentinel = h('div', { class: 'h-px', 'aria-hidden': 'true' });
+
+  /** 每批渲染的卡片数：一次性全渲染会在筛选时造成可感知卡顿，改为分批 */
+  const PAGE_SIZE = 36;
+  const hasIO = typeof IntersectionObserver !== 'undefined';
+
+  let currentList: InstrumentEntry[] = [];
+  let visibleCount = 0;
+
+  function updateLoadMoreHint(): void {
+    loadMoreHint.textContent =
+      visibleCount < currentList.length
+        ? `已展示 ${visibleCount} / ${currentList.length} 件乐器，继续下滑自动加载更多 ↓`
+        : '';
+  }
+
+  /** 追加下一批卡片（只增量 append，不重建整个网格） */
+  function loadMore(): void {
+    if (visibleCount >= currentList.length) return;
+    const next = Math.min(visibleCount + PAGE_SIZE, currentList.length);
+    const frag = document.createDocumentFragment();
+    for (let i = visibleCount; i < next; i++) frag.append(instrumentCard(currentList[i]!));
+    grid.append(frag);
+    visibleCount = next;
+    updateLoadMoreHint();
+  }
+
+  if (hasIO) {
+    // 哨兵进入视口前 600px 就预取下一批，滚动体感连贯
+    new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) loadMore();
+      },
+      { rootMargin: '600px 0px' },
+    ).observe(sentinel);
+  }
 
   function matches(s: InstrumentEntry): boolean {
     const kw = filter.keyword.trim().toLowerCase();
@@ -365,12 +402,14 @@ function renderInstrumentAtlas(): void {
   let firstPaint = true;
 
   function renderGrid(): void {
-    const list = ALL_INSTRUMENTS.filter(matches);
+    currentList = ALL_INSTRUMENTS.filter(matches);
+    // 无 IntersectionObserver 的环境一次渲染全部，避免无法触发追加
+    visibleCount = hasIO ? Math.min(PAGE_SIZE, currentList.length) : currentList.length;
     playButtons.clear();
     gridHeader.replaceChildren(
       h('span', {
         class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
-        textContent: list.length > 0 ? `共 ${list.length} 件乐器` : '乐器',
+        textContent: currentList.length > 0 ? `共 ${currentList.length} 件乐器` : '乐器',
       }),
       h('span', {
         class: 'text-xs text-[var(--fg-muted)]',
@@ -378,7 +417,7 @@ function renderInstrumentAtlas(): void {
       }),
     );
     grid.replaceChildren(
-      ...list.map((s, i) => {
+      ...currentList.slice(0, visibleCount).map((s, i) => {
         const card = instrumentCard(s);
         if (firstPaint) {
           card.classList.add('stagger-item');
@@ -391,8 +430,9 @@ function renderInstrumentAtlas(): void {
       grid.classList.add('stagger-ready');
       firstPaint = false;
     }
-    grid.style.display = list.length > 0 ? '' : 'none';
-    emptyHint.style.display = list.length > 0 ? 'none' : '';
+    grid.style.display = currentList.length > 0 ? '' : 'none';
+    emptyHint.style.display = currentList.length > 0 ? 'none' : '';
+    updateLoadMoreHint();
     syncPlayButtons();
   }
 
@@ -564,6 +604,10 @@ function renderInstrumentAtlas(): void {
     },
   });
 
+  // 浏览历史栈：弹层内点搭配乐器跳转时记录来路，支持多步返回
+  const detailStack: InstrumentEntry[] = [];
+  let currentDetail: InstrumentEntry | null = null;
+
   /** 详情分区标题 */
   function sectionTitle(text: string): HTMLElement {
     return h('div', {
@@ -680,7 +724,7 @@ function renderInstrumentAtlas(): void {
       class: 'inline-flex cursor-pointer items-center gap-1 px-2 py-1 hover:underline',
       title: `查看「${t.name}」的百科介绍`,
       textContent: `${t.icon} ${t.name}`,
-      onclick: () => openDetail(t),
+      onclick: () => openDetail(t, 'jump'),
     });
     const right = h('span', {
       class:
@@ -722,7 +766,15 @@ function renderInstrumentAtlas(): void {
     ]);
   }
 
-  function openDetail(s: InstrumentEntry): void {
+  /**
+   * 打开乐器详情弹层。
+   * mode: 'open' = 从网格/随机打开（重置历史栈）；'jump' = 弹层内点搭配乐器跳转
+   * （当前乐器入栈）；'back' = 返回（栈已弹出，不改动历史）。
+   */
+  function openDetail(s: InstrumentEntry, mode: 'open' | 'jump' | 'back' = 'open'): void {
+    if (mode === 'open') detailStack.length = 0;
+    else if (mode === 'jump' && currentDetail) detailStack.push(currentDetail);
+    currentDetail = s;
     stopAudio();
 
     const factsRows: [string, string | undefined][] = [
@@ -858,6 +910,27 @@ function renderInstrumentAtlas(): void {
       ]),
     ]);
 
+    // 返回按钮：有浏览历史时显示上一件乐器名，支持连续点击多步返回
+    let backBtn: HTMLElement | null = null;
+    const prev = detailStack[detailStack.length - 1];
+    if (prev) {
+      backBtn = h(
+        'button',
+        {
+          type: 'button',
+          title: `返回上一件乐器：${prev.name}（还可返回 ${detailStack.length} 步）`,
+          'aria-label': `返回 ${prev.name}`,
+          class:
+            'flex shrink-0 items-center gap-1 self-center rounded-full border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+          onclick: () => {
+            const target = detailStack.pop();
+            if (target) openDetail(target, 'back');
+          },
+        },
+        [h('span', { textContent: '←' }), h('span', { textContent: `${prev.icon} ${prev.name}` })],
+      );
+    }
+
     const modal = h(
       'div',
       {
@@ -873,6 +946,7 @@ function renderInstrumentAtlas(): void {
           },
           [
             h('div', { class: 'flex items-start gap-2.5' }, [
+              ...(backBtn ? [backBtn] : []),
               h('span', { class: 'text-2xl leading-none', textContent: s.icon }),
               h('div', {}, [
                 h('div', { class: 'flex flex-wrap items-center gap-2' }, [
@@ -910,6 +984,8 @@ function renderInstrumentAtlas(): void {
 
   function closeDetail(): void {
     stopAudio();
+    detailStack.length = 0;
+    currentDetail = null;
     detailOverlay.style.display = 'none';
     detailOverlay.replaceChildren();
     document.body.style.overflow = '';
@@ -929,7 +1005,13 @@ function renderInstrumentAtlas(): void {
     summaryEl,
     h('div', { class: 'mt-4 flex flex-col gap-5 lg:flex-row lg:items-start' }, [
       asideWrap,
-      h('div', { class: 'min-w-0 flex-1 space-y-3' }, [gridHeader, grid, emptyHint]),
+      h('div', { class: 'min-w-0 flex-1 space-y-3' }, [
+        gridHeader,
+        grid,
+        emptyHint,
+        loadMoreHint,
+        sentinel,
+      ]),
     ]),
   );
   document.body.append(detailOverlay);
