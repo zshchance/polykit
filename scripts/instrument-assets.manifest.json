@@ -1,0 +1,262 @@
+{
+  "piano": {
+    "photo": "File:Steinway_Vienna_002.JPG",
+    "audio": "File:Satie Gymnopedie No. 3 for piano solo 01.wav",
+    "manual": true
+  },
+  "electric-piano": {
+    "photo": "File:Rhodes_MkI_Stage_88_1970.jpg",
+    "audio": "File:Wurlitzer EP200.mp3",
+    "manual": true
+  },
+  "organ": {
+    "photo": "File:Neunkirchen_am_Brand_Kirche_Orgel-20210411-RM-155230.jpg",
+    "audio": "File:Mendelssohn organ sonata B-flat major op. 65 no. 4 Wolfram Syré.mp3",
+    "manual": true
+  },
+  "harpsichord": {
+    "photo": "File:ClavecinRuckers&Taskin.JPG",
+    "audio": "File:Handel - Suites for Harpsichord - No.5 in E major - The Harmonious Blacksmith.ogg",
+    "manual": true
+  },
+  "celesta": {
+    "photo": "File:Celesta_Schiedmayer_Studio.jpg",
+    "audio": "File:Cascading arpeggios on celesta from Sugar Plum Fairy.wav",
+    "manual": true
+  },
+  "accordion": {
+    "photo": "File:A_converter_free-bass_piano-accordion_and_a_Russian_bayan.jpg",
+    "audio": "File:Schubert's Ave Maria, D.839 (accordion orchestra) - Paul De Bra.ogg",
+    "manual": true
+  },
+  "violin": {
+    "photo": "File:Violin_VL100.png",
+    "audio": "File:J. S. Bach – Violin Sonata No.1 in G minor, BWV 1001, I. Adagio.ogg",
+    "manual": true
+  },
+  "viola": {
+    "photo": "File:Bratsche.jpg",
+    "audio": "File:Telemann - Viola Concerto Gmaj - 2. Allegro.ogg",
+    "manual": true
+  },
+  "cello": {
+    "photo": "File:Cello front side.png",
+    "audio": "File:JOHN MICHEL CELLO-J S BACH CELLO SUITE 1 in G Prelude.ogg",
+    "manual": true
+  },
+  "double-bass": {
+    "photo": "File:Double Bass MET DP217153.jpg",
+    "audio": "File:Jazz walking bass on double bass.oga",
+    "manual": true
+  },
+  "acoustic-guitar": {
+    "photo": "File:00 Walden Acoustic Guitar D310e 01.jpg",
+    "audio": "File:Jason Shaw - SOLO ACOUSTIC GUITAR.ogg",
+    "manual": true
+  },
+  "electric-guitar": {
+    "photo": "File:Guitarra eléctrica.JPG",
+    "audio": "File:Guitar Solo in a minor.ogg",
+    "manual": true
+  },
+  "bass-guitar": {
+    "photo": "File:Fender_Precision_Bass.jpg",
+    "audio": "File:Funky Slap Bass line.ogg",
+    "manual": true
+  },
+  "ukulele": {
+    "photo": "File:17 inch pocket ukulele branded \"ultnice\".jpg",
+    "audio": "File:Ukulele playing.ogg",
+    "manual": true
+  },
+  "harp": {
+    "photo": "File:Salvi harp Diana.jpg",
+    "audio": "File:Evening Fall (Harp) (ISRC USUAN1100236).mp3",
+    "manual": true
+  },
+  "banjo": {
+    "photo": "File:Bluegrass banjo.png",
+    "audio": "File:Carnival of Venice, composed by Julius Benedict, arranged for banjo and played by Alfred A. Farland.flac",
+    "manual": true
+  },
+  "mandolin": {
+    "photo": "File:Mandolin_MET_DP169023_(2).jpg",
+    "audio": "File:Antonio Vivaldi, Mandolin Concerto in C major, RV 425.ogg",
+    "manual": true
+  },
+  "flute": {
+    "photo": "File:Flûte_traversière.png",
+    "audio": "File:Bach - Partita For Solo Flute - Modern Flute - 3. Sarabande.ogg",
+    "manual": true
+  },
+  "piccolo": {
+    "photo": "File:Piccolo.jpg",
+    "audio": null,
+    "manual": true
+  },
+  "clarinet": {
+    "photo": "File:Leitner+Kraus_410_320.png",
+    "audio": "File:Wolfgang Amadeus Mozart - Clarinet Concerto - 2. Adagio.ogg",
+    "manual": true
+  },
+  "oboe": {
+    "photo": "File:Oboe_Patricola_Artista_PT1.jpg",
+    "audio": "File:Mourning Song (ISRC USUAN1100431).mp3",
+    "manual": true
+  },
+  "bassoon": {
+    "photo": "File:FoxBassoon.png",
+    "audio": "File:Bassoon beethoven.ogg",
+    "manual": true
+  },
+  "saxophone": {
+    "photo": "File:Yamaha YAS-25 Alto Saxophone 20080502.jpg",
+    "audio": "File:Georg Philipp Telemann - Fantasia No 11 - Soprano saxophone - David Hernando Vitores.ogg",
+    "manual": true
+  },
+  "trumpet": {
+    "photo": "File:Yamaha_Trumpet_YTR-8335LA_crop.jpg",
+    "audio": "File:Harry Gozzard trumpet solo in Donahue band.ogg",
+    "manual": true
+  },
+  "french-horn": {
+    "photo": "File:Yamaha_Horn_YHR-667V.tif",
+    "audio": "File:Hunting horn tone.ogg",
+    "manual": true
+  },
+  "trombone": {
+    "photo": "File:Yamaha_Tenor_trombone_YSL-891Z_(re-crop).jpg",
+    "audio": "File:RakeoianAnthem (trombone solo).wav",
+    "manual": true
+  },
+  "tuba": {
+    "photo": "File:Yamaha_Bass_tuba_YFB-822.tif",
+    "audio": "File:Sousaphone.ogg",
+    "manual": true
+  },
+  "flugelhorn": {
+    "photo": "File:Yamaha Flugelhorn YFH-8310Z.jpg",
+    "audio": "File:Short flugelhorn excerpt.ogg",
+    "manual": true
+  },
+  "drum-kit": {
+    "photo": "File:A drum kit made by Mapex Drums - Cacon Photos- Copyleft - Creative Commons 11.jpg",
+    "audio": "File:Drum beat.ogg",
+    "manual": true
+  },
+  "timpani": {
+    "photo": "File:Standard timpani setup.jpg",
+    "audio": "File:Paukenwirbel auf einer Wiener Pauke mit acht verschiedenen Schlegeln.ogg",
+    "manual": true
+  },
+  "marimba": {
+    "photo": "File:Marimba_One_4000_Series.jpg",
+    "audio": "File:Exemple marimba.ogg",
+    "manual": true
+  },
+  "xylophone": {
+    "photo": "File:Xylophone Metallophone IMG 9447.jpg",
+    "audio": "File:Bali xylophone.ogg",
+    "manual": true
+  },
+  "glockenspiel": {
+    "photo": "File:Glockenspiel-malletech.jpg",
+    "audio": "File:Glockenspiel 1. Mai Alle meine Entchen.ogg",
+    "manual": true
+  },
+  "cajon": {
+    "photo": "File:Homemade cajón.jpg",
+    "audio": "File:Cajon Peruano Parche.ogg",
+    "manual": true
+  },
+  "erhu": {
+    "photo": "File:Erhu.png",
+    "audio": "File:二泉映月.ogg",
+    "manual": true
+  },
+  "guzheng": {
+    "photo": "File:Guzheng 2020 by Glenn Francis.jpg",
+    "audio": "File:Guzheng Morning (Antti Luode).mp3",
+    "manual": true
+  },
+  "pipa": {
+    "photo": "File:Pipa MET DP216711.jpg",
+    "audio": "File:Pipa - sound.ogg",
+    "manual": true
+  },
+  "dizi": {
+    "photo": "File:Dizi MET mi65.149.R.jpg",
+    "audio": "File:DiZi Chinese Flute Sample.ogg",
+    "manual": true
+  },
+  "xiao": {
+    "photo": "File:Xiao MET DP216557.jpg",
+    "audio": null,
+    "manual": true
+  },
+  "suona": {
+    "photo": "File:Suona xinesa.jpg",
+    "audio": "File:Suona.ogg",
+    "manual": true
+  },
+  "guqin": {
+    "photo": "File:ZhongNiShi.jpg",
+    "audio": "File:Guqin-Yangguan Sandie.ogg",
+    "manual": true
+  },
+  "shamisen": {
+    "photo": "File:Anime Boston 2023 A Shamisen busker 04-08-2023 248PM.jpg",
+    "audio": "File:Shamisenwithvocals 2006.ogg",
+    "manual": true
+  },
+  "sitar": {
+    "photo": "File:Sitar3.jpg",
+    "audio": "File:Raga Bag Bhim, Ranjit Makkuni.ogg",
+    "manual": true
+  },
+  "kalimba": {
+    "photo": "File:Kalimba hata.jpg",
+    "audio": "File:Kalimba de coco (notas sueltas) 01.wav",
+    "manual": true
+  },
+  "handpan": {
+    "photo": "File:Handpan 2014.jpg",
+    "audio": "File:Hang 2007 vertical.ogg",
+    "manual": true
+  },
+  "panflute": {
+    "photo": "File:Flute_de_pan_MHNT_ETH_AC_NH_31_Savès.jpg",
+    "audio": "File:Daniel Alomía Robles - El Cóndor Pasa.ogg",
+    "manual": true
+  },
+  "bagpipe": {
+    "photo": "File:Bagpipe, Musical Instrument Museum, Brussels.jpg",
+    "audio": "File:Duet Musette (ISRC USUAN1100250).mp3",
+    "manual": true
+  },
+  "synthesizer": {
+    "photo": "File:Moog Prodigy.png",
+    "audio": "File:JP-4 Bass Arpeggio.ogg",
+    "manual": true
+  },
+  "theremin": {
+    "photo": "File:Etherwave Theremin Kit.jpg",
+    "audio": "File:Theremin walking bass.ogg",
+    "manual": true
+  },
+  "drum-machine": {
+    "photo": "File:TR-808 - MIM, Phoenix (2019-08-30 14.59.26 by Bryan Pocius) (cropped).jpg",
+    "audio": "File:808vstsample.ogg",
+    "manual": true
+  },
+  "sampler": {
+    "photo": "File:Akai MPC2000XL.jpg",
+    "audio": "File:Beat Hip hop.wav",
+    "manual": true
+  },
+  "vocoder": {
+    "photo": "File:Korg VC-10 Vocoder.jpg",
+    "audio": "File:Vocoder demo.ogg",
+    "manual": true
+  }
+}

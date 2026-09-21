@@ -1,0 +1,550 @@
+{
+  "piano": {
+    "audio": {
+      "title": "Satie Gymnopedie No. 3 for piano solo 01.wav",
+      "artist": "Satie",
+      "license": "Public domain"
+    }
+  },
+  "electric-piano": {
+    "audio": {
+      "title": "Hum - Fabulous soft sounding electric piano.（01-1318340-Hum-Fabulous soft sounding electric piano..mp3）",
+      "artist": "Hum",
+      "license": "Internet Archive · CC（见来源）",
+      "source": "https://archive.org/details/jamendo-305307"
+    }
+  },
+  "organ": {
+    "audio": {
+      "title": "Mendelssohn organ sonata B-flat major op. 65 no. 4 Wolfram Syré.mp3",
+      "artist": "composition: Felix Mendelssohn Bartoldy recording (using a Hauptwerk digital organ): Wolfram Syré",
+      "license": "Public domain"
+    }
+  },
+  "harpsichord": {
+    "photo": {
+      "title": "ClavecinRuckers&Taskin.JPG",
+      "artist": "Gérard Janot",
+      "license": "CC BY-SA 3.0"
+    },
+    "audio": {
+      "title": "Handel - Suites for Harpsichord - No.5 in E major - The Harmonious Blacksmith.ogg",
+      "artist": "Musopen",
+      "license": "CC0"
+    }
+  },
+  "celesta": {
+    "audio": {
+      "title": "Bartok cordes percussion celesta.ogg",
+      "artist": "Béla Bartók (1881-1945), composer LITTLEJAZZMAN, uploader",
+      "license": "CC BY-SA 3.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Bartok_cordes_percussion_celesta.ogg"
+    }
+  },
+  "accordion": {
+    "audio": {
+      "title": "Schubert's Ave Maria, D.839 (accordion orchestra) - Paul De Bra.ogg",
+      "artist": "Paul De Bra",
+      "license": "CC BY 4.0"
+    }
+  },
+  "violin": {
+    "audio": {
+      "title": "J. S. Bach – Violin Sonata No.1 in G minor, BWV 1001, I. Adagio.ogg",
+      "artist": "Unknown authorUnknown author",
+      "license": "CC0"
+    }
+  },
+  "viola": {
+    "photo": {
+      "title": "Bratsche.jpg",
+      "artist": "Just plain Bill",
+      "license": "Public domain"
+    },
+    "audio": {
+      "title": "Telemann - Viola Concerto Gmaj - 2. Allegro.ogg",
+      "artist": "the Advent Chamber Orchestra with Elias Goldstein (viola)",
+      "license": "CC BY-SA 2.0"
+    }
+  },
+  "cello": {
+    "photo": {
+      "title": "Cello front side.png",
+      "artist": "Georg Feitscher",
+      "license": "CC BY 3.0"
+    },
+    "audio": {
+      "title": "JOHN MICHEL CELLO-J S BACH CELLO SUITE 1 in G Prelude.ogg",
+      "artist": "Johann Sebastian Bach",
+      "license": "CC BY-SA 3.0"
+    }
+  },
+  "double-bass": {
+    "photo": {
+      "title": "Double Bass MET DP217153.jpg",
+      "artist": "Bartolomeo Cristofori",
+      "license": "CC0"
+    },
+    "audio": {
+      "title": "Jazz walking bass on double bass.oga",
+      "artist": "Serolillo",
+      "license": "CC BY 2.5"
+    }
+  },
+  "acoustic-guitar": {
+    "photo": {
+      "title": "00 Walden Acoustic Guitar D310e 01.jpg",
+      "artist": "Elmschrat",
+      "license": "CC BY-SA 4.0"
+    },
+    "audio": {
+      "title": "Jason Shaw - SOLO ACOUSTIC GUITAR.ogg",
+      "artist": "Jason Shaw",
+      "license": "CC BY 3.0 us"
+    }
+  },
+  "electric-guitar": {
+    "photo": {
+      "title": "Guitarra eléctrica.JPG",
+      "artist": "Rjcastillo",
+      "license": "CC BY-SA 3.0"
+    },
+    "audio": {
+      "title": "Guitar_Solo_in_a_minor.ogg",
+      "artist": "Joshua Olson",
+      "license": "CC BY-SA 3.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Guitar_Solo_in_a_minor.ogg"
+    }
+  },
+  "bass-guitar": {
+    "audio": {
+      "title": "Funky Slap Bass line.ogg",
+      "artist": "Serolillo",
+      "license": "CC BY 2.5"
+    }
+  },
+  "ukulele": {
+    "photo": {
+      "title": "17 inch pocket ukulele branded \"ultnice\".jpg",
+      "artist": "Zapyon",
+      "license": "CC BY-SA 4.0"
+    },
+    "audio": {
+      "title": "Ukulele playing.ogg",
+      "artist": "Cassa342",
+      "license": "CC BY-SA 4.0"
+    }
+  },
+  "harp": {
+    "photo": {
+      "title": "Salvi harp Diana.jpg",
+      "artist": "N.S.M. s.p.a.",
+      "license": "CC BY-SA 4.0"
+    },
+    "audio": {
+      "title": "Evening Fall (Harp) (ISRC USUAN1100236).mp3",
+      "artist": "Evening Fall (Harp) Kevin MacLeod",
+      "license": "CC BY 3.0"
+    }
+  },
+  "banjo": {
+    "photo": {
+      "title": "Bluegrass banjo.png",
+      "artist": "Arent",
+      "license": "CC BY-SA 4.0"
+    },
+    "audio": {
+      "title": "Carnival of Venice, composed by Julius Benedict, arranged for banjo and played by Alfred A. Farland.flac",
+      "artist": "Alfred A. Farland, arranger for banjo, banjo solo Julius Benedict, composer",
+      "license": "Public domain"
+    }
+  },
+  "mandolin": {
+    "audio": {
+      "title": "Antonio Vivaldi, Mandolin Concerto in C major, RV 425.ogg",
+      "artist": "The Milan Baroque Soloists",
+      "license": "PDM-owner"
+    }
+  },
+  "flute": {
+    "audio": {
+      "title": "Bach - Partita For Solo Flute - Modern Flute - 3. Sarabande.ogg",
+      "artist": "Scott Goff (flute)",
+      "license": "CC BY-SA 2.0"
+    }
+  },
+  "piccolo": {
+    "photo": {
+      "title": "Piccolo.jpg",
+      "artist": "User:Caesura",
+      "license": "Public domain"
+    }
+  },
+  "clarinet": {
+    "audio": {
+      "title": "Wolfgang Amadeus Mozart - Clarinet Concerto - 2. Adagio.ogg",
+      "artist": "Wolfgang Amadeus Mozart",
+      "license": "CC BY-SA 2.0"
+    }
+  },
+  "oboe": {
+    "audio": {
+      "title": "Mourning Song (ISRC USUAN1100431).mp3",
+      "artist": "Kevin MacLeod",
+      "license": "CC BY 3.0"
+    }
+  },
+  "bassoon": {
+    "photo": {
+      "title": "FoxBassoon.png",
+      "artist": "Gregory F. Maxwell &lt;gmaxwell@gmail.com&gt; PGP:0xB0413BFA",
+      "license": "GFDL 1.2"
+    },
+    "audio": {
+      "title": "AurbanniAudio - Comedy (Bassoon, pizzicato and orchestra)（01-1970396-AurbanniAudio-Comedy _Bassoon, pizzicato and orchestra_.mp3）",
+      "artist": "AurbanniAudio",
+      "license": "Internet Archive · CC（见来源）",
+      "source": "https://archive.org/details/jamendo-494382"
+    }
+  },
+  "saxophone": {
+    "photo": {
+      "title": "Yamaha YAS-25 Alto Saxophone 20080502.jpg",
+      "artist": "TR001",
+      "license": "CC BY-SA 3.0"
+    },
+    "audio": {
+      "title": "Georg_Philipp_Telemann_-_Fantasia_No_11_-_Soprano_saxophone_-_David_Hernando_Vitores.ogg",
+      "artist": "Georg Philipp Telemann",
+      "license": "CC BY-SA 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Georg_Philipp_Telemann_-_Fantasia_No_11_-_Soprano_saxophone_-_David_Hernando_Vitores.ogg"
+    }
+  },
+  "trumpet": {
+    "audio": {
+      "title": "Harry Gozzard trumpet solo in Donahue band.ogg",
+      "artist": "Geo Lightspeed7",
+      "license": "CC BY 4.0"
+    }
+  },
+  "french-horn": {
+    "audio": {
+      "title": "Hunting horn tone.ogg",
+      "artist": "Alon-De-Lon",
+      "license": "CC0"
+    }
+  },
+  "trombone": {
+    "audio": {
+      "title": "RakeoianAnthem (trombone solo).wav",
+      "artist": "MrSpode42",
+      "license": "CC BY-SA 4.0"
+    }
+  },
+  "tuba": {
+    "audio": {
+      "title": "Tuba Times(final)（Tuba time(final).mp3）",
+      "artist": "ROBER COLORS (Rober Ehgartner Mango)",
+      "license": "Internet Archive · CC（见来源）",
+      "source": "https://archive.org/details/tuba-timefinal"
+    }
+  },
+  "flugelhorn": {
+    "photo": {
+      "title": "Yamaha Flugelhorn YFH-8310Z.jpg",
+      "artist": "Photograph: Yamaha Corporation",
+      "license": "CC BY-SA 4.0"
+    },
+    "audio": {
+      "title": "Short flugelhorn excerpt.ogg",
+      "artist": "Ovinus Real",
+      "license": "CC BY-SA 4.0"
+    }
+  },
+  "drum-kit": {
+    "photo": {
+      "title": "A drum kit made by Mapex Drums - Cacon Photos- Copyleft - Creative Commons 11.jpg",
+      "artist": "Mostafameraji",
+      "license": "CC BY 4.0"
+    },
+    "audio": {
+      "title": "Djp - 04 drums 09-cell-wav rmx.ogg",
+      "artist": "Djp",
+      "license": "见源页面",
+      "source": "https://commons.wikimedia.org/wiki/File:Djp_-_04_drums_09-cell-wav_rmx.ogg"
+    }
+  },
+  "timpani": {
+    "photo": {
+      "title": "Standard timpani setup.jpg",
+      "artist": "The original uploader was Flamurai at English Wikipedia.",
+      "license": "CC BY-SA 3.0"
+    },
+    "audio": {
+      "title": "shostakovich-violincrto-mvtIII-timpani（shostakovich-ViolinConcerto1-mvtIII-timpani-passage-epancer.mp3）",
+      "artist": "Eric Pancer",
+      "license": "Internet Archive · CC（见来源）",
+      "source": "https://archive.org/details/shostakovich-violincrto-mvtIII-timpani"
+    }
+  },
+  "marimba": {
+    "audio": {
+      "title": "Exemple marimba.ogg",
+      "artist": "Bigfall00",
+      "license": "CC BY-SA 3.0"
+    }
+  },
+  "xylophone": {
+    "photo": {
+      "title": "Xylophone Metallophone IMG 9447.jpg",
+      "artist": "א ח מנינור שבשמים",
+      "license": "CC BY-SA 4.0"
+    },
+    "audio": {
+      "title": "nikproteus - la primavera alle porte no xylophone 30 sec（01-2310251-nikproteus-la primavera alle porte no xylophone 30 sec.mp3）",
+      "artist": "nikproteus",
+      "license": "Internet Archive · CC（见来源）",
+      "source": "https://archive.org/details/jamendo-629637"
+    }
+  },
+  "glockenspiel": {
+    "photo": {
+      "title": "Glockenspiel-malletech.jpg",
+      "artist": "flamurai",
+      "license": "Public domain"
+    },
+    "audio": {
+      "title": "Glockenspiel_1._Mai_Alle_meine_Entchen.ogg",
+      "artist": "Psychogerd",
+      "license": "CC BY-SA 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Glockenspiel_1._Mai_Alle_meine_Entchen.ogg"
+    }
+  },
+  "cajon": {
+    "photo": {
+      "title": "Homemade cajón.jpg",
+      "artist": "Luislema",
+      "license": "CC BY-SA 4.0"
+    },
+    "audio": {
+      "title": "Base de compás por bulerías de Jerez (palmas y caja).ogg",
+      "artist": "Santiago Sanchez Cifuentes",
+      "license": "CC0",
+      "source": "https://commons.wikimedia.org/wiki/File:Base_de_comp%C3%A1s_por_buler%C3%ADas_de_Jerez_(palmas_y_caja).ogg"
+    }
+  },
+  "erhu": {
+    "photo": {
+      "title": "Erhu.png",
+      "artist": "LDHan",
+      "license": "Public domain"
+    },
+    "audio": {
+      "title": "二泉映月.ogg",
+      "artist": "Originally composed and performed by 阿炳 (Abing), record by: David290, performed by :Zhang Peijian",
+      "license": "CC BY-SA 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File:%E4%BA%8C%E6%B3%89%E6%98%A0%E6%9C%88.ogg"
+    }
+  },
+  "guzheng": {
+    "photo": {
+      "title": "Guzheng 2020 by Glenn Francis.jpg",
+      "artist": "Toglenn",
+      "license": "CC BY-SA 4.0"
+    },
+    "audio": {
+      "title": "Guzheng Morning (Antti Luode).mp3",
+      "artist": "Antti Luode",
+      "license": "CC BY 3.0"
+    }
+  },
+  "pipa": {
+    "photo": {
+      "title": "Pipa MET DP216711.jpg",
+      "artist": "Wikimedia Commons",
+      "license": "CC0"
+    },
+    "audio": {
+      "title": "Sweet Pipa Of Mine (Antti Luode).mp3",
+      "artist": "Antti Luode",
+      "license": "CC BY 3.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Sweet_Pipa_Of_Mine_(Antti_Luode).mp3"
+    }
+  },
+  "dizi": {
+    "photo": {
+      "title": "Dizi MET mi65.149.R.jpg",
+      "artist": "Wikimedia Commons",
+      "license": "CC0"
+    },
+    "audio": {
+      "title": "DiZi Chinese Flute Sample.ogg",
+      "artist": "Gorgoroth6669",
+      "license": "CC0"
+    }
+  },
+  "xiao": {
+    "photo": {
+      "title": "Xiao MET DP216557.jpg",
+      "artist": "Wikimedia Commons",
+      "license": "CC0"
+    }
+  },
+  "suona": {
+    "photo": {
+      "title": "Suona xinesa.jpg",
+      "artist": "Francesc Fort",
+      "license": "CC BY-SA 4.0"
+    },
+    "audio": {
+      "title": "Suona.ogg",
+      "artist": "Francesc Fort",
+      "license": "CC BY-SA 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Suona.ogg"
+    }
+  },
+  "guqin": {
+    "photo": {
+      "title": "ZhongNiShi.jpg",
+      "artist": "The original uploader was CharlieHuang at English Wikipedia.",
+      "license": "CC BY-SA 3.0"
+    },
+    "audio": {
+      "title": "Guqin-Yangguan_Sandie.ogg",
+      "artist": "CharlieHuang",
+      "license": "CC BY-SA 3.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Guqin-Yangguan_Sandie.ogg"
+    }
+  },
+  "shamisen": {
+    "photo": {
+      "title": "Anime Boston 2023 A Shamisen busker 04-08-2023 248PM.jpg",
+      "artist": "Abzeronow",
+      "license": "CC BY-SA 4.0"
+    },
+    "audio": {
+      "title": "Shamisenwithvocals_2006.ogg",
+      "artist": "Nesnad",
+      "license": "CC BY 3.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Shamisenwithvocals_2006.ogg"
+    }
+  },
+  "sitar": {
+    "photo": {
+      "title": "Sitar3.jpg",
+      "artist": "Sathyadeep",
+      "license": "Public domain"
+    },
+    "audio": {
+      "title": "Sitar sample yaman.ogg",
+      "artist": "Tito Dutta",
+      "license": "CC BY-SA 3.0"
+    }
+  },
+  "kalimba": {
+    "photo": {
+      "title": "Kalimba hata.jpg",
+      "artist": "Seresbalint",
+      "license": "CC BY-SA 4.0"
+    },
+    "audio": {
+      "title": "Kalimba de coco (notas sueltas) 01.wav",
+      "artist": "Luis Alvaz",
+      "license": "CC BY-SA 4.0"
+    }
+  },
+  "handpan": {
+    "photo": {
+      "title": "Handpan 2014.jpg",
+      "artist": "Toglenn",
+      "license": "CC BY-SA 3.0"
+    },
+    "audio": {
+      "title": "Hang_2007_vertical.ogg",
+      "artist": "Michael Paschko (Ixkeys) www.hangblog.org",
+      "license": "CC BY-SA 3.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Hang_2007_vertical.ogg"
+    }
+  },
+  "panflute": {
+    "audio": {
+      "title": "Daniel Alomía Robles - El Cóndor Pasa.ogg",
+      "artist": "Pracchia-78",
+      "license": "Public domain"
+    }
+  },
+  "bagpipe": {
+    "photo": {
+      "title": "Bagpipe, Musical Instrument Museum, Brussels.jpg",
+      "artist": "Charles Hutchins",
+      "license": "CC BY 2.0"
+    },
+    "audio": {
+      "title": "Skye Boat Song.ogg",
+      "artist": "Lyrics by Sir Harold Boulton, Bart. (1859 - 1935) [Not included in this recording], to a traditional air collected by Miss Annie MacLeod in the 1870s. Performance by the Clan Stewart Pipe Band",
+      "license": "CC BY-SA 2.0"
+    }
+  },
+  "synthesizer": {
+    "photo": {
+      "title": "Moog Prodigy.png",
+      "artist": "Goorremont_Cinema_Halloween_Show.jpg: Spaz Tacular from Germany derivative work: Clusternote (talk)",
+      "license": "CC BY 2.0"
+    },
+    "audio": {
+      "title": "MicroKORG Demo.ogg",
+      "artist": "Autojak234",
+      "license": "CC BY-SA 4.0"
+    }
+  },
+  "theremin": {
+    "photo": {
+      "title": "Etherwave Theremin Kit.jpg",
+      "artist": "Hutschi",
+      "license": "CC BY-SA 3.0"
+    },
+    "audio": {
+      "title": "Theremin_walking_bass.ogg",
+      "artist": "Effebit",
+      "license": "CC BY-SA 3.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Theremin_walking_bass.ogg"
+    }
+  },
+  "drum-machine": {
+    "photo": {
+      "title": "TR-808 - MIM, Phoenix (2019-08-30 14.59.26 by Bryan Pocius) (cropped).jpg",
+      "artist": "Bryan Pocius from New York, USA",
+      "license": "CC BY 2.0"
+    },
+    "audio": {
+      "title": "808patterns 01.ogg",
+      "artist": "Theofanis Siassios",
+      "license": "CC BY-SA 3.0"
+    }
+  },
+  "sampler": {
+    "photo": {
+      "title": "Akai MPC2000XL.jpg",
+      "artist": "user:withe",
+      "license": "Public domain"
+    },
+    "audio": {
+      "title": "Beat Hip hop.wav",
+      "artist": "Filo gèn'",
+      "license": "CC BY-SA 4.0"
+    }
+  },
+  "vocoder": {
+    "photo": {
+      "title": "Korg VC-10 Vocoder.jpg",
+      "artist": "Michael Calore Camera location37° 45′ 57″ N, 122° 24′ 48″ W View this and other nearby images on: OpenStreetMap 37.765833; -122.413333",
+      "license": "CC BY 2.0"
+    },
+    "audio": {
+      "title": "NoiseGuy - Vocoder（01-556584-NoiseGuy-Vocoder.mp3）",
+      "artist": "NoiseGuy",
+      "license": "Internet Archive · CC（见来源）",
+      "source": "https://archive.org/details/jamendo-064690"
+    }
+  }
+}
