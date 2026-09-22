@@ -5,6 +5,7 @@ import { initTheme } from '@/core/components/ThemeToggle';
 import { PianoSynth } from './engine/synth';
 import { MidiBridge } from './engine/midi';
 import { createKeyboard } from './ui/keyboard';
+import { createMinimap } from './ui/minimap';
 import { createRack, type RackItem } from './ui/screen';
 import { injectPianoStyles } from './ui/styles';
 import { renderNoteCluster, renderChordSeq, type StaffSeqChord } from './ui/staff';
@@ -180,9 +181,22 @@ function renderLab(): void {
     labelFor: (midi) => keyLabels.get(midi) ?? null,
   });
 
+  // 88 键位置指示条：点击 / 拖动把窗口跳到对应音区
+  const minimap = createMinimap({
+    keyCount: () => state.keyCount,
+    onJump: (start) => {
+      const next = clampWindow(start, state.keyCount);
+      if (next === state.windowStart) return;
+      state.windowStart = next;
+      renderKeyboard();
+      persist();
+    },
+  });
+
   function renderKeyboard(): void {
     rebuildKeyLabels();
     kbd.render(state.windowStart, state.keyCount);
+    minimap.render(state.windowStart, state.keyCount);
     refresh();
   }
 
@@ -666,6 +680,7 @@ function renderLab(): void {
           state.tonality = t;
           tracker = buildTracker();
           persist();
+          renderTonalitySeg();
           renderRack();
           refresh();
         }),
@@ -892,6 +907,7 @@ function renderLab(): void {
   // ────────── 装配 ──────────
   const piano = h('div', { class: 'cl-piano' }, [
     bezel,
+    minimap.el,
     kbd.el,
     h('div', { class: 'cl-stand' }, [
       h('div', { class: 'cl-readout' }, [readoutBig, readoutSub, seqRows]),
@@ -910,7 +926,7 @@ function renderLab(): void {
     h('p', {
       class: 'mt-4 text-[11px] leading-relaxed text-[var(--fg-muted)]',
       textContent:
-        '快捷键：Z 排 = 当前窗口白键区（C 起），Q 排 = 高八度，←/→ 移动视图八度，空格 = 延音踏板，Esc = 全部松开。MIDI 设备点面板上的「🎹 MIDI」连接，支持踏板 CC64。',
+        '快捷键：Z 排 = 当前窗口白键区（C 起），Q 排 = 高八度，←/→ 移动视图八度，空格 = 延音踏板，Esc = 全部松开。键盘上方的微型指示条标示窗口在 88 键中的位置，点击 / 拖动可快速跳转音区。MIDI 设备点面板上的「🎹 MIDI」连接，支持踏板 CC64。',
     }),
   );
 

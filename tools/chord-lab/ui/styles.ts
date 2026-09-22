@@ -140,7 +140,7 @@ export function injectPianoStyles(): void {
   box-shadow: 0 1px 3px rgba(0,0,0,.7);
 }
 .cl-whiterow { display: flex; gap: 2px; height: 188px; position: relative; }
-.cl-blacklayer { position: absolute; inset: 21px 8px auto 8px; height: 0; }
+.cl-blacklayer { position: absolute; inset: 5px 8px auto 8px; height: 0; }
 
 .cl-key { position: relative; cursor: pointer; }
 .cl-whitek {
@@ -185,6 +185,31 @@ export function injectPianoStyles(): void {
 .cl-blackk .cl-klabel { bottom: 5px; color: #6d6d78; font-size: 9px; }
 .cl-oct { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
   font-size: 9px; color: #a09a88; pointer-events: none; }
+
+/* ── 88 键位置指示条（minimap） ─────────── */
+.cl-minimap { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 0 4px; }
+.cl-mm-end { font-size: 8px; color: #7a7e8e; letter-spacing: .02em; user-select: none; }
+.cl-mm-track {
+  position: relative; flex: 1; height: 22px; border-radius: 4px;
+  background: #101013; border: 1px solid #1d1d22;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.8);
+  overflow: hidden; cursor: pointer; touch-action: none; user-select: none;
+}
+.cl-mm-whites { display: flex; height: 100%; }
+.cl-mm-w { flex: 1 1 0; min-width: 0; background: linear-gradient(180deg, #48484f, #323238);
+  border-right: 1px solid rgba(0,0,0,.55); }
+.cl-mm-w:last-child { border-right: 0; }
+.cl-mm-b { position: absolute; top: 0; height: 58%; transform: translateX(-50%);
+  background: #0a0a0d; border-radius: 0 0 2px 2px; }
+.cl-mm-view {
+  position: absolute; top: 0; bottom: 0; border: 1px solid #34d399; border-radius: 3px;
+  background: rgba(52,211,153,.13);
+  box-shadow: 0 0 8px rgba(52,211,153,.45), inset 0 0 6px rgba(52,211,153,.22);
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none; transition: left .18s ease, width .18s ease;
+}
+.cl-mm-range { font-size: 8px; font-weight: 600; color: #b8f5d8;
+  text-shadow: 0 1px 2px rgba(0,0,0,.9); white-space: nowrap; }
 
 /* ── 谱架（指示区） ───────────────────── */
 .cl-stand {
