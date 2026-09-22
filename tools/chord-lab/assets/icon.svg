@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#14532d"/>
+  <!-- 琴键：四白三黑 -->
+  <g>
+    <rect x="10" y="30" width="9" height="24" rx="2" fill="#fdfcf7"/>
+    <rect x="21" y="30" width="9" height="24" rx="2" fill="#fdfcf7"/>
+    <rect x="32" y="30" width="9" height="24" rx="2" fill="#86efac"/>
+    <rect x="43" y="30" width="9" height="24" rx="2" fill="#fdfcf7"/>
+    <rect x="16" y="30" width="7" height="14" rx="1.6" fill="#17171b"/>
+    <rect x="27" y="30" width="7" height="14" rx="1.6" fill="#17171b"/>
+    <rect x="43.5" y="30" width="7" height="14" rx="1.6" fill="#17171b"/>
+  </g>
+  <!-- 大三和弦三音点（根/三/五） -->
+  <g fill="#4ade80">
+    <circle cx="14.5" cy="48" r="2.6"/>
+    <circle cx="36.5" cy="48" r="2.6"/>
+    <circle cx="47.5" cy="48" r="2.6"/>
+  </g>
+  <!-- 五线谱弧线 + 符头 -->
+  <g stroke="#fbbf24" stroke-width="2.2" fill="none" stroke-linecap="round">
+    <path d="M10 18 Q 22 10 32 16 T 54 14"/>
+  </g>
+  <ellipse cx="32" cy="16" rx="3.4" ry="2.6" fill="#fbbf24" transform="rotate(-16 32 16)"/>
+</svg>
