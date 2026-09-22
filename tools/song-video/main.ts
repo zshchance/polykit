@@ -11,7 +11,12 @@ import {
   resumeAudioContext,
   type LoadedAudio,
 } from './audio';
-import { addCustomTheme, loadCustomThemes, removeCustomTheme, toRenderTheme } from './custom-themes';
+import {
+  addCustomTheme,
+  loadCustomThemes,
+  removeCustomTheme,
+  toRenderTheme,
+} from './custom-themes';
 import { parseLyrics, type LyricLine } from './lyrics';
 import {
   ASPECTS,
@@ -43,7 +48,13 @@ import {
   type Timeline,
   type VisualizerId,
 } from './options';
-import { computeBands, drawFrame, resetListScroll, type ImageAsset, type RenderInput } from './renderer';
+import {
+  computeBands,
+  drawFrame,
+  resetListScroll,
+  type ImageAsset,
+  type RenderInput,
+} from './renderer';
 import { startRecording, isWakeLockSupported, type RecordHandle } from './recorder';
 import { loadOptions, saveOptions } from './settings';
 
@@ -244,8 +255,7 @@ function loadImageAsset(f: File): Promise<{ asset: ImageAsset; url: string }> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(f);
     const img = new Image();
-    img.onload = () =>
-      resolve({ asset: { img, w: img.naturalWidth, h: img.naturalHeight }, url });
+    img.onload = () => resolve({ asset: { img, w: img.naturalWidth, h: img.naturalHeight }, url });
     img.onerror = () => {
       URL.revokeObjectURL(url);
       reject(new Error('图片读取失败，请换一张试试'));
@@ -329,7 +339,9 @@ function render(): void {
   const previewCanvas = h('canvas', { class: 'block h-full w-full' }) as HTMLCanvasElement;
   const canvasFrame = h(
     'div',
-    { class: 'mx-auto overflow-hidden rounded-xl border border-[var(--border)] bg-black shadow-lg' },
+    {
+      class: 'mx-auto overflow-hidden rounded-xl border border-[var(--border)] bg-black shadow-lg',
+    },
     [previewCanvas],
   );
 
@@ -387,7 +399,16 @@ function render(): void {
     }
     const now = performance.now();
     const dt = lastFrameTime > 0 ? Math.min(0.05, (now - lastFrameTime) / 1000) : 0.016;
-    drawFrame(ctx, previewCanvas.width, previewCanvas.height, buildRenderInput(), t, dt, bands, wave);
+    drawFrame(
+      ctx,
+      previewCanvas.width,
+      previewCanvas.height,
+      buildRenderInput(),
+      t,
+      dt,
+      bands,
+      wave,
+    );
     lastFrameTime = now;
   }
 
@@ -658,7 +679,9 @@ function render(): void {
         'w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
       'aria-label': '导出分辨率',
       onchange: (e) =>
-        updateOptions(() => (opts.resolution = (e.target as HTMLSelectElement).value as ResolutionId)),
+        updateOptions(
+          () => (opts.resolution = (e.target as HTMLSelectElement).value as ResolutionId),
+        ),
     },
     RESOLUTIONS.map((r) =>
       h('option', { value: r.id, selected: r.id === opts.resolution }, [r.label]),
@@ -701,20 +724,16 @@ function render(): void {
     onchange: (e) =>
       updateOptions(() => (opts.showNextLyric = (e.target as HTMLInputElement).checked)),
   }) as HTMLInputElement;
-  const lyricFadeRow = h(
-    'div',
-    { class: 'flex flex-wrap gap-x-5 gap-y-1.5 pt-0.5' },
-    [
-      h('label', { class: 'flex items-center gap-2 text-xs cursor-pointer text-[var(--fg-muted)]' }, [
-        prevLyricCheckbox,
-        '显示前一句',
-      ]),
-      h('label', { class: 'flex items-center gap-2 text-xs cursor-pointer text-[var(--fg-muted)]' }, [
-        nextLyricCheckbox,
-        '显示后一句',
-      ]),
-    ],
-  );
+  const lyricFadeRow = h('div', { class: 'flex flex-wrap gap-x-5 gap-y-1.5 pt-0.5' }, [
+    h('label', { class: 'flex items-center gap-2 text-xs cursor-pointer text-[var(--fg-muted)]' }, [
+      prevLyricCheckbox,
+      '显示前一句',
+    ]),
+    h('label', { class: 'flex items-center gap-2 text-xs cursor-pointer text-[var(--fg-muted)]' }, [
+      nextLyricCheckbox,
+      '显示后一句',
+    ]),
+  ]);
 
   // 滚动列表模式：当前句上方/下方行数（上方默认小于下方；空间不足时自动少显）
   const selCls =
@@ -745,21 +764,17 @@ function render(): void {
       h('option', { value: String(c), selected: c === opts.lyricBelow }, [`下 ${c} 行`]),
     ),
   ) as HTMLSelectElement;
-  const lyricListRow = h(
-    'div',
-    { class: 'flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-0.5' },
-    [
-      h('label', { class: 'flex items-center gap-1.5 text-xs text-[var(--fg-muted)]' }, [
-        h('span', { textContent: '列表上方' }),
-        lyricAboveSel,
-      ]),
-      h('label', { class: 'flex items-center gap-1.5 text-xs text-[var(--fg-muted)]' }, [
-        h('span', { textContent: '列表下方' }),
-        lyricBelowSel,
-      ]),
-      h('span', { class: 'text-[11px] text-[var(--fg-muted)]', textContent: '空间不足时自动少显' }),
-    ],
-  );
+  const lyricListRow = h('div', { class: 'flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-0.5' }, [
+    h('label', { class: 'flex items-center gap-1.5 text-xs text-[var(--fg-muted)]' }, [
+      h('span', { textContent: '列表上方' }),
+      lyricAboveSel,
+    ]),
+    h('label', { class: 'flex items-center gap-1.5 text-xs text-[var(--fg-muted)]' }, [
+      h('span', { textContent: '列表下方' }),
+      lyricBelowSel,
+    ]),
+    h('span', { class: 'text-[11px] text-[var(--fg-muted)]', textContent: '空间不足时自动少显' }),
+  ]);
 
   // 主题：内置 10 套 + 用户自定义（存储参考名言卡片自定义模板：localStorage items 列表）
   const themeWrap = h('div', { class: 'flex flex-wrap items-center gap-3' }, []);
@@ -793,11 +808,32 @@ function render(): void {
       'aria-label': '主题名称',
       maxlength: '12',
     }) as HTMLInputElement;
-    const colorCls = 'h-8 w-12 cursor-pointer rounded border border-[var(--border)] bg-[var(--bg)] p-0.5';
-    const bg1 = h('input', { type: 'color', value: base.bg[0], class: colorCls, 'aria-label': '背景起色' }) as HTMLInputElement;
-    const bg2 = h('input', { type: 'color', value: base.bg[1], class: colorCls, 'aria-label': '背景止色' }) as HTMLInputElement;
-    const fg = h('input', { type: 'color', value: base.fg, class: colorCls, 'aria-label': '文字颜色' }) as HTMLInputElement;
-    const accentC = h('input', { type: 'color', value: base.accent, class: colorCls, 'aria-label': '主强调色' }) as HTMLInputElement;
+    const colorCls =
+      'h-8 w-12 cursor-pointer rounded border border-[var(--border)] bg-[var(--bg)] p-0.5';
+    const bg1 = h('input', {
+      type: 'color',
+      value: base.bg[0],
+      class: colorCls,
+      'aria-label': '背景起色',
+    }) as HTMLInputElement;
+    const bg2 = h('input', {
+      type: 'color',
+      value: base.bg[1],
+      class: colorCls,
+      'aria-label': '背景止色',
+    }) as HTMLInputElement;
+    const fg = h('input', {
+      type: 'color',
+      value: base.fg,
+      class: colorCls,
+      'aria-label': '文字颜色',
+    }) as HTMLInputElement;
+    const accentC = h('input', {
+      type: 'color',
+      value: base.accent,
+      class: colorCls,
+      'aria-label': '主强调色',
+    }) as HTMLInputElement;
     const swatch = h('div', {
       class: 'h-12 w-full rounded-lg border border-[var(--border)]',
       style: `background:linear-gradient(135deg,${base.bg[0]},${base.bg[1]})`,
@@ -879,7 +915,8 @@ function render(): void {
             'data-theme-id': th.id,
             title: th.label,
             'aria-label': `主题：${th.label}`,
-            class: 'h-9 w-14 rounded-lg border border-[var(--border)] transition-transform hover:scale-105',
+            class:
+              'h-9 w-14 rounded-lg border border-[var(--border)] transition-transform hover:scale-105',
             style: `background:${th.swatch}`,
             onclick: () => selectTheme(th.id),
           },
@@ -896,7 +933,8 @@ function render(): void {
           'data-theme-id': ct.id,
           title: `自定义主题：${ct.name}`,
           'aria-label': `自定义主题：${ct.name}`,
-          class: 'h-9 w-14 rounded-lg border border-[var(--border)] transition-transform hover:scale-105',
+          class:
+            'h-9 w-14 rounded-lg border border-[var(--border)] transition-transform hover:scale-105',
           style: `background:linear-gradient(135deg,${ct.bg1},${ct.bg2})`,
           onclick: () => selectTheme(ct.id),
         },
@@ -1003,7 +1041,8 @@ function render(): void {
     rows: 3,
     placeholder: '简介，每行一条，如：\n编曲 / 混音：某某\n出品：某某工作室',
     value: opts.coverDesc,
-    oninput: (e) => drawCoverFields(() => (opts.coverDesc = (e.target as HTMLTextAreaElement).value)),
+    oninput: (e) =>
+      drawCoverFields(() => (opts.coverDesc = (e.target as HTMLTextAreaElement).value)),
   }) as HTMLTextAreaElement;
   const coverStyleSeg = makeSegment<CoverStyleId>(
     COVER_STYLES.map((s) => ({ id: s.id, label: s.label, hint: s.hint })),
@@ -1065,8 +1104,7 @@ function render(): void {
     type: 'checkbox',
     class: 'h-4 w-4 accent-[var(--accent)]',
     checked: opts.coverSpin,
-    onchange: (e) =>
-      updateOptions(() => (opts.coverSpin = (e.target as HTMLInputElement).checked)),
+    onchange: (e) => updateOptions(() => (opts.coverSpin = (e.target as HTMLInputElement).checked)),
   }) as HTMLInputElement;
 
   const accentColorInput = h('input', {
@@ -1074,8 +1112,7 @@ function render(): void {
     value: opts.accentColor ?? resolveTheme(opts.theme).accent,
     class: 'h-8 w-10 cursor-pointer rounded border border-[var(--border)] bg-[var(--bg)] p-0.5',
     'aria-label': '自定义主色',
-    oninput: (e) =>
-      updateOptions(() => (opts.accentColor = (e.target as HTMLInputElement).value)),
+    oninput: (e) => updateOptions(() => (opts.accentColor = (e.target as HTMLInputElement).value)),
   }) as HTMLInputElement;
   const accentResetBtn = h(
     'button',
@@ -1098,8 +1135,7 @@ function render(): void {
     placeholder: '如 @我的音乐电台（留空不显示）',
     class:
       'w-full rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]',
-    oninput: (e) =>
-      updateOptions(() => (opts.publisher = (e.target as HTMLInputElement).value)),
+    oninput: (e) => updateOptions(() => (opts.publisher = (e.target as HTMLInputElement).value)),
   }) as HTMLInputElement;
 
   const endRollInput = h('input', {
@@ -1139,10 +1175,7 @@ function render(): void {
       refreshEndRollVisibility();
     },
   }) as HTMLInputElement;
-  endRollStopLabel.append(
-    endRollStopInput,
-    document.createTextNode('滚动至屏幕正中央停止'),
-  );
+  endRollStopLabel.append(endRollStopInput, document.createTextNode('滚动至屏幕正中央停止'));
   const endFreezeLabel = h('label', {
     class: 'flex items-center gap-2 text-xs cursor-pointer text-[var(--fg-muted)]',
     title: '视频最后一帧保持显示最终字幕',
@@ -1151,8 +1184,7 @@ function render(): void {
     type: 'checkbox',
     class: 'h-3.5 w-3.5 accent-[var(--accent)]',
     checked: opts.endFreeze,
-    onchange: (e) =>
-      updateOptions(() => (opts.endFreeze = (e.target as HTMLInputElement).checked)),
+    onchange: (e) => updateOptions(() => (opts.endFreeze = (e.target as HTMLInputElement).checked)),
   }) as HTMLInputElement;
   endFreezeLabel.append(endFreezeInput, document.createTextNode('结束定格在字幕'));
 
@@ -1195,7 +1227,8 @@ function render(): void {
       row('结尾动画', h('div', { class: 'space-y-2' }, [outroSeg.wrap, outroDurSel.wrap])),
       h('p', {
         class: 'text-[11px] leading-relaxed text-[var(--fg-muted)]',
-        textContent: '未勾选片尾字幕时，音乐结束即视频结束（结尾段不占时长）；勾选后按字幕展示需要自动延长。',
+        textContent:
+          '未勾选片尾字幕时，音乐结束即视频结束（结尾段不占时长）；勾选后按字幕展示需要自动延长。',
       }),
     ]),
     h('label', { class: 'flex items-center gap-2 text-sm cursor-pointer' }, [
@@ -1249,7 +1282,9 @@ function render(): void {
     class: 'h-full w-0 rounded-full bg-[var(--accent)] transition-[width] duration-150',
   });
   const progressBar = h('div', { class: 'flex-1' }, [
-    h('div', { class: 'h-2 w-full overflow-hidden rounded-full bg-[var(--bg)]' }, [progressBarFill]),
+    h('div', { class: 'h-2 w-full overflow-hidden rounded-full bg-[var(--bg)]' }, [
+      progressBarFill,
+    ]),
   ]);
   const progressLabel = h('p', { class: 'text-xs text-[var(--fg-muted)]', textContent: '' });
   const cancelBtn = h(
@@ -1340,8 +1375,7 @@ function render(): void {
     }
 
     // 完成：挂下载按钮（默认文件名 = 歌曲名）
-    const fname =
-      `${sanitizeFilePart(opts.titleText.trim() || audio.name, 60) || 'song-video'}.${result.ext}`;
+    const fname = `${sanitizeFilePart(opts.titleText.trim() || audio.name, 60) || 'song-video'}.${result.ext}`;
     if (downloadUrl) URL.revokeObjectURL(downloadUrl);
     downloadUrl = URL.createObjectURL(result.blob);
     const dl = h('a', {
@@ -1396,7 +1430,12 @@ function render(): void {
         row('画面比例', aspectSeg.wrap),
         row('导出画质', resolutionSel),
         row('音频可视化', visualizerSeg.wrap),
-        h('div', { class: 'space-y-2' }, [fieldLabel('歌词显示'), lyricSeg.wrap, lyricFadeRow, lyricListRow]),
+        h('div', { class: 'space-y-2' }, [
+          fieldLabel('歌词显示'),
+          lyricSeg.wrap,
+          lyricFadeRow,
+          lyricListRow,
+        ]),
         row('配色主题', themeWrap),
         row('进度条', progressSeg.wrap),
         h('div', { class: 'space-y-1.5' }, [
@@ -1435,7 +1474,8 @@ function render(): void {
   const layout = h(
     'div',
     {
-      class: 'grid items-start gap-6 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)]',
+      class:
+        'grid items-start gap-6 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)]',
     },
     [settingsCol, previewCol],
   );

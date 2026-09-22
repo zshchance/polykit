@@ -19,8 +19,7 @@ import { getSharedAudioContext } from './audio';
 import { computeBands, drawFrame, type RenderInput } from './renderer';
 
 export type RecordResult =
-  | { ok: true; blob: Blob; ext: 'mp4' | 'webm' }
-  | { ok: false; reason: string };
+  { ok: true; blob: Blob; ext: 'mp4' | 'webm' } | { ok: false; reason: string };
 
 export interface RecordOptions {
   /** 解码后的音频 */
@@ -122,11 +121,17 @@ export function startRecording(o: RecordOptions): RecordHandle {
 
   // —— 能力检测 ——
   if (typeof MediaRecorder === 'undefined') {
-    return { result: Promise.resolve({ ok: false, reason: '当前浏览器不支持视频录制（MediaRecorder）' }), cancel: () => {} };
+    return {
+      result: Promise.resolve({ ok: false, reason: '当前浏览器不支持视频录制（MediaRecorder）' }),
+      cancel: () => {},
+    };
   }
   const picked = pickMime();
   if (!picked) {
-    return { result: Promise.resolve({ ok: false, reason: '当前浏览器不支持 MP4/WebM 视频录制' }), cancel: () => {} };
+    return {
+      result: Promise.resolve({ ok: false, reason: '当前浏览器不支持 MP4/WebM 视频录制' }),
+      cancel: () => {},
+    };
   }
 
   const canvas = document.createElement('canvas');
@@ -170,7 +175,10 @@ export function startRecording(o: RecordOptions): RecordHandle {
     });
   } catch (e) {
     return {
-      result: Promise.resolve({ ok: false, reason: e instanceof Error ? e.message : '无法启动录制器' }),
+      result: Promise.resolve({
+        ok: false,
+        reason: e instanceof Error ? e.message : '无法启动录制器',
+      }),
       cancel: () => {},
     };
   }

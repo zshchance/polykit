@@ -101,14 +101,12 @@ export function loadOptions(): SongVideoOptions {
     outroDur,
     coverSpin: typeof o.coverSpin === 'boolean' ? o.coverSpin : d.coverSpin,
     publisher: typeof o.publisher === 'string' ? o.publisher.slice(0, 40) : d.publisher,
-    endRollEnabled:
-      typeof o.endRollEnabled === 'boolean' ? o.endRollEnabled : d.endRollEnabled,
+    endRollEnabled: typeof o.endRollEnabled === 'boolean' ? o.endRollEnabled : d.endRollEnabled,
     endRollMode: normalizeEndRollMode(o.endRollMode),
     endRollStopCenter:
       typeof o.endRollStopCenter === 'boolean' ? o.endRollStopCenter : d.endRollStopCenter,
     endFreeze: typeof o.endFreeze === 'boolean' ? o.endFreeze : d.endFreeze,
-    endRollText:
-      typeof o.endRollText === 'string' ? o.endRollText.slice(0, 2000) : d.endRollText,
+    endRollText: typeof o.endRollText === 'string' ? o.endRollText.slice(0, 2000) : d.endRollText,
     coverPageEnabled:
       typeof o.coverPageEnabled === 'boolean' ? o.coverPageEnabled : d.coverPageEnabled,
     coverTitle: typeof o.coverTitle === 'string' ? o.coverTitle.slice(0, 80) : d.coverTitle,

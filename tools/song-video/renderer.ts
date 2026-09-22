@@ -649,14 +649,7 @@ function drawCoverDisc(
   ctx.restore();
 
   // —— b. 胶盘主体：左上受光的径向渐变 + 边缘亮环（金属厚度感） ——
-  const vinyl = ctx.createRadialGradient(
-    cx - R * 0.4,
-    cy - R * 0.45,
-    R * 0.08,
-    cx,
-    cy,
-    R * 1.02,
-  );
+  const vinyl = ctx.createRadialGradient(cx - R * 0.4, cy - R * 0.45, R * 0.08, cx, cy, R * 1.02);
   vinyl.addColorStop(0, '#33363f');
   vinyl.addColorStop(0.55, '#1a1c22');
   vinyl.addColorStop(1, '#0a0b0e');
@@ -774,8 +767,7 @@ interface VisMetrics {
 
 function visMetrics(input: RenderInput, H: number, S: number): VisMetrics {
   const isPortrait = H > S;
-  const list =
-    input.opts.lyricMode === 'list' && !!input.lyrics && input.lyrics.length > 0;
+  const list = input.opts.lyricMode === 'list' && !!input.lyrics && input.lyrics.length > 0;
   switch (input.opts.visualizer) {
     case 'bars': {
       const baseY = isPortrait ? H - S * 0.12 : H * 0.92;
@@ -809,8 +801,7 @@ function drawVisualizer(
 ): void {
   const { opts, theme } = input;
   const accent = theme.accent;
-  const v = (i: number): number =>
-    bands && i < bands.length ? (bands[i] ?? 0) / 255 : 0;
+  const v = (i: number): number => (bands && i < bands.length ? (bands[i] ?? 0) / 255 : 0);
 
   if (opts.visualizer === 'bars') {
     const m = visMetrics(input, H, S);
@@ -879,8 +870,14 @@ function drawVisualizer(
       // 内侧短倒影
       ctx.globalAlpha = base * 0.35;
       ctx.beginPath();
-      ctx.moveTo(layout.coverCx + cos * (innerR - S * 0.008), layout.coverCy + sin * (innerR - S * 0.008));
-      ctx.lineTo(layout.coverCx + cos * (innerR - S * 0.008 - len * 0.3), layout.coverCy + sin * (innerR - S * 0.008 - len * 0.3));
+      ctx.moveTo(
+        layout.coverCx + cos * (innerR - S * 0.008),
+        layout.coverCy + sin * (innerR - S * 0.008),
+      );
+      ctx.lineTo(
+        layout.coverCx + cos * (innerR - S * 0.008 - len * 0.3),
+        layout.coverCy + sin * (innerR - S * 0.008 - len * 0.3),
+      );
       ctx.stroke();
     }
     ctx.globalAlpha = base;
@@ -1015,8 +1012,7 @@ function drawLyrics(
     listScroll = animTarget;
   }
   // 当前行基准：整块在带内居中（上留白 = 下留白），并保证上/下方行各自有位
-  let curY =
-    boundTop + opts.lyricAbove * lineH + (boundBottom - boundTop - (n - 1) * lineH) / 2;
+  let curY = boundTop + opts.lyricAbove * lineH + (boundBottom - boundTop - (n - 1) * lineH) / 2;
   curY = Math.min(curY, boundBottom - opts.lyricBelow * lineH);
   curY = Math.max(curY, boundTop + opts.lyricAbove * lineH);
   curY = Math.min(Math.max(curY, boundTop), boundBottom);
@@ -1054,8 +1050,7 @@ function drawLyrics(
     );
     const active = i === idx;
     const dist = Math.min(1, Math.abs(d) / (opts.lyricAbove + opts.lyricBelow + 1));
-    ctx.globalAlpha =
-      listBase * (active ? 1 : 0.55 * (1 - dist * 0.7)) * edgeFade * winFade;
+    ctx.globalAlpha = listBase * (active ? 1 : 0.55 * (1 - dist * 0.7)) * edgeFade * winFade;
     ctx.fillStyle = active ? theme.accent : theme.fg;
     ctx.font = fontOf(active ? '700' : '500', S * (active ? 0.038 : 0.03));
     ctx.fillText(line.text, W / 2, y, W * 0.86);

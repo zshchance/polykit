@@ -487,10 +487,7 @@ export function computeTimeline(
   if (opts.endRollEnabled) {
     const lines = opts.endRollText.split('\n').filter((l) => l.trim());
     if (opts.endRollMode === 'fade' || opts.endRollMode === 'cut') {
-      const pages = Math.max(
-        1,
-        Math.ceil(lines.length / endRollLinesPerScreen(aspect)),
-      );
+      const pages = Math.max(1, Math.ceil(lines.length / endRollLinesPerScreen(aspect)));
       rollNeed = lines.length > 0 ? pages * END_ROLL_PAGE_SEC[opts.endRollMode] : 0;
     } else {
       rollNeed = lines.length * ROLL_SEC_PER_LINE + 1.6;

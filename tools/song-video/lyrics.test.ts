@@ -56,12 +56,9 @@ describe('parseLyrics · SRT', () => {
   });
 
   it('保留块内多行文本并去除 HTML 标签与实体', () => {
-    const srt = [
-      '1',
-      '00:00:01,000 --> 00:00:04,000',
-      '<i>斜体行</i>',
-      '第二行 &amp; 收尾',
-    ].join('\n');
+    const srt = ['1', '00:00:01,000 --> 00:00:04,000', '<i>斜体行</i>', '第二行 &amp; 收尾'].join(
+      '\n',
+    );
     const lines = parseLyrics(srt, 10);
     expect(lines[0]?.text).toBe('斜体行 第二行 & 收尾');
   });
