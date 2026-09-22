@@ -40,6 +40,9 @@ initTheme();
  */
 function renderHome(): void {
   const app = document.getElementById('app')!;
+  // 清掉构建期 SEO 插件注入的静态兜底内容（h1+工具链接列表，供爬虫读取），再渲染交互界面
+  app.replaceChildren();
+
   const tools = getRegisteredTools();
   const categories = getCategories(tools);
 

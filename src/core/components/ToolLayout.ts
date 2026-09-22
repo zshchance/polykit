@@ -16,6 +16,10 @@ export interface ToolLayout {
 }
 
 export function renderToolLayout(parent: HTMLElement, title: string): ToolLayout {
+  // 清掉构建期 SEO 插件注入的静态兜底内容（h1+描述，供不执行 JS 的爬虫读取），
+  // 否则运行时 DOM 会与兜底并存，标题和描述重复出现。
+  parent.replaceChildren();
+
   const backLink = h('a', {
     href: getHomeUrl(),
     class:

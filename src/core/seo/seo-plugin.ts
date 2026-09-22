@@ -7,6 +7,10 @@
  *  2. transformIndexHtml 阶段：
  *       - 首页 index.html → 注入站点级 meta + Open Graph + 工具目录 JSON-LD(ItemList)
  *       - 各工具页 index.html → 注入 description/keywords + SoftwareApplication JSON-LD
+ *       - 同时向 <div id="app"> 注入静态兜底内容（h1 + 描述 + 内链），
+ *         让不执行 JS 的爬虫（百度/Bing/微信等）也能读到正文与站点链接结构；
+ *         运行时 JS 挂载前会用 replaceChildren() 清掉它（见 ToolLayout / home/main），
+ *         不会与交互界面并存。
  *  3. closeBundle 阶段（仅生产构建）：写出 dist/sitemap.xml 与 dist/robots.txt
  *
  * 这样关键词满足需求："默认对用户不可见"（不渲染到可见 UI），
@@ -168,9 +172,10 @@ export function seoPlugin(options: SeoOptions = {}): Plugin {
       order: 'post',
       handler(html, ctx) {
         const isHome = ctx.path === '/' || ctx.path === '/index.html';
+        // base 用于兜底内容里的相对链接（/ 或 /polykit/），随部署平台自动跟随
         return isHome
-          ? injectHome(html, tools, options)
-          : injectTool(html, ctx.path, tools, options);
+          ? injectHome(html, tools, options, config.base)
+          : injectTool(html, ctx.path, tools, options, config.base);
       },
     },
 
@@ -190,7 +195,7 @@ export function seoPlugin(options: SeoOptions = {}): Plugin {
 
 // ─────────────────────────── 首页注入 ───────────────────────────
 
-function injectHome(html: string, tools: ToolConfig[], options: SeoOptions): string {
+function injectHome(html: string, tools: ToolConfig[], options: SeoOptions, base: string): string {
   // 首页关键词 = 站点级关键词 + 各工具关键词；去重（保留首次出现顺序），
   // 避免 siteKeywords 与工具 keywords 同时含「名言卡片」等造成 meta 重复。
   const keywords = dedupStrings(
@@ -198,6 +203,7 @@ function injectHome(html: string, tools: ToolConfig[], options: SeoOptions): str
   );
   const siteUrl = (options.siteUrl || DEFAULT_URL).replace(/\/$/, '');
   const homeUrl = `${siteUrl}/`;
+  const ogImage = `${siteUrl}/og-image.png`;
 
   const tags = [
     `<meta name="description" content="${escape(SITE_DESC)}" />`,
@@ -211,7 +217,12 @@ function injectHome(html: string, tools: ToolConfig[], options: SeoOptions): str
     `<meta property="og:type" content="website" />`,
     `<meta property="og:url" content="${escape(homeUrl)}" />`,
     `<meta property="og:site_name" content="${escape(SITE_NAME)}" />`,
-    `<meta name="twitter:card" content="summary" />`,
+    `<meta property="og:image" content="${escape(ogImage)}" />`,
+    `<meta property="og:image:width" content="1200" />`,
+    `<meta property="og:image:height" content="630" />`,
+    `<meta property="og:image:alt" content="${escape(`${SITE_NAME} — 即开即用的本地小工具合集`)}" />`,
+    `<meta name="twitter:card" content="summary_large_image" />`,
+    `<meta name="twitter:image" content="${escape(ogImage)}" />`,
   ];
 
   // WebSite：标识站点本身，利于 sitelinks 搜索框等
@@ -254,7 +265,9 @@ function injectHome(html: string, tools: ToolConfig[], options: SeoOptions): str
   };
   tags.push(`<script type="application/ld+json">${JSON.stringify(itemList)}</script>`);
 
-  return injectIntoHead(html, tags.join('\n    '));
+  html = injectIntoHead(html, tags.join('\n    '));
+  // 静态兜底：h1 + 站点简介 + 全工具链接列表（爬虫可爬的内链骨架）
+  return injectIntoApp(html, buildHomeFallback(tools, base));
 }
 
 // ─────────────────────────── 工具页注入 ───────────────────────────
@@ -264,6 +277,7 @@ function injectTool(
   pagePath: string,
   tools: (ToolConfig & { dir: string })[],
   options: SeoOptions,
+  base: string,
 ): string {
   // pagePath 形如 /tools/password-generator/index.html
   const slug = pagePath.split('/')[2];
@@ -272,6 +286,7 @@ function injectTool(
 
   const siteUrl = (options.siteUrl || DEFAULT_URL).replace(/\/$/, '');
   const pageUrl = `${siteUrl}/tools/${tool.slug}/`;
+  const ogImage = `${siteUrl}/og-image.png`;
 
   // 描述兜底：若工具未写 description，回退站点描述，避免输出 content="undefined"
   const desc = tool.description?.trim() || `${tool.name} · ${SITE_DESC}`;
@@ -285,6 +300,12 @@ function injectTool(
     `<meta property="og:type" content="website" />`,
     `<meta property="og:url" content="${escape(pageUrl)}" />`,
     `<meta property="og:site_name" content="${escape(SITE_NAME)}" />`,
+    `<meta property="og:image" content="${escape(ogImage)}" />`,
+    `<meta property="og:image:width" content="1200" />`,
+    `<meta property="og:image:height" content="630" />`,
+    `<meta property="og:image:alt" content="${escape(`${tool.name} · ${SITE_NAME}`)}" />`,
+    `<meta name="twitter:card" content="summary_large_image" />`,
+    `<meta name="twitter:image" content="${escape(ogImage)}" />`,
   ].filter(Boolean);
 
   // SoftwareApplication 结构化数据（描述同样用兜底后的 desc）
@@ -301,23 +322,27 @@ function injectTool(
   };
   tags.push(`<script type="application/ld+json">${JSON.stringify(schema)}</script>`);
 
-  return injectIntoHead(html, tags.join('\n    '));
+  html = injectIntoHead(html, tags.join('\n    '));
+  // 静态兜底：返回首页链接 + h1 + 工具描述（与运行时 ToolLayout 首屏结构一致）
+  return injectIntoApp(html, buildToolFallback(tool, desc, base));
 }
 
 // ─────────────────────────── sitemap / robots ───────────────────────────
 
 function writeSitemap(outDir: string, siteUrl: string, tools: ToolConfig[]): void {
   const urls: string[] = [];
+  // lastmod 用构建日期：爬虫据此判断新鲜度，静态站内容随构建更新，语义吻合
+  const lastmod = new Date().toISOString().slice(0, 10);
 
   // 首页
   urls.push(
-    `  <url>\n    <loc>${siteUrl}/</loc>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>`,
+    `  <url>\n    <loc>${siteUrl}/</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>`,
   );
   // 各工具页：loc = canonical 前缀 + /tools/<slug>/（与部署 base 解耦）
   for (const t of tools) {
     const loc = `${siteUrl}/tools/${t.slug}/`;
     urls.push(
-      `  <url>\n    <loc>${loc}</loc>\n    <changefreq>monthly</changefreq>\n    <priority>0.7</priority>\n  </url>`,
+      `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.7</priority>\n  </url>`,
     );
   }
 
@@ -364,6 +389,69 @@ function injectIntoHead(html: string, tags: string): string {
     return html.replace(/<\/head>/i, `    ${tags}\n  </head>`);
   }
   return `${tags}\n${html}`;
+}
+
+// ─────────────────────────── 静态兜底内容（爬虫/无 JS 可读） ───────────────────────────
+
+/**
+ * 兜底内容统一打上 data-seo-fallback 标记，便于：
+ *  1. 运行时排查（JS 挂载后该标记应被 replaceChildren 清除）；
+ *  2. 自动化测试断言「JS 渲染后无残留、无重复 h1」。
+ * 样式复用 Tailwind + CSS 变量，与运行时首屏结构保持一致，避免无 JS 时裸奔。
+ */
+
+/** 首页兜底：站点 h1 + 简介 + 全部工具的链接列表（构成爬虫可爬的内链骨架） */
+function buildHomeFallback(tools: ToolConfig[], base: string): string {
+  const items = tools
+    .map((t) => {
+      const desc = t.description?.trim() || t.name;
+      return [
+        `        <li class="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4">`,
+        `          <a class="font-semibold text-[var(--fg)] hover:text-[var(--accent)] transition-colors" href="${escape(base)}tools/${escape(t.slug)}/">${escape(t.name)}</a>`,
+        `          <p class="mt-1 text-sm text-[var(--fg-muted)] line-clamp-2">${escape(desc)}</p>`,
+        `        </li>`,
+      ].join('\n');
+    })
+    .join('\n');
+
+  return [
+    `    <div data-seo-fallback>`,
+    `      <header class="mb-8">`,
+    `        <h1 class="text-4xl font-bold tracking-tight text-[var(--fg)]">${escape(SITE_NAME)}</h1>`,
+    `        <p class="mt-2 text-[var(--fg-muted)]">即开即用，数据不出本地 · 实用与趣味兼得的在线小工具</p>`,
+    `      </header>`,
+    `      <nav aria-label="全部工具">`,
+    `        <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 list-none p-0 m-0">`,
+    items,
+    `        </ul>`,
+    `      </nav>`,
+    `    </div>`,
+  ].join('\n');
+}
+
+/** 工具页兜底：返回首页链接 + 工具 h1 + 描述（结构与运行时 ToolLayout 一致） */
+function buildToolFallback(tool: ToolConfig, desc: string, base: string): string {
+  return [
+    `    <div data-seo-fallback>`,
+    `      <header class="flex items-center gap-3 border-b pb-4 mb-8">`,
+    `        <a href="${escape(base)}" class="inline-flex items-center gap-1 text-sm text-[var(--fg-muted)] hover:text-[var(--accent)] transition-colors">← 首页</a>`,
+    `        <h1 class="text-xl font-semibold">${escape(tool.name)}</h1>`,
+    `      </header>`,
+    `      <main>`,
+    `        <p class="text-[var(--fg-muted)] leading-7">${escape(desc)}</p>`,
+    `      </main>`,
+    `    </div>`,
+  ].join('\n');
+}
+
+/** 把兜底 HTML 注入到 <div id="app"> 内（所有页面源文件中该 div 均为空） */
+function injectIntoApp(html: string, inner: string): string {
+  const m = html.match(/<div\s+id="app"[^>]*>/i);
+  if (!m) {
+    console.warn('[seo] 未找到 <div id="app">，跳过静态兜底注入');
+    return html;
+  }
+  return html.replace(m[0], `${m[0]}\n${inner}\n    `);
 }
 
 export default seoPlugin;
