@@ -1,0 +1,47 @@
+import type { RhythmPattern } from '../../types';
+
+/** 摇滚流派鼓律动：反手拍、半速、朋克 */
+export const ROCK_RHYTHMS: RhythmPattern[] = [
+  {
+    id: 'rock-backbeat',
+    name: '摇滚反手拍',
+    nameEn: 'Rock Backbeat',
+    icon: '🎸',
+    genre: '摇滚',
+    moods: ['硬朗', '奔放'],
+    steps: 16,
+    bpmRange: [110, 130],
+    tracks: { kick: [0, 8], snare: [4, 12], hat: [0, 2, 4, 6, 8, 10, 12, 14] },
+    desc: '底鼓一三拍、军鼓二四拍，从车库到体育馆都适用的万能骨架',
+    promptFragment: 'a steady rock backbeat with kicks on one and three and snares on two and four',
+    promptFragmentZh: '摇滚反手拍：底鼓一三拍，军鼓二四拍',
+  },
+  {
+    id: 'half-time-anthem',
+    name: '半速圣歌',
+    nameEn: 'Half-time Anthem',
+    icon: '⛰️',
+    genre: '摇滚',
+    moods: ['史诗', '硬朗'],
+    steps: 16,
+    bpmRange: [120, 140],
+    tracks: { kick: [0], snare: [8], hat: [0, 2, 4, 6, 8, 10, 12, 14] },
+    desc: '一倍的速度、两倍的重量：第三拍那声大军鼓像山一样压下来',
+    promptFragment: 'a half-time rock anthem feel with a huge snare on beat three',
+    promptFragmentZh: '半速摇滚：第三拍大军鼓的史诗感',
+  },
+  {
+    id: 'punk-dash',
+    name: '朋克冲刺',
+    nameEn: 'Punk Dash',
+    icon: '🔥',
+    genre: '摇滚',
+    moods: ['奔放', '硬朗'],
+    steps: 16,
+    bpmRange: [155, 180],
+    tracks: { kick: [0, 2, 8, 10], snare: [4, 12], hat: [0, 2, 4, 6, 8, 10, 12, 14] },
+    desc: '双击底鼓配上不停歇的八分踩镲，两分钟唱完一首的冲刺感',
+    promptFragment: 'a frantic punk dash with doubled kick hits and relentless eighth-note hats',
+    promptFragmentZh: '朋克冲刺：双击底鼓配不停的八分踩镲',
+  },
+];

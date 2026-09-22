@@ -1,0 +1,47 @@
+import type { RhythmPattern } from '../../types';
+
+/** 流行流派鼓律动：稳拍、抒情慢板、舞曲流行 */
+export const POP_RHYTHMS: RhythmPattern[] = [
+  {
+    id: 'pop-steady',
+    name: '流行稳拍',
+    nameEn: 'Pop Steady',
+    icon: '🎤',
+    genre: '流行',
+    moods: ['欢快', '温暖'],
+    steps: 16,
+    bpmRange: [95, 115],
+    tracks: { kick: [0, 8, 10], snare: [4, 12], hat: [0, 2, 4, 6, 8, 10, 12, 14] },
+    desc: '第三拍前多一脚抢先底鼓，稳稳托住旋律又不失前进感',
+    promptFragment: 'a steady pop groove with an anticipating extra kick before beat three',
+    promptFragmentZh: '流行稳拍：第三拍前的抢先底鼓',
+  },
+  {
+    id: 'ballad-gentle',
+    name: '抒情慢板',
+    nameEn: 'Gentle Ballad',
+    icon: '🕯️',
+    genre: '流行',
+    moods: ['温暖', '空灵'],
+    steps: 16,
+    bpmRange: [65, 78],
+    tracks: { kick: [0, 8], snare: [12], hat: [0, 2, 4, 6, 8, 10, 12, 14] },
+    desc: '稀疏底鼓、第四拍才落下的轻柔军鼓，给人声留足呼吸空间',
+    promptFragment: 'a gentle ballad pulse with sparse kicks and a soft snare on beat four',
+    promptFragmentZh: '抒情慢板：稀疏底鼓，第四拍轻柔军鼓',
+  },
+  {
+    id: 'dance-pop',
+    name: '舞曲流行',
+    nameEn: 'Dance Pop',
+    icon: '💃',
+    genre: '流行',
+    moods: ['欢快', '奔放'],
+    steps: 16,
+    bpmRange: [112, 124],
+    tracks: { kick: [0, 4, 8, 12], snare: [4, 12, 15], hat: [2, 6, 10, 14] },
+    desc: '四踩底鼓配反拍踩镲，小节末那声应答拍手是副歌的信号弹',
+    promptFragment: 'an upbeat dance-pop groove with an extra clap answering the backbeat',
+    promptFragmentZh: '舞曲流行：反拍之后有应答拍手',
+  },
+];

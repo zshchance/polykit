@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 200">
+  <defs>
+    <linearGradient id="cov-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4c0519"/>
+      <stop offset="0.55" stop-color="#881337"/>
+      <stop offset="1" stop-color="#e11d48"/>
+    </linearGradient>
+  </defs>
+  <rect width="480" height="200" fill="url(#cov-bg)"/>
+
+  <!-- 16×3 步进网格（底鼓/军鼓/踩镲三轨） -->
+  <g>
+    <!-- 底鼓：四踩 -->
+    <g fill="#ffffff">
+      <rect x="40" y="46" width="18" height="10" rx="3"/>
+      <rect x="132" y="46" width="18" height="10" rx="3"/>
+      <rect x="224" y="46" width="18" height="10" rx="3"/>
+      <rect x="316" y="46" width="18" height="10" rx="3"/>
+    </g>
+    <!-- 军鼓：二四拍 -->
+    <g fill="#fbbf24">
+      <rect x="132" y="62" width="18" height="10" rx="3"/>
+      <rect x="316" y="62" width="18" height="10" rx="3"/>
+    </g>
+    <!-- 踩镲：反拍 -->
+    <g fill="#ffffff" opacity="0.45">
+      <rect x="86" y="78" width="18" height="10" rx="3"/>
+      <rect x="178" y="78" width="18" height="10" rx="3"/>
+      <rect x="270" y="78" width="18" height="10" rx="3"/>
+      <rect x="362" y="78" width="18" height="10" rx="3"/>
+    </g>
+    <!-- 空拍底纹 -->
+    <g fill="#ffffff" opacity="0.12">
+      <rect x="86" y="46" width="18" height="10" rx="3"/>
+      <rect x="178" y="46" width="18" height="10" rx="3"/>
+      <rect x="270" y="46" width="18" height="10" rx="3"/>
+      <rect x="362" y="46" width="18" height="10" rx="3"/>
+      <rect x="408" y="46" width="18" height="10" rx="3"/>
+      <rect x="40" y="62" width="18" height="10" rx="3"/>
+      <rect x="86" y="62" width="18" height="10" rx="3"/>
+      <rect x="178" y="62" width="18" height="10" rx="3"/>
+      <rect x="224" y="62" width="18" height="10" rx="3"/>
+      <rect x="270" y="62" width="18" height="10" rx="3"/>
+      <rect x="362" y="62" width="18" height="10" rx="3"/>
+      <rect x="408" y="62" width="18" height="10" rx="3"/>
+      <rect x="40" y="78" width="18" height="10" rx="3"/>
+      <rect x="132" y="78" width="18" height="10" rx="3"/>
+      <rect x="224" y="78" width="18" height="10" rx="3"/>
+      <rect x="316" y="78" width="18" height="10" rx="3"/>
+      <rect x="408" y="78" width="18" height="10" rx="3"/>
+    </g>
+  </g>
+
+  <!-- 上行琶音：跨八度的音高柱 -->
+  <g fill="#fde68a">
+    <rect x="48" y="150" width="14" height="30" rx="3" opacity="0.55"/>
+    <rect x="72" y="138" width="14" height="42" rx="3" opacity="0.7"/>
+    <rect x="96" y="126" width="14" height="54" rx="3" opacity="0.85"/>
+    <rect x="120" y="108" width="14" height="72" rx="3"/>
+    <rect x="144" y="138" width="14" height="42" rx="3" opacity="0.7"/>
+    <rect x="168" y="126" width="14" height="54" rx="3" opacity="0.85"/>
+    <rect x="192" y="114" width="14" height="66" rx="3" opacity="0.95"/>
+    <rect x="216" y="96" width="14" height="84" rx="3"/>
+    <rect x="240" y="126" width="14" height="54" rx="3" opacity="0.85"/>
+    <rect x="264" y="114" width="14" height="66" rx="3" opacity="0.95"/>
+    <rect x="288" y="102" width="14" height="78" rx="3"/>
+    <rect x="312" y="84" width="14" height="96" rx="3"/>
+    <rect x="336" y="114" width="14" height="66" rx="3" opacity="0.9"/>
+    <rect x="360" y="102" width="14" height="78" rx="3"/>
+    <rect x="384" y="90" width="14" height="90" rx="3"/>
+    <rect x="408" y="72" width="14" height="108" rx="3"/>
+  </g>
+
+  <!-- 连接琶音峰值的细线 -->
+  <path d="M55 150 L79 138 L103 126 L127 108 L151 138 L175 126 L199 114 L223 96 L247 126 L271 114 L295 102 L319 84 L343 114 L367 102 L391 90 L415 72"
+        stroke="#fff7ed" stroke-width="1.6" fill="none" opacity="0.5" stroke-linecap="round"/>
+</svg>

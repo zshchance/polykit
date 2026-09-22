@@ -74,6 +74,11 @@ export const registryConfig: RegistryConfig = {
       '复古终端',
       'CRT 终端',
       '半块字符',
+      '节奏型',
+      '鼓点律动',
+      '琶音模式',
+      'AI音乐提示词',
+      '节拍设计',
     ],
   },
   modules: {
@@ -85,5 +90,7 @@ export const registryConfig: RegistryConfig = {
     'image-compress': { order: 5 },
     'prompt-hub': { order: 6 },
     'style-atlas': { order: 7 },
+    'instrument-atlas': { order: 8 },
+    'rhythm-arp-lab': { order: 9 },
   },
 };

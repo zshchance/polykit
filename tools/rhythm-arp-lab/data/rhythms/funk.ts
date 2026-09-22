@@ -1,0 +1,53 @@
+import type { RhythmPattern } from '../../types';
+
+/** 放克流派鼓律动：切分放克、迪斯科、新灵魂 */
+export const FUNK_RHYTHMS: RhythmPattern[] = [
+  {
+    id: 'funk-chop',
+    name: '放克切分',
+    nameEn: 'Funk Chop',
+    icon: '🕶️',
+    genre: '放克',
+    moods: ['律动', '俏皮'],
+    steps: 16,
+    bpmRange: [95, 108],
+    tracks: {
+      kick: [0, 3, 8, 11],
+      snare: [4, 7, 12, 15],
+      hat: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    },
+    swing: 0.15,
+    desc: '底鼓专挑缝儿里钻，幽灵军鼓若隐若现，身体会比脑子先动',
+    promptFragment: 'a syncopated funk chop with ghost snares and sizzling sixteenth-note hats',
+    promptFragmentZh: '放克切分：幽灵军鼓配沙沙作响的十六分踩镲',
+  },
+  {
+    id: 'disco-night',
+    name: '迪斯科之夜',
+    nameEn: 'Disco Night',
+    icon: '🪩',
+    genre: '放克',
+    moods: ['欢快', '律动'],
+    steps: 16,
+    bpmRange: [110, 124],
+    tracks: { kick: [0, 4, 8, 12], snare: [4, 12], hat: [0, 2, 4, 6, 8, 10, 12, 14] },
+    desc: '镜面球下的金色律动：稳健四踩配八分踩镲，永远纸醉金迷',
+    promptFragment: 'a glittering disco groove with steady kicks and splashy eighth-note hats',
+    promptFragmentZh: '迪斯科律动：稳健四踩配飞溅的八分踩镲',
+  },
+  {
+    id: 'neo-soul-drag',
+    name: '新灵魂拖拍',
+    nameEn: 'Neo-Soul Drag',
+    icon: '🌙',
+    genre: '放克',
+    moods: ['慵懒', '温暖'],
+    steps: 16,
+    bpmRange: [78, 92],
+    tracks: { kick: [0, 6, 10], snare: [4, 12, 15], hat: [0, 2, 4, 6, 8, 10, 12, 14] },
+    swing: 0.38,
+    desc: '故意拖在拍子后面的醉人摇晃，D’Angelo 式的深夜松弛美学',
+    promptFragment: 'a behind-the-beat neo-soul drag with heavy swing and ghost snare accents',
+    promptFragmentZh: '新灵魂拖拍：重摇摆配幽灵军鼓点缀',
+  },
+];
