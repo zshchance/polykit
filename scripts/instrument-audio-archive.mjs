@@ -57,11 +57,17 @@ const FORCE = process.argv.includes('--force');
 const targets = Object.keys(QUERIES).filter((id) => !onlyArg || onlyArg.has(id));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const exists = (p) => access(p).then(() => true).catch(() => false);
+const exists = (p) =>
+  access(p)
+    .then(() => true)
+    .catch(() => false);
 
 async function getJSON(url, attempt = 1) {
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(25000) });
+    const res = await fetch(url, {
+      headers: { 'User-Agent': UA },
+      signal: AbortSignal.timeout(25000),
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (e) {
@@ -75,13 +81,21 @@ async function getJSON(url, attempt = 1) {
 
 async function download(url, dest) {
   await run('curl', [
-    '-sS', '-L',
+    '-sS',
+    '-L',
     ...(PROXY ? ['-x', PROXY] : []),
-    '--connect-timeout', '10',
-    '--max-time', '180',
-    '--speed-limit', '1024', '--speed-time', '25',
-    '-A', UA,
-    '-o', dest,
+    '--connect-timeout',
+    '10',
+    '--max-time',
+    '180',
+    '--speed-limit',
+    '1024',
+    '--speed-time',
+    '25',
+    '-A',
+    UA,
+    '-o',
+    dest,
     url,
   ]);
 }
@@ -115,8 +129,10 @@ async function searchItems(q, rows = 20) {
 async function itemMeta(id) {
   const m = await getJSON(`https://archive.org/metadata/${encodeURIComponent(id)}`);
   return {
-    files: (m.files || []).filter((f) =>
-      /mp3|ogg|oga|flac|wav|m4a/i.test(f.format || '') || /\.(mp3|ogg|oga|flac|wav|m4a)$/i.test(f.name || ''),
+    files: (m.files || []).filter(
+      (f) =>
+        /mp3|ogg|oga|flac|wav|m4a/i.test(f.format || '') ||
+        /\.(mp3|ogg|oga|flac|wav|m4a)$/i.test(f.name || ''),
     ),
     licenseurl: m.metadata?.licenseurl || '',
     creator: m.metadata?.creator || m.metadata?.artist || 'Internet Archive 上传者',
@@ -137,12 +153,19 @@ function parseLength(s) {
 async function detectLeadSilence(file) {
   try {
     const r = await run('ffmpeg', [
-      '-i', file, '-t', '45',
-      '-af', 'silencedetect=noise=-35dB:d=0.8',
-      '-f', 'null', '-',
+      '-i',
+      file,
+      '-t',
+      '45',
+      '-af',
+      'silencedetect=noise=-35dB:d=0.8',
+      '-f',
+      'null',
+      '-',
     ]);
     const err = r.stderr || '';
-    const startsAtZero = /silence_(start|end): -?0[\d.]/.test(err) || err.includes('silence_start: 0');
+    const startsAtZero =
+      /silence_(start|end): -?0[\d.]/.test(err) || err.includes('silence_start: 0');
     const m = [...err.matchAll(/silence_end: ([\d.]+)/g)];
     if (startsAtZero && m.length > 0) {
       return Math.min(Number.parseFloat(m[0][1]), 30);
@@ -181,24 +204,47 @@ async function main() {
         const cand = meta.files
           .map((f) => ({ ...f, sec: parseLength(f.length) }))
           .filter((f) => f.sec >= 13)
-          .sort((a, b) => Number(/\.mp3$/i.test(b.name)) - Number(/\.mp3$/i.test(a.name)) || a.sec - b.sec);
+          .sort(
+            (a, b) =>
+              Number(/\.mp3$/i.test(b.name)) - Number(/\.mp3$/i.test(a.name)) || a.sec - b.sec,
+          );
         for (const f of cand.slice(0, 3)) {
-          const tmp = resolve('/tmp', `ia-arch-${id}-${createHash('md5').update(f.name).digest('hex').slice(0, 6)}.${(f.name.match(/\.([a-z0-9]+)$/i)?.[1] || 'bin').toLowerCase()}`);
+          const tmp = resolve(
+            '/tmp',
+            `ia-arch-${id}-${createHash('md5').update(f.name).digest('hex').slice(0, 6)}.${(f.name.match(/\.([a-z0-9]+)$/i)?.[1] || 'bin').toLowerCase()}`,
+          );
           const url = `https://archive.org/download/${encodeURIComponent(it.identifier)}/${encodeURIComponent(f.name)}`;
           try {
             await download(url, tmp);
             // 跳过开头静音/试音，从首个声音处截取
             const lead = await detectLeadSilence(tmp);
             await run('ffmpeg', [
-              '-y', '-v', 'error',
-              '-ss', String(lead),
-              '-i', tmp,
-              '-t', String(AUDIO_SECONDS),
-              '-af', `afade=t=out:st=${AUDIO_SECONDS - 2}:d=2`,
-              '-c:a', 'libmp3lame', '-q:a', '5',
+              '-y',
+              '-v',
+              'error',
+              '-ss',
+              String(lead),
+              '-i',
+              tmp,
+              '-t',
+              String(AUDIO_SECONDS),
+              '-af',
+              `afade=t=out:st=${AUDIO_SECONDS - 2}:d=2`,
+              '-c:a',
+              'libmp3lame',
+              '-q:a',
+              '5',
               out,
             ]);
-            const probe = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', out]);
+            const probe = await run('ffprobe', [
+              '-v',
+              'error',
+              '-show_entries',
+              'format=duration',
+              '-of',
+              'csv=p=0',
+              out,
+            ]);
             const dur = Number.parseFloat(probe.stdout.trim());
             if (!Number.isFinite(dur) || dur < 10) {
               await rm(out, { force: true });
@@ -208,7 +254,9 @@ async function main() {
             credits[id].audio = {
               title: `${meta.title}（${f.name}）`,
               artist: meta.creator,
-              license: it.licenseurl ? `Internet Archive · ${it.licenseurl.includes('creativecommons') ? 'CC（见来源）' : '见来源'}` : 'Internet Archive · 许可见来源页',
+              license: it.licenseurl
+                ? `Internet Archive · ${it.licenseurl.includes('creativecommons') ? 'CC（见来源）' : '见来源'}`
+                : 'Internet Archive · 许可见来源页',
               source: `https://archive.org/details/${it.identifier}`,
             };
             ok++;
@@ -231,7 +279,9 @@ async function main() {
     await sleep(1200);
   }
 
-  console.log(`\n完成：成功 ${ok}，失败 ${fail.length}${fail.length ? '：' + fail.join(', ') : ''}`);
+  console.log(
+    `\n完成：成功 ${ok}，失败 ${fail.length}${fail.length ? '：' + fail.join(', ') : ''}`,
+  );
 }
 
 await main();

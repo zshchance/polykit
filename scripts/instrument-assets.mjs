@@ -311,15 +311,23 @@ async function commonsSearch(query, kind, limit = 8) {
  */
 async function download(url, dest) {
   await run('curl', [
-    '-sS', '-L',
+    '-sS',
+    '-L',
     ...(PROXY ? ['-x', PROXY] : []),
-    '--connect-timeout', '8',
-    '--max-time', '120',
-    '--speed-limit', '1024', '--speed-time', '20', // <1KB/s 持续 20s 视为卡死
+    '--connect-timeout',
+    '8',
+    '--max-time',
+    '120',
+    '--speed-limit',
+    '1024',
+    '--speed-time',
+    '20', // <1KB/s 持续 20s 视为卡死
     // 不用 --retry：429 属 transient 错误会被 curl 重试并刷新源站惩罚计时器，
     // 快速失败交给调用方按窗口节奏统一处理
-    '-A', UA,
-    '-o', dest,
+    '-A',
+    UA,
+    '-o',
+    dest,
     url,
   ]);
 }
@@ -549,26 +557,40 @@ async function doFetch() {
         } else {
           // ffmpeg 直接从 URL 流式读取：-t 12 使其只拉取前 12 秒对应的数据，
           // 避免下载整首录音（古典原件可达 20MB+），流量降一个数量级。
-          await run('ffmpeg', [
-            '-y',
-            '-v', 'error',
-            '-user_agent', UA,
-            '-rw_timeout', '20000000', // 单次 IO 卡住 20s 即失败（死窗口快速跳过）
-            '-i', uploadUrl(t.title),
-            '-t',
-            String(AUDIO_SECONDS),
-            '-af',
-            `afade=t=out:st=${AUDIO_SECONDS - 2}:d=2`,
-            '-c:a',
-            'libmp3lame',
-            '-q:a',
-            '5',
-            t.out,
-          ], SPAWN_ENV);
+          await run(
+            'ffmpeg',
+            [
+              '-y',
+              '-v',
+              'error',
+              '-user_agent',
+              UA,
+              '-rw_timeout',
+              '20000000', // 单次 IO 卡住 20s 即失败（死窗口快速跳过）
+              '-i',
+              uploadUrl(t.title),
+              '-t',
+              String(AUDIO_SECONDS),
+              '-af',
+              `afade=t=out:st=${AUDIO_SECONDS - 2}:d=2`,
+              '-c:a',
+              'libmp3lame',
+              '-q:a',
+              '5',
+              t.out,
+            ],
+            SPAWN_ENV,
+          );
           // 时长闸门：限流期间错误响应体会被转成 <1s 的空 mp3，
           // 源文件本身过短同样过不了闸——一律视为失败并删除，下轮换源重下
           const probe = await run('ffprobe', [
-            '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', t.out,
+            '-v',
+            'error',
+            '-show_entries',
+            'format=duration',
+            '-of',
+            'csv=p=0',
+            t.out,
           ]);
           const dur = Number.parseFloat(probe.stdout.trim());
           if (!Number.isFinite(dur) || dur < 10) {

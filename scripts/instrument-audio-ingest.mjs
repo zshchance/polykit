@@ -36,12 +36,19 @@ for (const [id, m] of Object.entries(manifest)) {
 async function detectLeadSilence(file) {
   try {
     const r = await run('ffmpeg', [
-      '-i', file, '-t', '45',
-      '-af', 'silencedetect=noise=-35dB:d=0.8',
-      '-f', 'null', '-',
+      '-i',
+      file,
+      '-t',
+      '45',
+      '-af',
+      'silencedetect=noise=-35dB:d=0.8',
+      '-f',
+      'null',
+      '-',
     ]);
     const err = r.stderr || '';
-    const startsAtZero = /silence_(start|end): -?0[\d.]/.test(err) || err.includes('silence_start: 0');
+    const startsAtZero =
+      /silence_(start|end): -?0[\d.]/.test(err) || err.includes('silence_start: 0');
     const m = [...err.matchAll(/silence_end: ([\d.]+)/g)];
     if (startsAtZero && m.length > 0) return Math.min(Number.parseFloat(m[0][1]), 30);
   } catch {}
@@ -49,7 +56,9 @@ async function detectLeadSilence(file) {
 }
 
 await mkdir(AUDIOS_DIR, { recursive: true });
-const files = (await readdir(INBOX)).filter((f) => extname(f) && f !== '下载清单.md' && !f.startsWith('.'));
+const files = (await readdir(INBOX)).filter(
+  (f) => extname(f) && f !== '下载清单.md' && !f.startsWith('.'),
+);
 if (!files.length) {
   console.log('inbox 为空：请先按 下载清单.md 下载文件到 scripts/instrument-audio-inbox/');
   process.exit(0);
@@ -68,15 +77,32 @@ for (const f of files) {
   try {
     const lead = await detectLeadSilence(src);
     await run('ffmpeg', [
-      '-y', '-v', 'error',
-      '-ss', String(lead),
-      '-i', src,
-      '-t', String(AUDIO_SECONDS),
-      '-af', `afade=t=out:st=${AUDIO_SECONDS - 2}:d=2`,
-      '-c:a', 'libmp3lame', '-q:a', '5',
+      '-y',
+      '-v',
+      'error',
+      '-ss',
+      String(lead),
+      '-i',
+      src,
+      '-t',
+      String(AUDIO_SECONDS),
+      '-af',
+      `afade=t=out:st=${AUDIO_SECONDS - 2}:d=2`,
+      '-c:a',
+      'libmp3lame',
+      '-q:a',
+      '5',
       out,
     ]);
-    const probe = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', out]);
+    const probe = await run('ffprobe', [
+      '-v',
+      'error',
+      '-show_entries',
+      'format=duration',
+      '-of',
+      'csv=p=0',
+      out,
+    ]);
     const dur = Number.parseFloat(probe.stdout.trim());
     if (!Number.isFinite(dur) || dur < 10) {
       await rm(out, { force: true });
@@ -85,13 +111,20 @@ for (const f of files) {
     // 署名：从 Commons API 拉一次（API 主机不受限流影响）
     try {
       const api = `https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent('File:' + key)}&prop=imageinfo&iiprop=url%7Cextmetadata&format=json`;
-      const res = await fetch(api, { headers: { 'User-Agent': 'StaticToolkit/1.0' }, signal: AbortSignal.timeout(15000) });
+      const res = await fetch(api, {
+        headers: { 'User-Agent': 'StaticToolkit/1.0' },
+        signal: AbortSignal.timeout(15000),
+      });
       const data = await res.json();
       const page = Object.values(data.query?.pages || {})[0];
       const ii = page?.imageinfo?.[0];
       if (ii) {
         const em = ii.extmetadata || {};
-        const strip = (s) => String(s || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+        const strip = (s) =>
+          String(s || '')
+            .replace(/<[^>]*>/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
         credits[id] = credits[id] || {};
         credits[id].audio = {
           title: key,
