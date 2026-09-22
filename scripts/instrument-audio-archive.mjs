@@ -25,9 +25,6 @@ const CREDITS_PATH = resolve(ROOT, 'tools/instrument-atlas/assets/credits.json')
 
 const UA = 'StaticToolkitInstrumentAtlas/1.0 (educational static site; contact via github)';
 const PROXY = process.env.IA_PROXY || '';
-const SPAWN_ENV = PROXY
-  ? { ...process.env, http_proxy: PROXY, https_proxy: PROXY, HTTP_PROXY: PROXY, HTTPS_PROXY: PROXY }
-  : undefined;
 const AUDIO_SECONDS = 12;
 
 /** 每件乐器的 archive.org 检索词（挑贴切的独奏/主导录音） */
@@ -150,7 +147,7 @@ async function detectLeadSilence(file) {
     if (startsAtZero && m.length > 0) {
       return Math.min(Number.parseFloat(m[0][1]), 30);
     }
-  } catch (e) {
+  } catch {
     // silencedetect 失败（如整段静音）则回退 0 起点，由时长闸门兜底
   }
   return 0;
@@ -219,12 +216,12 @@ async function main() {
             console.log(`✓ ${id} ← archive.org/${it.identifier}（${dur.toFixed(0)}s）`);
             await writeFile(CREDITS_PATH, JSON.stringify(credits, null, 2));
             break outer;
-          } catch (e) {
+          } catch {
             // 该文件失败（下载/转换/闸门），试下一个
           }
         }
       }
-    } catch (e) {
+    } catch {
       // 搜索层面失败
     }
     if (!done) {

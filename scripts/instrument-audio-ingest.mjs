@@ -7,7 +7,7 @@
  * inbox 文件名即 manifest 里的 Commons 文件名（下载清单.md 生成的原名）。
  * 用法：node scripts/instrument-audio-ingest.mjs
  */
-import { readdir, readFile, writeFile, access, rm, mkdir, copyFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile, rm, mkdir } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { resolve, dirname, extname } from 'node:path';
