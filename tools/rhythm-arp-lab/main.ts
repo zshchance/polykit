@@ -1180,11 +1180,11 @@ function renderLab(): void {
     class:
       'space-y-4 rounded-b-xl border border-t-0 border-[var(--border)] bg-[var(--bg-elevated)] px-4 pb-4 sm:px-5 sm:pb-5',
   });
-  // 折叠态：仅留一行可点的摘要条
+  // 折叠态：仅留一行可点的摘要条（默认隐藏，展开时切 display 显示）
   const benchCollapsedBar = h('button', {
     type: 'button',
     class:
-      'hidden w-full items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3 text-left transition-colors hover:border-[var(--accent)]',
+      'w-full items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3 text-left transition-colors hover:border-[var(--accent)]',
     onclick: () => {
       state.benchOpen = true;
       renderBench();
@@ -1197,7 +1197,9 @@ function renderLab(): void {
     benchToggleBtn.textContent = open ? '收起 ▴' : '展开 ▾';
     benchHead.style.display = open ? '' : 'none';
     benchBody.style.display = open ? '' : 'none';
-    benchCollapsedBar.style.display = open ? 'none' : '';
+    benchCollapsedBar.style.display = open ? 'none' : 'flex';
+    // 折叠后播放停止没有意义（看不到也控制不到），自动停止
+    if (!open && scheduler.playing) stopPlayback();
     if (!open) {
       const r = selectedRhythm();
       const a = selectedArp();
@@ -1212,7 +1214,7 @@ function renderLab(): void {
         }),
         h('span', {
           class: 'shrink-0 text-xs text-[var(--fg-muted)]',
-          textContent: scheduler.playing ? '▶ 播放中 · 展开 ▾' : '展开 ▾',
+          textContent: '展开 ▾',
         }),
       );
     }
