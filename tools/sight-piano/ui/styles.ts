@@ -190,7 +190,9 @@ export function injectSightStyles(): void {
 .sp-ev-passed .sp-stem, .sp-ev-passed .sp-acc { stroke: #b0563c; fill: #b0563c; }
 .sp-ev-passed .sp-flag, .sp-ev-passed .sp-beam, .sp-ev-passed .sp-dot { fill: #b0563c; }
 
-.sp-playhead { stroke: rgba(180,83,9,.5); stroke-width: 1.6; }
+/* 播放头指示条：渐变带（fill 用 SVG 内联渐变）+ 中心亮线 = 精确节拍位 */
+.sp-phband { pointer-events: none; }
+.sp-playhead { stroke: rgba(180,83,9,.95); stroke-width: 2; pointer-events: none; }
 
 /* 错音反馈（SVG 谱面坐标系，随谱面滚动）：
    幽灵音符精确落在弹错音的谱面位置，金星在其上闪烁 */

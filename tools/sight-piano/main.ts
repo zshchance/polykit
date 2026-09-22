@@ -416,7 +416,8 @@ function renderApp(): void {
   function refreshTarget(): void {
     if (!session || !song) return;
     const idx = session.currentIndex();
-    if (idx >= 0) view.setEventState(idx, 'current');
+    // 演奏模式的谱面 current 由播放头逐帧驱动（对齐指示条），判定侧不插手
+    if (idx >= 0 && state.mode !== 'play') view.setEventState(idx, 'current');
     const ev = session.current();
     // 目标音跑出窗口时把窗口挪过去（88 键 MIDI 全键可弹，窗口只跟目标走）
     if (ev) {
@@ -772,7 +773,7 @@ function renderApp(): void {
       view.setEventState(idx, 'passed');
       updateCombo();
       const nxt = session.currentIndex();
-      if (nxt >= 0) view.setEventState(nxt, 'current');
+      if (nxt >= 0 && state.mode !== 'play') view.setEventState(nxt, 'current');
       updateTargetReadout();
     }
 

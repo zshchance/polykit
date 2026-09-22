@@ -8,8 +8,10 @@
  *   - 连杠按谱表分组（同拍八分成杠、十六分双杠），附点/加线齐全
  *
  * 滚动（本条重写的心脏）：一个 rAF 循环独占 transform——
- *   演奏模式：播放头锁定视口 32% 处，谱面按音频时钟连续左移，
- *             标志线与谱面同一帧更新，严格同步、速度恒定；
+ *   演奏模式：拍→像素是纯线性映射（xOfBeat = 原点 + beat*BEAT_W），
+ *             小节线只是装饰、不占时间轴宽度，谱面左移严格匀速、
+ *             过小节零跳变；当前音符高亮由同一帧的连续播放头节拍
+ *             驱动，变化精确落在指示条压到符头的瞬间；
  *   跟弹模式：目标变化时以临界阻尼滑过去，没有缓动重启的忽快忽慢。
  * 错音反馈画在谱面坐标系里（fx 层在 SVG 内部，随谱面一起滚）：
  * 在「弹的那个音」的谱面位置画幽灵音符 + 金星——弹成 C 就标在 C 上。
@@ -23,7 +25,6 @@ import {
   END_PAD,
   GAP,
   LEFT_PAD,
-  MEAS_PAD,
   TIMESIG_W,
   drawClefs,
   drawKeySig,
@@ -42,6 +43,13 @@ import {
 } from './staff';
 
 export type EventState = 'todo' | 'current' | 'done' | 'passed';
+
+/** 拍号之后、首个音符之前的呼吸位 */
+const FIRST_PAD = 10;
+/** 小节线相对小节边界拍点的最大提前量（落在两音间隙中点，不压符头） */
+const BAR_INSET_MAX = 20;
+/** 播放头指示条宽度（谱面坐标 px），中心亮线即精确节拍位 */
+const BAND_W = 26;
 
 export interface ScoreView {
   el: HTMLElement;
@@ -82,11 +90,16 @@ export function createScoreView(): ScoreView {
   let inner: SVGGElement | null = null;
   let fxG: SVGGElement | null = null;
   let playheadLine: SVGLineElement | null = null;
+  let playheadBand: SVGRectElement | null = null;
   let refs: EvRef[] = [];
   let totalWidth = 0;
+  /** 内容原点：谱号 + 调号 + 拍号之后的 x */
+  let contentX = 0;
   let currentX = 0;
   let translateX = 0;
   let playheadBeat: number | null = null;
+  /** 演奏模式下播放头正压着的事件（-1 = 无），随播放头逐帧刷新 */
+  let nowIdx = -1;
   let raf = 0;
   let lastFrame = 0;
 
@@ -118,12 +131,20 @@ export function createScoreView(): ScoreView {
     if (playheadBeat !== null) {
       const x = xOfBeat(Math.max(0, playheadBeat));
       translateX = clampTx(anchorX() - x);
+      if (playheadBand) {
+        playheadBand.setAttribute('x', String(x - BAND_W / 2));
+        playheadBand.setAttribute('visibility', 'visible');
+      }
       if (playheadLine) {
         playheadLine.setAttribute('x1', String(x));
         playheadLine.setAttribute('x2', String(x));
         playheadLine.setAttribute('visibility', 'visible');
       }
+      // 错音星光/命中光圈落在指示条处；当前音符高亮与位移同一帧同节拍更新
+      currentX = x;
+      markNow(playheadBeat);
     } else {
+      if (playheadBand) playheadBand.setAttribute('visibility', 'hidden');
       if (playheadLine) playheadLine.setAttribute('visibility', 'hidden');
       const goal = clampTx(anchorX() - currentX);
       translateX += (goal - translateX) * (1 - Math.exp(-dt * 6.5));
@@ -144,13 +165,43 @@ export function createScoreView(): ScoreView {
     raf = 0;
   }
 
+  /**
+   * 拍 → 谱面 x：严格线性（匀速滚动的心脏）。
+   * 小节线不占时间轴宽度，只是画在两音间隙里的装饰，
+   * 因此播放头过界时谱面没有任何跳变。
+   */
   function xOfBeat(beat: number): number {
     if (!score) return 0;
-    const contentX = LEFT_PAD + CLEF_W + keySigWidth(score.sig) + TIMESIG_W;
-    const measureW = MEAS_PAD * 2 + score.beatsPerBar * BEAT_W;
-    const bar = Math.floor(beat / score.beatsPerBar);
-    const inBar = beat - bar * score.beatsPerBar;
-    return contentX + bar * measureW + MEAS_PAD + inBar * BEAT_W;
+    return contentX + FIRST_PAD + beat * BEAT_W;
+  }
+
+  /**
+   * 演奏模式：播放头正压着的事件换成 current 高亮（琥珀呼吸）。
+   * 与谱面位移共用同一帧的连续节拍，变化精确对齐指示条中心；
+   * 已判定（done/passed）的事件不再染回琥珀。
+   */
+  function markNow(beat: number): void {
+    let lo = 0;
+    let hi = refs.length - 1;
+    let idx = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (refs[mid]!.beat <= beat + 1e-4) {
+        idx = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    if (idx === nowIdx) return;
+    if (nowIdx >= 0) refs[nowIdx]!.g.classList.remove('sp-ev-current');
+    nowIdx = idx;
+    if (idx >= 0) {
+      const g = refs[idx]!.g;
+      if (!g.classList.contains('sp-ev-done') && !g.classList.contains('sp-ev-passed')) {
+        g.classList.add('sp-ev-current');
+      }
+    }
   }
 
   function drawEvent(ev: ScoreEvent, x: number, idx: number): EvRef {
@@ -191,10 +242,9 @@ export function createScoreView(): ScoreView {
   function render(sc: Score): void {
     sig = sc.sig;
     geom = geomFor(isGrand(sc));
-    const measureW = MEAS_PAD * 2 + sc.beatsPerBar * BEAT_W;
+    contentX = LEFT_PAD + CLEF_W + keySigWidth(sc.sig) + TIMESIG_W;
     const barCount = Math.ceil(sc.totalBeats / sc.beatsPerBar);
-    const contentX = LEFT_PAD + CLEF_W + keySigWidth(sc.sig) + TIMESIG_W;
-    totalWidth = contentX + barCount * measureW + END_PAD;
+    totalWidth = contentX + FIRST_PAD + sc.totalBeats * BEAT_W + END_PAD;
 
     svg = se('svg', {
       width: totalWidth,
@@ -202,20 +252,47 @@ export function createScoreView(): ScoreView {
       viewBox: `0 0 ${totalWidth} ${geom.height}`,
       class: 'sp-score',
     });
+    // 播放头指示条的琥珀渐变（水平：两边透明、中间聚拢）
+    const defs = se('defs', {});
+    const grad = se('linearGradient', { id: 'sp-phgrad', x1: '0', y1: '0', x2: '1', y2: '0' });
+    grad.append(
+      se('stop', { offset: '0%', 'stop-color': '#d97706', 'stop-opacity': '0' }),
+      se('stop', { offset: '30%', 'stop-color': '#d97706', 'stop-opacity': '0.13' }),
+      se('stop', { offset: '50%', 'stop-color': '#d97706', 'stop-opacity': '0.30' }),
+      se('stop', { offset: '70%', 'stop-color': '#d97706', 'stop-opacity': '0.13' }),
+      se('stop', { offset: '100%', 'stop-color': '#d97706', 'stop-opacity': '0' }),
+    );
+    defs.append(grad);
+    svg.append(defs);
     inner = se('g', {});
     svg.append(inner);
     refs = [];
+    nowIdx = -1;
 
     drawStaffLines(inner, geom, 8, totalWidth - 10);
     drawClefs(inner, geom);
     drawKeySig(inner, sc.sig, geom);
     drawTimeSig(inner, sc.sig, geom, sc.beatsPerBar, sc.beatUnit);
 
-    // 小节线（大谱表连通两层）+ 小节序号
+    // 小节线（大谱表连通两层）：不占时间轴宽度，画在「边界拍点与前一个
+    // 事件间隙」的中点（上限 BAR_INSET_MAX），过界滚动因此零跳变；
+    // 起始处按标准记谱不画小节线，结尾画终止双线
     const barTop = geom.trebleY0 - GAP * 4;
     const barBottom = geom.grand ? geom.bassY0 : geom.trebleY0;
-    for (let b = 0; b <= barCount; b++) {
-      const x = contentX + b * measureW;
+    const barXOf = (b: number): number => {
+      const boundary = b * sc.beatsPerBar;
+      const bx = xOfBeat(boundary);
+      let prev = -Infinity;
+      for (const ev of sc.events) {
+        if (ev.beat >= boundary - 1e-6) break;
+        prev = ev.beat;
+      }
+      const inset =
+        prev === -Infinity ? BAR_INSET_MAX : Math.min((bx - xOfBeat(prev)) / 2, BAR_INSET_MAX);
+      return bx - inset;
+    };
+    for (let b = 1; b <= barCount; b++) {
+      const x = barXOf(b);
       const last = b === barCount;
       inner.append(se('line', { x1: x, y1: barTop, x2: x, y2: barBottom, class: 'sp-barline' }));
       if (last) {
@@ -223,17 +300,17 @@ export function createScoreView(): ScoreView {
           se('rect', { x: x + 2, y: barTop, width: 3.4, height: barBottom - barTop, class: 'sp-finalbar' }),
         );
       }
-      if (b < barCount) {
-        inner.append(
-          se('text', {
-            x: x + 3,
-            y: barTop - (geom.grand ? 22 : 16),
-            'font-size': 9,
-            class: 'sp-barnum',
-            textContent: String(b + 1),
-          }),
-        );
-      }
+    }
+    for (let b = 0; b < barCount; b++) {
+      inner.append(
+        se('text', {
+          x: b === 0 ? xOfBeat(0) - 8 : barXOf(b) + 3,
+          y: barTop - (geom.grand ? 22 : 16),
+          'font-size': 9,
+          class: 'sp-barnum',
+          textContent: String(b + 1),
+        }),
+      );
     }
 
     // 事件
@@ -259,21 +336,31 @@ export function createScoreView(): ScoreView {
     fxG = se('g', { class: 'sp-fxg' });
     inner.append(fxG);
 
-    // 播放头
+    // 播放头指示条：琥珀渐变带 + 中心亮线（谱面坐标，随位移逐帧对齐视口锚点）
+    playheadBand = se('rect', {
+      x: 0,
+      y: 14,
+      width: BAND_W,
+      height: barBottom + 26 - 14,
+      rx: 7,
+      fill: 'url(#sp-phgrad)',
+      class: 'sp-phband',
+      visibility: 'hidden',
+    });
     playheadLine = se('line', {
       x1: 0,
-      y1: 20,
+      y1: 14,
       x2: 0,
-      y2: barBottom + 24,
+      y2: barBottom + 26,
       class: 'sp-playhead',
       visibility: 'hidden',
     });
-    inner.append(playheadLine);
+    inner.append(playheadBand, playheadLine);
 
     el.style.height = `${geom.height}px`;
     el.replaceChildren(svg);
     translateX = 0;
-    currentX = contentX + MEAS_PAD;
+    currentX = xOfBeat(0);
     applyTranslate();
     startLoop();
   }
@@ -349,12 +436,14 @@ export function createScoreView(): ScoreView {
       stopLoop();
       score = sc;
       playheadBeat = null;
+      nowIdx = -1;
       if (!sc) {
         svg = null;
         sig = null;
         refs = [];
         fxG = null;
         playheadLine = null;
+        playheadBand = null;
         el.replaceChildren();
         return;
       }
@@ -375,6 +464,7 @@ export function createScoreView(): ScoreView {
       }
       translateX = 0;
       playheadBeat = null;
+      nowIdx = -1;
       fxG?.replaceChildren();
       applyTranslate();
     },
@@ -441,7 +531,15 @@ export function createScoreView(): ScoreView {
 
     setPlayhead(beat: number | null): void {
       playheadBeat = beat;
-      if (beat === null && playheadLine) playheadLine.setAttribute('visibility', 'hidden');
+      if (beat === null) {
+        if (playheadBand) playheadBand.setAttribute('visibility', 'hidden');
+        if (playheadLine) playheadLine.setAttribute('visibility', 'hidden');
+        // 播放头收起时摘掉它驱动的 current（跟弹模式的 current 由判定侧重设）
+        if (nowIdx >= 0) {
+          refs[nowIdx]?.g.classList.remove('sp-ev-current');
+          nowIdx = -1;
+        }
+      }
     },
 
     relayout(): void {

@@ -20,7 +20,6 @@ export const STEP_G2 = 18; // 低音谱表最下一线
 export const STEP_C4 = 28; // 中央 C
 
 export const BEAT_W = 36;
-export const MEAS_PAD = 12;
 export const LEFT_PAD = 14;
 export const CLEF_W = 34;
 export const TIMESIG_W = 20;
