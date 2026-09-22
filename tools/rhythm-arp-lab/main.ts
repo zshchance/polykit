@@ -140,6 +140,7 @@ function renderLab(): void {
     persist();
     renderTabs();
     renderGrid();
+    renderBench();
     updateWorkbench();
   }
 
@@ -150,6 +151,7 @@ function renderLab(): void {
     persist();
     renderTabs();
     renderGrid();
+    renderBench();
     updateWorkbench();
   }
 
@@ -185,7 +187,7 @@ function renderLab(): void {
     updateWorkbench();
     if (!mixerState.chord) triggerPad(Math.floor(Math.random() * 4), false);
     if (!scheduler.playing) startPlayback();
-    workbenchEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    renderBench(); // 折叠态下随机组合也要刷新摘要条
   }
 
   // ────────── 和弦垫 ──────────
@@ -890,16 +892,32 @@ function renderLab(): void {
     dlg.open();
   }
 
-  // ────────── 6. 试听工作台 ──────────
-  const comboLabel = h('span', { class: 'text-sm text-[var(--fg-muted)]' });
+  // ────────── 6. 试听工作台（页面顶部，可折叠；展开时吸顶悬停） ──────────
+  // 结构：标题/控制条 + [吸顶区：传输 + 步进网格播放头] + [文档流区：控制行 + 和弦垫]。
+  // 展开且页面下滚浏览曲库时，传输与播放头始终吸顶可见，边选边听。
+  const comboLabel = h('span', {
+    class: 'min-w-0 truncate text-sm text-[var(--fg-muted)]',
+  });
 
   const transportBtn = h('button', {
     type: 'button',
     class:
-      'inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm font-medium text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
+      'inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--accent)] px-5 py-2 text-sm font-medium text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
     textContent: '▶ 播放',
     title: '播放/停止（空格）',
     onclick: togglePlayback,
+  });
+
+  const benchToggleBtn = h('button', {
+    type: 'button',
+    class:
+      'shrink-0 rounded-md px-2 py-1 text-xs text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg)] hover:text-[var(--fg)]',
+    title: '折叠/展开试听工作台',
+    onclick: () => {
+      state.benchOpen = !state.benchOpen;
+      renderBench();
+      persist();
+    },
   });
 
   const bpmSlider = h('input', {
@@ -1146,65 +1164,114 @@ function renderLab(): void {
     const r = selectedRhythm();
     const a = selectedArp();
     comboLabel.textContent =
-      r && a ? `${r.icon} ${r.name} × ${a.icon} ${a.name}` : '从上方两个库各选一条，组合即在此发声';
+      r && a ? `${r.icon} ${r.name} × ${a.icon} ${a.name}` : '从下方两个库各选一条，组合即在此发声';
     syncTempo();
     renderStepGrid();
     updatePrompt();
   }
 
-  const workbenchEl = h(
-    'section',
-    {
-      class:
-        'mt-6 space-y-4 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 sm:p-5',
+  // 吸顶区（展开时 sticky）：标题 + 传输 + 步进网格播放头
+  const benchHead = h('div', {
+    class:
+      'space-y-3 rounded-t-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 sm:p-5',
+  });
+  // 文档流区（展开时显示，不吸顶）：控制行 + 和弦垫 + 键位说明
+  const benchBody = h('div', {
+    class:
+      'space-y-4 rounded-b-xl border border-t-0 border-[var(--border)] bg-[var(--bg-elevated)] px-4 pb-4 sm:px-5 sm:pb-5',
+  });
+  // 折叠态：仅留一行可点的摘要条
+  const benchCollapsedBar = h('button', {
+    type: 'button',
+    class:
+      'hidden w-full items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3 text-left transition-colors hover:border-[var(--accent)]',
+    onclick: () => {
+      state.benchOpen = true;
+      renderBench();
+      persist();
     },
-    [
-      h('div', { class: 'flex flex-wrap items-center gap-3' }, [
+  });
+
+  function renderBench(): void {
+    const open = state.benchOpen;
+    benchToggleBtn.textContent = open ? '收起 ▴' : '展开 ▾';
+    benchHead.style.display = open ? '' : 'none';
+    benchBody.style.display = open ? '' : 'none';
+    benchCollapsedBar.style.display = open ? 'none' : '';
+    if (!open) {
+      const r = selectedRhythm();
+      const a = selectedArp();
+      benchCollapsedBar.replaceChildren(
+        h('span', { class: 'text-sm', textContent: '🎛' }),
         h('span', {
-          class: 'text-sm font-semibold text-[var(--fg)] select-none',
-          textContent: '🎛 试听工作台',
+          class: 'min-w-0 flex-1 truncate text-sm text-[var(--fg-muted)]',
+          textContent:
+            r && a
+              ? `${r.name} × ${a.name} · ${effectiveBpm()} BPM`
+              : '试听工作台（展开后可实时混合试听）',
         }),
-        comboLabel,
-        h('div', { class: 'ml-auto' }, [transportBtn]),
-      ]),
-      h('div', { class: 'flex flex-wrap items-center gap-x-4 gap-y-2.5' }, [
-        h('label', { class: 'flex items-center gap-2 text-xs text-[var(--fg-muted)]' }, [
-          'BPM',
-          bpmSlider,
-          bpmValue,
-          bpmResetBtn,
-        ]),
-        h('label', { class: 'flex items-center gap-2 text-xs text-[var(--fg-muted)]' }, [
-          '调性',
-          rootSelect,
-          ...tonalityButtons.values(),
-        ]),
-        h('div', { class: 'flex items-center gap-2 text-xs text-[var(--fg-muted)]' }, [
-          '混合',
-          ...mixModeButtons.values(),
-        ]),
-        h('div', { class: 'flex items-center gap-2 text-xs text-[var(--fg-muted)]' }, [
-          '声部',
-          drumMuteBtn,
-          arpMuteBtn,
-        ]),
-      ]),
-      mixModeHint,
-      stepGridWrap,
-      h('div', {}, [
-        h('div', {
-          class:
-            'mb-2 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)] select-none',
-          textContent: '和弦垫 · 点击或按键实时换和声',
+        h('span', {
+          class: 'shrink-0 text-xs text-[var(--fg-muted)]',
+          textContent: scheduler.playing ? '▶ 播放中 · 展开 ▾' : '展开 ▾',
         }),
-        padsWrap,
-      ]),
-      h('p', {
-        class: 'text-[11px] leading-relaxed text-[var(--fg-muted)]',
-        textContent: '键盘：A–K 触发和弦垫 · Z/X 半音移调 · Q 大调 / E 小调 · 空格 播放/停止',
+      );
+    }
+  }
+
+  benchHead.replaceChildren(
+    h('div', { class: 'flex flex-wrap items-center gap-3' }, [
+      h('span', {
+        class: 'text-sm font-semibold text-[var(--fg)] select-none',
+        textContent: '🎛 试听工作台',
       }),
-    ],
+      comboLabel,
+      h('div', { class: 'ml-auto flex items-center gap-2' }, [transportBtn, benchToggleBtn]),
+    ]),
+    stepGridWrap,
   );
+  benchBody.replaceChildren(
+    h('div', { class: 'flex flex-wrap items-center gap-x-4 gap-y-2.5 pt-1' }, [
+      h('label', { class: 'flex items-center gap-2 text-xs text-[var(--fg-muted)]' }, [
+        'BPM',
+        bpmSlider,
+        bpmValue,
+        bpmResetBtn,
+      ]),
+      h('label', { class: 'flex items-center gap-2 text-xs text-[var(--fg-muted)]' }, [
+        '调性',
+        rootSelect,
+        ...tonalityButtons.values(),
+      ]),
+      h('div', { class: 'flex items-center gap-2 text-xs text-[var(--fg-muted)]' }, [
+        '混合',
+        ...mixModeButtons.values(),
+      ]),
+      h('div', { class: 'flex items-center gap-2 text-xs text-[var(--fg-muted)]' }, [
+        '声部',
+        drumMuteBtn,
+        arpMuteBtn,
+      ]),
+    ]),
+    mixModeHint,
+    h('div', {}, [
+      h('div', {
+        class:
+          'mb-2 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)] select-none',
+        textContent: '和弦垫 · 点击或按键实时换和声',
+      }),
+      padsWrap,
+    ]),
+    h('p', {
+      class: 'text-[11px] leading-relaxed text-[var(--fg-muted)]',
+      textContent: '键盘：A–K 触发和弦垫 · Z/X 半音移调 · Q 大调 / E 小调 · 空格 播放/停止',
+    }),
+  );
+
+  // 吸顶容器只包 benchHead（展开）或折叠条；benchBody 留在文档流中随页面滚动
+  const workbenchEl = h('div', { class: 'sticky top-0 z-30 -mx-4 px-4 pt-2 pb-2' }, [
+    benchCollapsedBar,
+    benchHead,
+  ]);
 
   // ────────── 7. 提示词工坊 ──────────
   function comboContext(): ComboContext | null {
@@ -1324,19 +1391,19 @@ function renderLab(): void {
   });
 
   // ────────── 装配 ──────────
+  // 顺序：简介 → 试听工作台（吸顶）→ 工作台详情区（和弦垫，文档流）→ 工具条/曲库 → 提示词工坊
   content.append(
     h('p', {
-      class: 'mb-5 text-sm text-[var(--fg-muted)]',
-      textContent: `${ALL_RHYTHMS.length} 种鼓组律动 × ${ALL_ARPS.length} 种琶音模式：点选组合后在试听工作台实时混听，和弦垫（A-K）随时切换和声，融合模式让琶音贴着鼓点走。选定组合自动拼成中英双语 AI 音乐提示词，一键复制给 Suno / Udio。全部在浏览器本地实时合成，零音频文件。`,
+      class: 'mb-4 text-sm text-[var(--fg-muted)]',
+      textContent: `${ALL_RHYTHMS.length} 种鼓组律动 × ${ALL_ARPS.length} 种琶音模式：在下方曲库点选组合，工作台吸顶跟随、边选边听，和弦垫（A-K）随时切换和声，融合模式让琶音贴着鼓点走。选定组合自动拼成中英双语 AI 音乐提示词，一键复制给 Suno / Udio。全部在浏览器本地实时合成，零音频文件。`,
     }),
-    toolbar,
-    tabBar,
-    summaryEl,
+    workbenchEl,
+    benchBody,
+    h('div', { class: 'mt-6' }, [toolbar, tabBar, summaryEl]),
     h('div', { class: 'mt-4 flex flex-col gap-5 lg:flex-row lg:items-start' }, [
       asideWrap,
       h('div', { class: 'min-w-0 flex-1 space-y-3' }, [gridHeader, grid, emptyHint]),
     ]),
-    workbenchEl,
     workshopEl,
   );
 
@@ -1347,6 +1414,7 @@ function renderLab(): void {
   syncMixModeUI();
   syncMuteButtons();
   renderPads();
+  renderBench();
   updateWorkbench();
 }
 

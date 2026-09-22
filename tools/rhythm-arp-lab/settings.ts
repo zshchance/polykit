@@ -31,6 +31,8 @@ export interface LabState {
   arpSel: { form: string | null; moods: string | null };
   /** 筛选面板是否展开 */
   panelOpen: boolean;
+  /** 试听工作台是否展开（展开时吸顶悬停） */
+  benchOpen: boolean;
   /** 工作台当前选中的词条 id（null = 未选） */
   rhythmId: string | null;
   arpId: string | null;
@@ -49,6 +51,7 @@ interface LabBlob {
   rhythmSel: Record<string, string | null>;
   arpSel: Record<string, string | null>;
   panelOpen: boolean;
+  benchOpen: boolean;
   rhythmId: string | null;
   arpId: string | null;
   bpm: number | null;
@@ -67,6 +70,7 @@ export function defaultState(): LabState {
     rhythmSel: { genre: null, moods: null },
     arpSel: { form: null, moods: null },
     panelOpen: true,
+    benchOpen: true,
     rhythmId: null,
     arpId: null,
     bpm: null,
@@ -91,6 +95,7 @@ export function loadState(): LabState {
   const keyword =
     typeof parsed.keyword === 'string' ? parsed.keyword.slice(0, MAX_KEYWORD_LEN) : def.keyword;
   const panelOpen = typeof parsed.panelOpen === 'boolean' ? parsed.panelOpen : def.panelOpen;
+  const benchOpen = typeof parsed.benchOpen === 'boolean' ? parsed.benchOpen : def.benchOpen;
 
   const rSel = parsed.rhythmSel ?? {};
   const aSel = parsed.arpSel ?? {};
@@ -120,6 +125,7 @@ export function loadState(): LabState {
       moods: vocabPick(aSel.moods, MOODS),
     },
     panelOpen,
+    benchOpen,
     rhythmId:
       typeof parsed.rhythmId === 'string' && RHYTHM_IDS.has(parsed.rhythmId)
         ? parsed.rhythmId
