@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect x="4" y="6" width="56" height="36" rx="5" fill="#f8f1de" stroke="#8a7a52" stroke-width="2"/>
+  <g stroke="#a89a78" stroke-width="1.4">
+    <line x1="9" y1="18" x2="55" y2="18"/>
+    <line x1="9" y1="24" x2="55" y2="24"/>
+    <line x1="9" y1="30" x2="55" y2="30"/>
+    <line x1="9" y1="36" x2="55" y2="36"/>
+  </g>
+  <text x="12" y="36" font-size="26" fill="#6b5d3f" font-family="serif">𝄞</text>
+  <ellipse cx="34" cy="27" rx="4" ry="3" fill="#15803d" transform="rotate(-16 34 27)"/>
+  <line x1="37.5" y1="26" x2="37.5" y2="10" stroke="#15803d" stroke-width="1.6"/>
+  <text x="44" y="20" font-size="12" fill="#f59e0b">✦</text>
+  <g>
+    <rect x="8" y="46" width="48" height="14" rx="3" fill="#2a2724"/>
+    <g fill="#fdfcf7">
+      <rect x="11" y="47.5" width="5.4" height="11" rx="1"/>
+      <rect x="18" y="47.5" width="5.4" height="11" rx="1"/>
+      <rect x="25" y="47.5" width="5.4" height="11" rx="1"/>
+      <rect x="32" y="47.5" width="5.4" height="11" rx="1"/>
+      <rect x="39" y="47.5" width="5.4" height="11" rx="1"/>
+      <rect x="46" y="47.5" width="5.4" height="11" rx="1"/>
+    </g>
+    <g fill="#17171b">
+      <rect x="15.4" y="47.5" width="3.6" height="7" rx="0.8"/>
+      <rect x="22.4" y="47.5" width="3.6" height="7" rx="0.8"/>
+      <rect x="36.4" y="47.5" width="3.6" height="7" rx="0.8"/>
+      <rect x="43.4" y="47.5" width="3.6" height="7" rx="0.8"/>
+    </g>
+  </g>
+</svg>

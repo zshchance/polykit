@@ -92,5 +92,6 @@ export const registryConfig: RegistryConfig = {
     'style-atlas': { order: 7 },
     'instrument-atlas': { order: 8 },
     'rhythm-arp-lab': { order: 9 },
+    'sight-piano': { order: 10 },
   },
 };
