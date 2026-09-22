@@ -30,6 +30,8 @@ export class BeatScheduler {
   private nextStep = 0;
   private nextBar = 0;
   private nextTime = 0;
+  /** 第 0 步的网格时刻（start 时记录，连续播放头的时间原点） */
+  private gridStart = 0;
   private scheduled: { step: number; bar: number; time: number }[] = [];
 
   constructor(opts: SchedulerOptions) {
@@ -51,6 +53,7 @@ export class BeatScheduler {
     this.nextStep = 0;
     this.nextBar = 0;
     this.nextTime = ctx.currentTime + 0.08;
+    this.gridStart = this.nextTime;
     this.scheduled = [];
     this.timer = setInterval(() => this.tick(), LOOKAHEAD_MS);
   }
@@ -69,6 +72,16 @@ export class BeatScheduler {
       if (this.scheduled[i]!.time <= now) return this.scheduled[i]!;
     }
     return null;
+  }
+
+  /**
+   * 连续播放头（单位：拍，四分音符 = 1）：从音频时钟直接换算，
+   * 不做 16 分量化——谱面平滑滚动用。未播放返回 null。
+   */
+  beatNow(): number | null {
+    if (!this.playing) return null;
+    const now = this.getContext().currentTime;
+    return Math.max(0, (now - this.gridStart) / (this.stepDur() * 4));
   }
 
   private tick(): void {

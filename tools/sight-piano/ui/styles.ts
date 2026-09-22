@@ -143,12 +143,14 @@ export function injectSightStyles(): void {
     radial-gradient(140% 100% at 50% 0%, #f8f1de 0%, #f1e8d0 55%, #e7dcc0 100%);
   box-shadow: inset 0 2px 10px rgba(90,70,30,.25), 0 1px 0 rgba(255,255,255,.08);
   height: 176px;
+  transition: height .3s ease;
 }
-.sp-score { display: block; transition: transform .38s ease; will-change: transform; }
-.sp-fxlayer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+/* transform 由 rAF 主循环逐帧驱动，禁止任何 CSS 过渡（忽快忽慢的元凶） */
+.sp-score { display: block; will-change: transform; }
 
 .sp-line { stroke: #a89a78; stroke-width: 1; }
 .sp-ledger { stroke: #a89a78; stroke-width: 1; }
+.sp-brace { stroke: #9c8f6d; stroke-width: 1.6; }
 .sp-barline { stroke: #9c8f6d; stroke-width: 1.1; }
 .sp-finalbar { fill: #9c8f6d; }
 .sp-clef { fill: #6b5d3f; font-family: serif; }
@@ -157,6 +159,7 @@ export function injectSightStyles(): void {
 .sp-barnum { fill: #b3a582; }
 .sp-rest { fill: #5d5140; }
 .sp-evlabel { fill: #8a7a52; font-weight: 600; }
+.sp-freehint { fill: #b3a582; font-style: italic; }
 
 .sp-ev .sp-head { fill: #3c352a; stroke: none; transition: fill .18s ease; }
 .sp-ev .sp-head-hollow { fill: none; stroke: #3c352a; stroke-width: 1.5; transition: stroke .18s ease; }
@@ -187,32 +190,38 @@ export function injectSightStyles(): void {
 .sp-ev-passed .sp-stem, .sp-ev-passed .sp-acc { stroke: #b0563c; fill: #b0563c; }
 .sp-ev-passed .sp-flag, .sp-ev-passed .sp-beam, .sp-ev-passed .sp-dot { fill: #b0563c; }
 
-.sp-playhead { stroke: rgba(180,83,9,.5); stroke-width: 1.6;
-  transition: x1 .1s linear, x2 .1s linear; }
+.sp-playhead { stroke: rgba(180,83,9,.5); stroke-width: 1.6; }
 
-/* 错音星光：金色四角星在谱面闪烁 */
-.sp-sparkle {
-  position: absolute; transform: translate(-50%, -50%);
-  color: #f59e0b; font-size: 20px; font-style: normal;
-  text-shadow: 0 0 8px #fbbf24, 0 0 16px rgba(251,191,36,.7);
-  animation: sp-spark .9s ease-out forwards;
+/* 错音反馈（SVG 谱面坐标系，随谱面滚动）：
+   幽灵音符精确落在弹错音的谱面位置，金星在其上闪烁 */
+.sp-ghost { animation: sp-ghost-life 1.3s ease-out forwards; }
+.sp-ghost-head { fill: rgba(220,38,38,.85); stroke: #991b1b; stroke-width: 1;
+  transform-box: fill-box; transform-origin: center;
+  animation: sp-ghost-pulse .5s ease-in-out 2; }
+.sp-ghost-ledger { stroke: rgba(220,38,38,.6); stroke-width: 1; }
+.sp-ghost-acc { fill: #b91c1c; }
+.sp-ghost-star { fill: #f59e0b;
+  text-shadow: 0 0 8px #fbbf24;
+  transform-box: fill-box; transform-origin: center;
+  animation: sp-ghost-star .9s ease-out forwards; }
+@keyframes sp-ghost-life {
+  0% { opacity: 0; } 12% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; }
 }
-@keyframes sp-spark {
-  0% { opacity: 0; transform: translate(-50%,-50%) scale(.3) rotate(0deg); }
-  25% { opacity: 1; transform: translate(-50%,-50%) scale(1.25) rotate(45deg); }
-  100% { opacity: 0; transform: translate(-50%,-50%) scale(1.6) rotate(120deg) translateY(-10px); }
+@keyframes sp-ghost-pulse {
+  0%, 100% { transform: scale(1); } 50% { transform: scale(1.35); }
 }
-/* 命中光圈 */
-.sp-hitpop {
-  position: absolute; width: 30px; height: 30px; border-radius: 50%;
-  transform: translate(-50%, -50%);
-  border: 2px solid rgba(34,197,94,.9);
-  box-shadow: 0 0 12px rgba(34,197,94,.6);
-  animation: sp-pop .45s ease-out forwards;
+@keyframes sp-ghost-star {
+  0% { opacity: 0; transform: scale(.3) rotate(0deg); }
+  30% { opacity: 1; transform: scale(1.3) rotate(50deg); }
+  100% { opacity: 0; transform: scale(1.6) rotate(130deg) translateY(-8px); }
 }
+/* 命中光圈（SVG circle） */
+.sp-hitpop { fill: none; stroke: rgba(34,197,94,.9); stroke-width: 2;
+  transform-box: fill-box; transform-origin: center;
+  animation: sp-pop .45s ease-out forwards; }
 @keyframes sp-pop {
-  0% { opacity: .95; transform: translate(-50%,-50%) scale(.4); }
-  100% { opacity: 0; transform: translate(-50%,-50%) scale(1.5); }
+  0% { opacity: .95; transform: scale(.4); }
+  100% { opacity: 0; transform: scale(1.5); }
 }
 
 /* ── 键盘 ─────────────────────────────── */
@@ -328,6 +337,20 @@ export function injectSightStyles(): void {
   0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); }
 }
 .sp-combo-label { font-size: 9px; color: #b5ab98; letter-spacing: .1em; }
+
+/* ── 难度页签（LCD 曲目架的二级分类） ── */
+.sp-leveltabs { display: flex; gap: 3px; margin-top: 5px; }
+.sp-leveltab {
+  font-size: 9px; padding: 2px 7px; border-radius: 5px; cursor: pointer;
+  border: 1px solid rgba(250,200,110,.3); background: rgba(28,19,5,.6);
+  color: rgba(247,206,131,.75); user-select: none;
+  transition: border-color .12s ease, background .12s ease;
+}
+.sp-leveltab:hover { border-color: rgba(251,191,36,.65); }
+.sp-leveltab-on {
+  background: linear-gradient(180deg, #92600f, #6b430a);
+  color: #fff3dd; border-color: #3a2504;
+}
 
 /* ── 学习路径卡 ───────────────────────── */
 .sp-stage {

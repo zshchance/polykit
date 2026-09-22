@@ -46,6 +46,16 @@ describe('数字简谱解析', () => {
     const warn = parseJianpu('1=C\n1 @ 2');
     expect(warn.warnings.length).toBeGreaterThan(0);
   });
+
+  it('小调头部 1=Am：音级走自然小调', () => {
+    const p = parseJianpu('1=Am 4/4\n1 2 3 4 5 6 7 #7');
+    expect(p.keyPc).toBe(9);
+    expect(p.tonality).toBe('minor');
+    expect(p.events[0]!.midi).toBe(57); // A3（最靠近 C4 的 A）
+    expect(p.events[2]!.midi).toBe(60); // 3 = C（自然小调三音）
+    expect(p.events[5]!.midi).toBe(65); // 6 = F（小六度）
+    expect(p.events[7]!.midi).toBe(68); // #7 = G♯（和声小调导音）
+  });
 });
 
 describe('ABC 解析', () => {

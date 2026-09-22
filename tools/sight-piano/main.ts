@@ -8,11 +8,13 @@ import { MidiBridge } from './engine/midi';
 import { createKeyboard } from './ui/keyboard';
 import { createMinimap } from './ui/minimap';
 import { createScoreView } from './ui/scoreview';
+import { createFreeStaff } from './ui/freestaff';
 import { createSongRack, type SongCardItem } from './ui/songrack';
 import { injectSightStyles } from './ui/styles';
 import {
   JudgeSession,
   accuracyOf,
+  allMidisOf,
   scoreRange,
   starsOf,
   STAGE_LABEL,
@@ -20,13 +22,15 @@ import {
   type Stage,
 } from './score';
 import {
+  detectChordName,
   keyDisplayName,
+  keySigOf,
   midiName,
-  pcName,
   pcOf,
   spelledName,
   spellInKey,
   TONALITY_LABEL,
+  type Tonality,
 } from './theory';
 import { BUILTIN_SONGS, type BuiltinSong } from './data/songs';
 import { RHYTHM_MAP, RHYTHM_STYLES } from './data/rhythms';
@@ -59,23 +63,26 @@ const STAGE_DESC: Record<Stage, { icon: string; title: string; desc: string }> =
   read: {
     icon: '🎼',
     title: '识谱 · 五线谱认读',
-    desc: '从中央 C 出发，跟着谱面弹单音。调号按 C→G→F→D→降B 逐个加码，练的是「看到音符就知道键在哪」。',
+    desc: '从单手旋律到双手大谱表：认线间、认形状、认调号。入门单手、进阶加左手根音、挑战分解伴奏。',
   },
   chord: {
     icon: '🎹',
     title: '和弦 · 走向进行',
-    desc: '每小节一个和弦块，三个音一起按齐就点亮。1564、4536、卡农……感受经典走向的情绪走向。',
+    desc: '每小节一个和弦块，三个音一起按齐就点亮。1564、4536、卡农、蓝调……十个调轮着练。',
   },
   arp: {
     icon: '🌊',
     title: '琶音 · 伴奏织体',
-    desc: '把和弦拆成流动的八分音符。弹对时贝斯和鼓会跟上你——这就是给歌配伴奏的感觉。',
+    desc: '把和弦拆成流动的音符。弹对时贝斯和鼓会跟上你——这就是给歌配伴奏的感觉。',
   },
 };
 
-/** 谱面位置的人话描述（高音谱表，E4 为下一线） */
-function staffPositionName(step: number): string {
-  const d = step - 30; // E4 = 0
+const LEVEL_LABEL: Record<1 | 2 | 3, string> = { 1: '入门', 2: '进阶', 3: '挑战' };
+
+/** 谱面位置的人话描述（staff: 高音谱表 E4 为下一线 / 低音谱表 G2 为下一线） */
+function staffPositionName(step: number, staff: 't' | 'b'): string {
+  const base = staff === 't' ? 30 : 18;
+  const d = step - base;
   if (d >= 0 && d <= 8) {
     return d % 2 === 0 ? `第 ${d / 2 + 1} 线` : `第 ${(d + 1) / 2} 间`;
   }
@@ -102,6 +109,16 @@ function renderApp(): void {
   // ────────── 曲目登记（内置 + 导入，导入懒解析带缓存） ──────────
   const importCache = new Map<string, Score | null>();
 
+  /** 导入谱面的难度归属：短而窄 → 入门，长或宽 → 挑战 */
+  function importedLevel(score: Score): 1 | 2 | 3 {
+    const range = scoreRange(score);
+    const span = range ? range.hi - range.lo : 0;
+    const n = score.events.length;
+    if (n <= 30 && span <= 14) return 1;
+    if (n <= 80 && span <= 24) return 2;
+    return 3;
+  }
+
   function importedScores(): { score: Score; tip: string }[] {
     const out: { score: Score; tip: string }[] = [];
     for (const s of state.imported) {
@@ -113,6 +130,7 @@ function renderApp(): void {
               ? importSheet({ kind: 'midi', buf: base64ToBuf(s.data) }, s.id, 'read', s.title)
               : importSheet({ kind: 'text', text: s.data }, s.id, 'read', s.title);
           sc = res.score;
+          if (sc) sc.level = importedLevel(sc);
         } catch {
           sc = null;
         }
@@ -132,6 +150,12 @@ function renderApp(): void {
     return stage === 'read' ? [...builtin, ...importedScores()] : builtin;
   }
 
+  /** 当前难度页签下可见的曲目 */
+  function visibleSongs(stage: Stage): { score: Score; tip: string }[] {
+    const lv = state.level[stage];
+    return stageSongs(stage).filter((s) => (s.score.level ?? 2) === lv);
+  }
+
   function findSong(id: string): { score: Score; tip: string } | null {
     for (const st of ['read', 'chord', 'arp'] as const) {
       const hit = stageSongs(st).find((s) => s.score.id === id);
@@ -144,8 +168,8 @@ function renderApp(): void {
   let song: { score: Score; tip: string } | null = null;
   let session: JudgeSession | null = null;
   let hesitateTimer: ReturnType<typeof setTimeout> | null = null;
-  /** 演奏模式：谱面播放头轮询 */
-  let playTimer: ReturnType<typeof setInterval> | null = null;
+  /** 演奏模式：播放头/判定的 rAF 主循环 */
+  let playRaf = 0;
 
   function currentBpm(): number {
     return state.bpm ?? song?.score.bpm ?? 96;
@@ -174,6 +198,12 @@ function renderApp(): void {
 
     const score = found.score;
     session = new JudgeSession(score, score.stage === 'chord' ? 'chord' : 'exact');
+    // 难度页签跟随所选曲目（导入曲目的难度可能与当前页签不同）
+    const lv = score.level ?? 2;
+    if (state.level[state.stage] !== lv) {
+      state.level[state.stage] = lv;
+      renderLevelTabs();
+    }
     view.setScore(score);
     view.setPlayhead(null);
 
@@ -187,6 +217,7 @@ function renderApp(): void {
     refreshTarget();
     renderRack();
     updateReadoutIdle();
+    syncStand();
     syncBand({ restart: state.mode === 'play' });
   }
 
@@ -196,6 +227,13 @@ function renderApp(): void {
 
   function isPressed(midi: number): boolean {
     return (holdCount.get(midi) ?? 0) > 0 || (state.pedalOn && latched.has(midi));
+  }
+
+  /** 当前发声中的全部音（升序）：自由弹奏实时谱面的输入 */
+  function soundingNotes(): number[] {
+    const set = new Set<number>(holdCount.keys());
+    if (state.pedalOn) for (const m of latched) set.add(m);
+    return [...set].sort((a, b) => a - b);
   }
 
   // ────────── 琴键与谱面 ──────────
@@ -229,6 +267,7 @@ function renderApp(): void {
   });
 
   const view = createScoreView();
+  const freeStaff = createFreeStaff();
 
   function renderKeyboard(): void {
     rebuildKeyLabels();
@@ -237,8 +276,9 @@ function renderApp(): void {
     paintTarget();
   }
 
-  function followWindow(midi: number): void {
-    if (kbd.contains(midi)) return;
+  /** 自由弹奏：起手第一个音在窗外时把窗口挪过去（按住期间不挪，双手不甩窗） */
+  function followWindowIfIdle(midi: number, wasIdle: boolean): void {
+    if (song || !wasIdle || kbd.contains(midi)) return;
     state.windowStart = clampWindow(midi - Math.floor(state.keyCount / 2), state.keyCount);
     renderKeyboard();
     persist();
@@ -254,10 +294,11 @@ function renderApp(): void {
 
   // ────────── 音符进出（三路输入的汇合点） ──────────
   function noteOn(midi: number, vel: number): void {
+    const wasIdle = holdCount.size === 0 && latched.size === 0;
     holdCount.set(midi, (holdCount.get(midi) ?? 0) + 1);
     latched.delete(midi);
     synth.noteOn(midi, vel);
-    followWindow(midi);
+    followWindowIfIdle(midi, wasIdle);
 
     if (session && !session.stats().done) {
       const verdict = session.feedOn(midi);
@@ -279,6 +320,7 @@ function renderApp(): void {
       kbd.press(midi, null);
     }
     paintTarget();
+    if (!song) syncFreeStaff();
   }
 
   function noteOff(midi: number): void {
@@ -293,6 +335,7 @@ function renderApp(): void {
     session?.feedOff(midi);
     kbd.release(midi);
     paintTarget();
+    if (!song) syncFreeStaff();
   }
 
   function setPedal(on: boolean): void {
@@ -302,6 +345,7 @@ function renderApp(): void {
     if (!on) latched.clear();
     syncPedalBtn();
     persist();
+    if (!song) syncFreeStaff();
   }
 
   function releaseAllNotes(): void {
@@ -310,6 +354,34 @@ function renderApp(): void {
     synth.releaseAll();
     const [lo, hi] = kbd.range();
     for (let m = lo; m <= hi; m++) kbd.release(m);
+    if (!song) syncFreeStaff();
+  }
+
+  // ────────── 自由弹奏实时谱面 ──────────
+  function syncFreeStaff(): void {
+    freeStaff.setNotes(soundingNotes());
+    updateFreeReadout();
+  }
+
+  function updateFreeReadout(): void {
+    if (song) return;
+    const notes = soundingNotes();
+    if (!notes.length) {
+      updateReadoutIdle();
+      return;
+    }
+    const sig = keySigOf(state.freeKeyPc, state.freeTonality);
+    const names = notes.map((m) => midiName(m)).join(' ');
+    if (notes.length === 1) {
+      const sp = spellInKey(notes[0]!, sig);
+      const staff = sp.step < 28 ? 'b' : 't';
+      readoutBig.textContent = `${spelledName(sp)}${sp.octave}`;
+      readoutSub.textContent = `${staff === 't' ? '高音谱表' : '低音谱表'} · ${staffPositionName(sp.step, staff)} · 钢琴键名 ${names}`;
+      return;
+    }
+    const chord = detectChordName(notes);
+    readoutBig.textContent = chord ?? names;
+    readoutSub.textContent = chord ? `${names} · 松开即消失，试试别的把位` : `${names} · 还构不成常见三/七和弦，再凑一个音试试`;
   }
 
   // ────────── 目标引导（琴键染色 + 谱面当前项 + 犹豫提示） ──────────
@@ -332,10 +404,11 @@ function renderApp(): void {
         else if (pcs.has(pcOf(m))) kbd.setDots(m, ['#fbbf24']);
       }
     } else {
-      const target = ev.midis[0];
-      // 识谱/琶音练的就是「谱面这个音 = 琴键这个键」，只点亮精确八度
-      if (target !== undefined && state.keyGuide && target >= lo && target <= hi) {
-        kbd.setHint(target, guideColor);
+      // 识谱/琶音练的就是「谱面这个音 = 琴键这个键」，双手目标也只点亮精确八度
+      if (state.keyGuide) {
+        for (const m of allMidisOf(ev)) {
+          if (m >= lo && m <= hi) kbd.setHint(m, guideColor);
+        }
       }
     }
   }
@@ -345,13 +418,18 @@ function renderApp(): void {
     const idx = session.currentIndex();
     if (idx >= 0) view.setEventState(idx, 'current');
     const ev = session.current();
-    // 目标不在窗口内时把窗口挪过去（识谱模式的音区跟随）
-    if (ev && ev.midis.length) {
-      const target = ev.midis[0]!;
-      if (!kbd.contains(target)) {
-        state.windowStart = clampWindow(target - Math.floor(state.keyCount / 2), state.keyCount);
-        renderKeyboard();
-        persist();
+    // 目标音跑出窗口时把窗口挪过去（88 键 MIDI 全键可弹，窗口只跟目标走）
+    if (ev) {
+      const notes = allMidisOf(ev);
+      if (notes.length) {
+        const [lo, hi] = kbd.range();
+        const tLo = Math.min(...notes);
+        const tHi = Math.max(...notes);
+        if (tLo < lo || tHi > hi) {
+          state.windowStart = windowStartFor({ lo: tLo, hi: tHi });
+          renderKeyboard();
+          persist();
+        }
       }
     }
     paintTarget();
@@ -381,11 +459,22 @@ function renderApp(): void {
       readoutBig.textContent = `试着一起按下 ${ev.label ?? '这个和弦'}`;
       readoutSub.textContent = `${ev.midis.map(midiName).join(' + ')} · 金色的键都在等你`;
     } else {
-      const target = ev.midis[0]!;
-      if (target >= lo && target <= hi) kbd.setHintStrong(target, true);
-      const sp = spellInKey(target, song.score.sig);
-      readoutBig.textContent = `这个音是 ${spelledName(sp)}${sp.octave}，在谱面${staffPositionName(sp.step)}`;
-      readoutSub.textContent = '看它在五线谱上的位置，再找琴键上对应的键——线间关系比数格子快。';
+      const parts: string[] = [];
+      if (ev.spelled.length) {
+        parts.push(
+          `右手：${ev.spelled.map((sp) => `${spelledName(sp)}${sp.octave}（高音谱${staffPositionName(sp.step, 't')}）`).join('、')}`,
+        );
+      }
+      if (ev.bassSpelled.length) {
+        parts.push(
+          `左手：${ev.bassSpelled.map((sp) => `${spelledName(sp)}${sp.octave}（低音谱${staffPositionName(sp.step, 'b')}）`).join('、')}`,
+        );
+      }
+      for (const m of allMidisOf(ev)) {
+        if (m >= lo && m <= hi) kbd.setHintStrong(m, true);
+      }
+      readoutBig.textContent = parts.join('；');
+      readoutSub.textContent = '看它们在五线谱上的位置，再找琴键上对应的键——线间关系比数格子快。';
     }
   }
 
@@ -409,9 +498,17 @@ function renderApp(): void {
       readoutBig.textContent = `弹 ${ev.label ?? '这个和弦'}`;
       readoutSub.textContent = `${ev.midis.map(midiName).join(' + ')} · 一起按齐就过`;
     } else {
-      const sp = spellInKey(ev.midis[0]!, song.score.sig);
-      readoutBig.textContent = `${spelledName(sp)}${sp.octave} · 谱面${staffPositionName(sp.step)}`;
-      readoutSub.textContent = `第 ${Math.floor(ev.beat / song.score.beatsPerBar) + 1} 小节 · ${
+      const bits: string[] = [];
+      if (ev.spelled.length) {
+        bits.push(ev.spelled.map((sp) => `${spelledName(sp)}${sp.octave}`).join('+'));
+      }
+      if (ev.bassSpelled.length) {
+        bits.push(`左手 ${ev.bassSpelled.map((sp) => `${spelledName(sp)}${sp.octave}`).join('+')}`);
+      }
+      readoutBig.textContent = bits.join(' · ');
+      const firstSp = ev.spelled[0];
+      const pos = firstSp ? `高音谱${staffPositionName(firstSp.step, 't')} · ` : '';
+      readoutSub.textContent = `${pos}第 ${Math.floor(ev.beat / song.score.beatsPerBar) + 1} 小节 · ${
         st.progressed + 1
       }/${st.total} 音`;
     }
@@ -420,7 +517,7 @@ function renderApp(): void {
   function updateReadoutIdle(): void {
     if (!song) {
       readoutBig.textContent = '随便弹，琴房听你自由发挥';
-      readoutSub.textContent = '自由弹奏模式：从屏幕选一首曲子就开始有目标地练。';
+      readoutSub.textContent = '自由弹奏：按下的音会实时落到谱面上，右上角可换调号。';
       return;
     }
     readoutBig.textContent = `《${song.score.title}》准备好了`;
@@ -485,7 +582,7 @@ function renderApp(): void {
       h('div', { style: 'display:flex;gap:8px;margin-top:6px' }, [
         overlayBtn('再来一遍', () => selectSong(id)),
         overlayBtn('下一首', () => {
-          const list = stageSongs(state.stage);
+          const list = visibleSongs(state.stage);
           const idx = list.findIndex((s) => s.score.id === id);
           const next = list[(idx + 1) % list.length];
           if (next) selectSong(next.score.id);
@@ -623,13 +720,17 @@ function renderApp(): void {
   }
 
   function startPlayheadIfNeeded(): void {
-    if (state.mode !== 'play' || !song || playTimer) return;
-    playTimer = setInterval(() => tickPlayhead(), 50);
+    if (state.mode !== 'play' || !song || playRaf) return;
+    const loop = (): void => {
+      playRaf = requestAnimationFrame(loop);
+      tickPlayhead();
+    };
+    playRaf = requestAnimationFrame(loop);
   }
 
   function stopPlayhead(): void {
-    if (playTimer) clearInterval(playTimer);
-    playTimer = null;
+    if (playRaf) cancelAnimationFrame(playRaf);
+    playRaf = 0;
     view.setPlayhead(null);
   }
 
@@ -637,11 +738,9 @@ function renderApp(): void {
 
   function tickPlayhead(): void {
     if (!scheduler.playing || !song || !session) return;
-    const cur = scheduler.current();
-    if (!cur) return;
-    schedulerBar = cur.bar;
+    const rawBeat = scheduler.beatNow();
+    if (rawBeat === null) return;
     const spb = song.score.beatsPerBar;
-    const rawBeat = cur.bar * spb + cur.step / 4;
     const scoreBeat = rawBeat - spb; // 一小节预备拍
 
     if (scoreBeat < 0) {
@@ -654,7 +753,11 @@ function renderApp(): void {
       view.setPlayhead(null);
       return;
     }
-    countInAnnounced = -1;
+    if (countInAnnounced !== -1) {
+      // 预备拍结束、进入正文：读数区从倒数恢复成目标引导
+      countInAnnounced = -1;
+      updateTargetReadout();
+    }
     view.setPlayhead(scoreBeat);
 
     // 到点未命中 → 温柔放过（谱面染灰红，不断曲）
@@ -670,6 +773,7 @@ function renderApp(): void {
       updateCombo();
       const nxt = session.currentIndex();
       if (nxt >= 0) view.setEventState(nxt, 'current');
+      updateTargetReadout();
     }
 
     if (session.stats().done) {
@@ -757,8 +861,9 @@ function renderApp(): void {
       const v = Number(bpmInput.value);
       if (Number.isFinite(v) && v >= 40 && v <= 220) {
         state.bpm = v;
-        scheduler.bpm = v;
         persist();
+        // 连续播放头锚定音频时钟：改速度时重启伴奏，避免网格突变
+        syncBand({ restart: scheduler.playing });
       } else {
         bpmInput.value = String(currentBpm());
       }
@@ -770,8 +875,8 @@ function renderApp(): void {
     () => {
       state.bpm = null;
       bpmInput.value = String(currentBpm());
-      scheduler.bpm = currentBpm();
       persist();
+      syncBand({ restart: scheduler.playing });
     },
     '恢复曲目建议速度',
   );
@@ -805,6 +910,43 @@ function renderApp(): void {
     pedalBtn.textContent = state.pedalOn ? '🟢 踏板' : '踏板';
   }
 
+  // 自由弹奏调号
+  const FREE_KEY_OPTIONS: { pc: number; tonality: Tonality }[] = [
+    { pc: 0, tonality: 'major' }, { pc: 7, tonality: 'major' }, { pc: 5, tonality: 'major' },
+    { pc: 2, tonality: 'major' }, { pc: 10, tonality: 'major' }, { pc: 9, tonality: 'major' },
+    { pc: 3, tonality: 'major' }, { pc: 4, tonality: 'major' }, { pc: 8, tonality: 'major' },
+    { pc: 11, tonality: 'major' }, { pc: 1, tonality: 'major' }, { pc: 6, tonality: 'major' },
+    { pc: 9, tonality: 'minor' }, { pc: 4, tonality: 'minor' }, { pc: 2, tonality: 'minor' },
+    { pc: 11, tonality: 'minor' }, { pc: 7, tonality: 'minor' }, { pc: 0, tonality: 'minor' },
+    { pc: 6, tonality: 'minor' }, { pc: 5, tonality: 'minor' },
+  ];
+  const freeKeySelect = h('select', {
+    class: 'sp-select',
+    title: '自由弹奏谱面的调号（选择会被记住）',
+    onchange: () => {
+      const opt = FREE_KEY_OPTIONS[freeKeySelect.selectedIndex]!;
+      state.freeKeyPc = opt.pc;
+      state.freeTonality = opt.tonality;
+      persist();
+      freeStaff.setKey(opt.pc, opt.tonality);
+      updateFreeReadout();
+      renderLcdTitle();
+    },
+  }) as HTMLSelectElement;
+  freeKeySelect.replaceChildren(
+    ...FREE_KEY_OPTIONS.map((k) =>
+      h('option', {
+        textContent: `${keyDisplayName(k.pc, k.tonality)} ${TONALITY_LABEL[k.tonality]}`,
+      }),
+    ),
+  );
+  function syncFreeKeySelect(): void {
+    const idx = FREE_KEY_OPTIONS.findIndex(
+      (k) => k.pc === state.freeKeyPc && k.tonality === state.freeTonality,
+    );
+    freeKeySelect.selectedIndex = Math.max(0, idx);
+  }
+
   // MIDI
   const midiLamp = h('span', { class: 'sp-lamp' });
   const midiStatus = h('span', { class: 'sp-lcd-hint', textContent: '未连接' });
@@ -821,7 +963,7 @@ function renderApp(): void {
     type: 'button',
     class: 'sp-btn',
     textContent: '🎹 MIDI',
-    title: '连接外接 MIDI 键盘（Chrome/Edge 支持）',
+    title: '连接外接 MIDI 键盘（88 键全键可弹，窗口自动跟随目标音区；Chrome/Edge 支持）',
     onclick: () => void midi.connect(),
   });
 
@@ -852,8 +994,33 @@ function renderApp(): void {
     beatLamp.className = 'sp-lamp' + (scheduler.playing ? ' sp-lamp-on' : '');
   }
 
-  // ────────── LCD（屏标 + 曲目卡架） ──────────
+  // ────────── LCD（屏标 + 难度页签 + 曲目卡架） ──────────
   const lcdTitle = h('div', { class: 'sp-lcd-title' });
+  const levelTabs = h('div', { class: 'sp-leveltabs' });
+
+  function renderLevelTabs(): void {
+    const all = stageSongs(state.stage);
+    levelTabs.replaceChildren(
+      ...([1, 2, 3] as const).map((lv) => {
+        const count = all.filter((s) => (s.score.level ?? 2) === lv).length;
+        const btn = h('button', {
+          type: 'button',
+          class: 'sp-leveltab' + (state.level[state.stage] === lv ? ' sp-leveltab-on' : ''),
+          textContent: `${LEVEL_LABEL[lv]} ${count}`,
+          title: `${LEVEL_LABEL[lv]}难度 · ${count} 首`,
+          onclick: () => {
+            if (state.level[state.stage] === lv) return;
+            state.level[state.stage] = lv;
+            persist();
+            renderLevelTabs();
+            renderRack();
+          },
+        });
+        return btn;
+      }),
+    );
+  }
+
   function renderLcdTitle(): void {
     lcdTitle.replaceChildren(
       h('b', { textContent: STAGE_LABEL[state.stage] }),
@@ -861,8 +1028,9 @@ function renderApp(): void {
         class: 'sp-lcd-hint',
         textContent: song
           ? `${keyDisplayName(song.score.keyPc, song.score.tonality)} ${TONALITY_LABEL[song.score.tonality]} · ${currentBpm()}♩`
-          : '自由弹奏',
+          : `自由弹奏 · ${keyDisplayName(state.freeKeyPc, state.freeTonality)} ${TONALITY_LABEL[state.freeTonality]}`,
       }),
+      levelTabs,
     );
   }
 
@@ -878,6 +1046,8 @@ function renderApp(): void {
       updateReadoutIdle();
       renderLcdTitle();
       paintTarget();
+      syncStand();
+      syncFreeStaff();
       return;
     }
     selectSong(id);
@@ -889,14 +1059,14 @@ function renderApp(): void {
       items.push({
         id: 'free',
         name: '自由弹奏',
-        sub: '无谱面 · 纯玩',
+        sub: '实时谱面 · 纯玩',
         stars: 0,
         active: !song,
         group: '热身',
-        tip: '不看谱，随便弹；节拍器和伴奏照常可用',
+        tip: '不看谱，随便弹；按下的音会实时落到谱面上',
       });
     }
-    for (const s of stageSongs(state.stage)) {
+    for (const s of visibleSongs(state.stage)) {
       const p = state.progress[s.score.id];
       items.push({
         id: s.score.id,
@@ -914,6 +1084,11 @@ function renderApp(): void {
 
   const lcd = h('div', { class: 'sp-lcd' }, [lcdTitle, rack.el]);
 
+  const freeKeyWrap = h('span', { class: 'sp-ctl' }, [
+    h('span', { textContent: '🎼 调号' }),
+    freeKeySelect,
+  ]);
+
   const bezel = h('div', { class: 'sp-bezel' }, [
     h('div', { class: 'sp-ctl' }, [
       h('span', { textContent: '键数' }),
@@ -924,6 +1099,7 @@ function renderApp(): void {
     ]),
     lcd,
     h('div', { class: 'sp-ctl', style: 'justify-content:flex-end' }, [
+      freeKeyWrap,
       h('span', { class: 'sp-ctl' }, [h('span', { textContent: '🥁' }), rhythmSelect, beatLamp]),
       h('span', { class: 'sp-ctl' }, [h('span', { textContent: '♩' }), bpmInput, bpmReset]),
       guideBtn,
@@ -932,6 +1108,14 @@ function renderApp(): void {
       h('span', { class: 'sp-ctl' }, [h('span', { textContent: '🎚' }), volSlider, bandVolSlider]),
     ]),
   ]);
+
+  /** 谱架内容切换：有曲 = 卷轴谱面；自由 = 实时大谱表（调号选择器只在自由时露面） */
+  function syncStand(): void {
+    const free = !song;
+    view.el.style.display = free ? 'none' : '';
+    freeStaff.el.style.display = free ? '' : 'none';
+    freeKeyWrap.style.display = free ? '' : 'none';
+  }
 
   // ────────── 学习路径面板 ──────────
   const stageCards = new Map<Stage, HTMLButtonElement>();
@@ -972,6 +1156,7 @@ function renderApp(): void {
             state.stage = st;
             persist();
             renderPath();
+            renderLevelTabs();
             renderRack();
             const saved = state.songId[st];
             const target = findSong(saved) ?? stageSongs(st)[0] ?? null;
@@ -982,6 +1167,8 @@ function renderApp(): void {
               updateReadoutIdle();
               renderLcdTitle();
               renderRack();
+              syncStand();
+              syncFreeStaff();
             } else if (target) {
               selectSong(target.score.id);
             }
@@ -1019,7 +1206,7 @@ function renderApp(): void {
       'mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 font-mono text-xs leading-relaxed text-[var(--fg)] outline-none focus:border-[var(--accent)]',
     rows: 4,
     placeholder:
-      '粘贴数字简谱：\n小星星\n1=C 4/4 ♩=96\n1 1 5 5 | 6 6 5 - | 4 4 3 3 | 2 2 1 -\n\n也支持 ABC 记谱（X:/T:/M:/L:/K: 头 + C D E F G 字母），或直接把 .mid 文件拖进来',
+      '粘贴数字简谱：\n小星星\n1=C 4/4 ♩=96\n1 1 5 5 | 6 6 5 - | 4 4 3 3 | 2 2 1 -\n\n也支持 ABC 记谱（X:/T:/M:/L:/K: 头 + C D E F G 字母）与小调（1=Am），或直接把 .mid 文件拖进来',
   }) as HTMLTextAreaElement;
 
   function doImportText(): void {
@@ -1048,9 +1235,10 @@ function renderApp(): void {
       importText.value = '';
       state.stage = 'read';
       renderPath();
+      renderLevelTabs();
       selectSong(id);
       importStatus.textContent =
-        `已导入《${res.score.title}》（${res.format} · ${pcName(res.score.keyPc)} ${TONALITY_LABEL[res.score.tonality]} · ${res.score.events.length} 个记号）` +
+        `已导入《${res.score.title}》（${res.format} · ${keyDisplayName(res.score.keyPc, res.score.tonality)} ${TONALITY_LABEL[res.score.tonality]} · ${res.score.events.length} 个记号）` +
         (res.warnings.length ? `；提示：${res.warnings.slice(0, 2).join('；')}` : '');
     } catch (err) {
       importStatus.textContent = `导入失败：${err instanceof Error ? err.message : String(err)}`;
@@ -1082,6 +1270,7 @@ function renderApp(): void {
           persist();
           state.stage = 'read';
           renderPath();
+          renderLevelTabs();
           selectSong(id);
           importStatus.textContent = `已导入《${res.score.title}》（MIDI · 已提取最高声部旋律并量化）`;
         } else {
@@ -1204,12 +1393,15 @@ function renderApp(): void {
     if (off !== undefined) noteOff(compBase() + off);
   });
 
-  window.addEventListener('resize', () => view.relayout());
+  window.addEventListener('resize', () => {
+    view.relayout();
+    freeStaff.relayout();
+  });
 
   // ────────── 装配 ──────────
   const piano = h('div', { class: 'sp-piano' }, [
     bezel,
-    h('div', { class: 'sp-stand' }, [view.el]),
+    h('div', { class: 'sp-stand' }, [view.el, freeStaff.el]),
     minimap.el,
     kbd.el,
     h('div', { class: 'sp-readout' }, [
@@ -1222,7 +1414,7 @@ function renderApp(): void {
     h('p', {
       class: 'mb-4 text-sm text-[var(--fg-muted)]',
       textContent:
-        '一台放在浏览器里的识谱练琴房：跟着五线谱弹，弹对的音符变绿、弹错的位置闪星光，连击越久琴越烫。识谱、和弦走向、琶音伴奏三段路径循序渐进；鼠标点、电脑键盘（Z 排 / Q 排双排映射）或外接 MIDI 键盘都能弹，节拍器与节奏伴奏随行。支持导入数字简谱 / ABC / MIDI，全部本地运行，进度与曲库自动记忆。',
+        '一台放在浏览器里的识谱练琴房：单手旋律 → 双手大谱表 → 和弦走向 → 琶音伴奏，三个阶段各 150+ 首练习，按入门 / 进阶 / 挑战分级。跟着五线谱弹，弹对的音符变绿、弹错的音在「它自己的谱面位置」闪星光；鼠标点、电脑键盘（Z 排 / Q 排双排映射）或外接 88 键 MIDI 键盘都能弹（窗口自动跟随目标音区），节拍器与节奏伴奏随行。自由弹奏时按下的音会实时落到谱面上。支持导入数字简谱 / ABC / MIDI，全部本地运行，进度、调号与曲库自动记忆。',
     }),
     pathPanel,
     h('div', { class: 'mt-5' }, [piano]),
@@ -1230,7 +1422,7 @@ function renderApp(): void {
     h('p', {
       class: 'mt-4 text-[11px] leading-relaxed text-[var(--fg-muted)]',
       textContent:
-        '快捷键：Z 排 = 当前窗口白键区（C 起），Q 排 = 高八度，←/→ 移动视图八度，空格 = 延音踏板，Esc = 全部松开。跟弹模式谱面等你弹对；演奏模式有一小节预备拍，错过不等人但也不罚停。调号爬坡顺序 C → G → F → D → 降B，每个调只多一个升降号，正是视奏练习的经典路径。',
+        '快捷键：Z 排 = 当前窗口白键区（C 起），Q 排 = 高八度，←/→ 移动视图八度，空格 = 延音踏板，Esc = 全部松开。跟弹模式谱面等你弹对；演奏模式有一小节预备拍，错过不等人但也不罚停。双手练习曲的左手由内置编曲器按小节自动配和声：入门按住根音长音、进阶四分分解、挑战阿尔贝蒂。',
     }),
   );
 
@@ -1239,7 +1431,10 @@ function renderApp(): void {
   renderModeSeg();
   syncPedalBtn();
   syncGuideBtn();
+  syncFreeKeySelect();
   renderPath();
+  renderLevelTabs();
+  renderKeyboard(); // 自由模式下刷新也要把琴键画出来
 
   // 恢复上次曲目（优先各阶段记忆的 songId；导入曲失效自动回退）
   const savedId = state.songId[state.stage];
@@ -1251,6 +1446,9 @@ function renderApp(): void {
     const found = findSong(savedId) ?? stageSongs(state.stage)[0] ?? null;
     if (found) selectSong(found.score.id, { autopersist: false });
   }
+  freeStaff.setKey(state.freeKeyPc, state.freeTonality);
+  syncStand();
+  syncFreeStaff();
   renderRack();
   syncBand();
 }

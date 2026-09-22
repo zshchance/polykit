@@ -32,10 +32,14 @@ export interface ScoreEvent {
   beat: number;
   /** 时值（拍） */
   dur: number;
-  /** 音（休止符为空数组；和弦事件为多音，升序） */
+  /** 右手/高音谱表的音（休止符为空数组；和弦事件为多音，升序） */
   midis: number[];
   /** 与 midis 平行的谱面拼写（已按调号算好） */
   spelled: SpelledNote[];
+  /** 左手/低音谱表的音（单手曲为空数组；出现即按大谱表渲染） */
+  bassMidis: number[];
+  /** 与 bassMidis 平行的拼写 */
+  bassSpelled: SpelledNote[];
   /** 事件标签（和弦名 / 级数，如 "C" "vi"），谱面上方小字 */
   label?: string;
   /** 贝斯根音音高类（和弦/琶音阶段，伴奏贝斯跟着它走） */
@@ -46,6 +50,8 @@ export interface Score {
   id: string;
   title: string;
   stage: Stage;
+  /** 难度分级（1 入门 / 2 进阶 / 3 挑战），曲库二级分类用 */
+  level?: 1 | 2 | 3;
   keyPc: number;
   tonality: Tonality;
   sig: KeySig;
@@ -57,7 +63,7 @@ export interface Score {
   totalBeats: number;
   /** 建议 BPM（演奏模式与伴奏速度默认值） */
   bpm: number;
-  /** 曲库分组（内置：按难度；导入：'我的曲库'） */
+  /** 曲库分组（内置：按难度/调性；导入：'我的曲库'） */
   group?: string;
 }
 
@@ -65,6 +71,8 @@ export interface RawEvent {
   beat: number;
   dur: number;
   midis: number[];
+  /** 左手音（低音谱表）；省略 = 单手事件 */
+  bassMidis?: number[];
   label?: string;
   bassPc?: number;
 }
@@ -75,26 +83,67 @@ export interface BuildScoreOpts {
   stage: Stage;
   keyPc: number;
   tonality?: Tonality;
+  level?: 1 | 2 | 3;
   beatsPerBar?: number;
   beatUnit?: number;
   bpm?: number;
   group?: string;
 }
 
-/** 由裸事件构建完整谱面：排序、拼写、算总长 */
+/** 事件包含的全部目标音（右手 + 左手） */
+export function allMidisOf(ev: ScoreEvent): number[] {
+  return ev.bassMidis.length ? [...ev.bassMidis, ...ev.midis] : ev.midis;
+}
+
+/** 是否大谱表（任一事件带左手音） */
+export function isGrand(score: Score): boolean {
+  return score.events.some((e) => e.bassMidis.length > 0);
+}
+
+/** 由裸事件构建完整谱面：同拍合并、排序、拼写、算总长 */
 export function buildScore(raw: readonly RawEvent[], opts: BuildScoreOpts): Score {
   const tonality = opts.tonality ?? 'major';
   const sig = keySigOf(opts.keyPc, tonality);
-  const events: ScoreEvent[] = [...raw]
+
+  // 同拍事件合并（左右手同起、导入谱双声部叠拍）：音取并集，时值取最长
+  const byBeat = new Map<number, RawEvent>();
+  for (const e of raw) {
+    const beat = Math.round(e.beat * 1000) / 1000;
+    const prev = byBeat.get(beat);
+    if (!prev) {
+      byBeat.set(beat, {
+        beat,
+        dur: e.dur,
+        midis: [...e.midis],
+        ...(e.bassMidis ? { bassMidis: [...e.bassMidis] } : {}),
+        ...(e.label !== undefined ? { label: e.label } : {}),
+        ...(e.bassPc !== undefined ? { bassPc: e.bassPc } : {}),
+      });
+    } else {
+      prev.dur = Math.max(prev.dur, e.dur);
+      prev.midis.push(...e.midis);
+      if (e.bassMidis) prev.bassMidis = [...(prev.bassMidis ?? []), ...e.bassMidis];
+      if (prev.label === undefined && e.label !== undefined) prev.label = e.label;
+      if (prev.bassPc === undefined && e.bassPc !== undefined) prev.bassPc = e.bassPc;
+    }
+  }
+
+  const events: ScoreEvent[] = [...byBeat.values()]
     .sort((a, b) => a.beat - b.beat)
-    .map((e) => ({
-      beat: Math.round(e.beat * 1000) / 1000,
-      dur: e.dur,
-      midis: [...e.midis].sort((a, b) => a - b),
-      spelled: e.midis.map((m) => spellInKey(m, sig)),
-      ...(e.label !== undefined ? { label: e.label } : {}),
-      ...(e.bassPc !== undefined ? { bassPc: e.bassPc } : {}),
-    }));
+    .map((e) => {
+      const midis = [...e.midis].sort((a, b) => a - b);
+      const bassMidis = [...(e.bassMidis ?? [])].sort((a, b) => a - b);
+      return {
+        beat: e.beat,
+        dur: e.dur,
+        midis,
+        spelled: midis.map((m) => spellInKey(m, sig)),
+        bassMidis,
+        bassSpelled: bassMidis.map((m) => spellInKey(m, sig)),
+        ...(e.label !== undefined ? { label: e.label } : {}),
+        ...(e.bassPc !== undefined ? { bassPc: e.bassPc } : {}),
+      };
+    });
   const last = events[events.length - 1];
   const beatsPerBar = opts.beatsPerBar ?? 4;
   const end = last ? last.beat + last.dur : 0;
@@ -102,6 +151,7 @@ export function buildScore(raw: readonly RawEvent[], opts: BuildScoreOpts): Scor
     id: opts.id,
     title: opts.title,
     stage: opts.stage,
+    ...(opts.level !== undefined ? { level: opts.level } : {}),
     keyPc: opts.keyPc,
     tonality,
     sig,
@@ -114,12 +164,12 @@ export function buildScore(raw: readonly RawEvent[], opts: BuildScoreOpts): Scor
   };
 }
 
-/** 谱面音域（忽略休止符）；空谱返回 null */
+/** 谱面音域（忽略休止符，含左手）；空谱返回 null */
 export function scoreRange(score: Score): { lo: number; hi: number } | null {
   let lo = Infinity;
   let hi = -Infinity;
   for (const e of score.events) {
-    for (const m of e.midis) {
+    for (const m of allMidisOf(e)) {
       if (m < lo) lo = m;
       if (m > hi) hi = m;
     }
@@ -151,24 +201,27 @@ export interface JudgeStats {
 /**
  * 判定会话：跟随用户弹奏推进谱面。
  * 音符进出都上报；会话只关心「当前目标」，命中推进、错音记 miss。
- * 演奏模式（带伴奏按时间走）由 main 调 advanceTime() 强推，未命中的目标记 missed。
+ *   exact —— 目标是一组精确音高（单手单音，或双手事件的 2-3 个音），
+ *            先后按下（滚奏）也算凑齐；多余的音记 miss 不打断
+ *   chord —— 目标是一组音高类，任意八度凑齐即命中
+ * 演奏模式（带伴奏按时间走）由 main 调 advanceMissed() 强推，未命中的目标记 missed。
  */
 export class JudgeSession {
   private readonly score: Score;
   private readonly mode: JudgeMode;
   /** 当前目标下标（始终指向非休止事件；越界 = 弹完） */
   private idx = 0;
-  /** chord 模式：当前目标已按下的音高类 */
+  /** 当前目标已按中的音：exact 存精确 MIDI，chord 存音高类 */
   private matched = new Set<number>();
   /** 统计 */
   private s = { hits: 0, misses: 0, combo: 0, maxCombo: 0, progressed: 0, total: 0, done: false };
-  /** exact 模式同音连弹去重：命中后要求先松掉该音再算下一次 */
-  private awaitRelease: number | null = null;
+  /** exact 模式：刚命中的那组音，要求先松掉再算下一次（同音连弹去重） */
+  private awaitRelease = new Set<number>();
 
   constructor(score: Score, mode: JudgeMode) {
     this.score = score;
     this.mode = mode;
-    this.s.total = score.events.filter((e) => e.midis.length > 0).length;
+    this.s.total = score.events.filter((e) => allMidisOf(e).length > 0).length;
     this.skipRests();
   }
 
@@ -192,14 +245,20 @@ export class JudgeSession {
     if (!ev) return { type: 'ignore' };
 
     if (this.mode === 'exact') {
-      const target = ev.midis[0];
-      if (target === undefined) return { type: 'ignore' };
-      if (this.awaitRelease === midi) return { type: 'ignore' };
-      if (midi === target) {
-        const hitIdx = this.idx;
-        this.registerHit(ev);
-        this.awaitRelease = midi;
-        return { type: 'hit', event: ev, index: hitIdx };
+      if (this.awaitRelease.has(midi)) return { type: 'ignore' };
+      const targets = new Set(allMidisOf(ev));
+      if (!targets.size) return { type: 'ignore' };
+      if (targets.has(midi)) {
+        if (this.matched.has(midi)) return { type: 'ignore' };
+        this.matched.add(midi);
+        if (this.matched.size >= targets.size) {
+          const hitIdx = this.idx;
+          this.registerHit(ev);
+          this.awaitRelease = new Set(targets);
+          this.matched.clear();
+          return { type: 'hit', event: ev, index: hitIdx };
+        }
+        return { type: 'ignore' };
       }
       this.registerMiss();
       return { type: 'miss', midi };
@@ -224,9 +283,9 @@ export class JudgeSession {
 
   /** 松开 */
   feedOff(midi: number): void {
-    if (this.awaitRelease === midi) this.awaitRelease = null;
-    // chord 模式刻意不清理已匹配音：和弦是一个个音先后按下的
-    // （滚奏/分解输入在跟弹模式同样算数），凑齐即过、错音只记 miss
+    this.awaitRelease.delete(midi);
+    // chord/exact 的 matched 都刻意不随松键清理：和弦与双手音都是先后按下的
+    // （滚奏输入在跟弹模式同样算数），凑齐即过、错音只记 miss
   }
 
   /**
@@ -264,7 +323,7 @@ export class JudgeSession {
   private skipRests(): void {
     while (this.idx < this.score.events.length) {
       const ev = this.score.events[this.idx]!;
-      if (ev.midis.length > 0) return;
+      if (allMidisOf(ev).length > 0) return;
       this.idx++;
     }
     this.s.done = true;

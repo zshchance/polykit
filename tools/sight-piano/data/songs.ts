@@ -1,231 +1,163 @@
 /**
- * 识谱琴房 —— 内置曲库（策展数据）。
+ * 识谱琴房 —— 内置曲库总装。
  *
- * 三个阶段共用一份 Score 模型，但来源不同：
- *   识谱（read）  —— 手写数字简谱字符串，经自家 jianpu 解析器构建
- *                    （曲库即解析器的狗粮测试）。按调性难度分组：
- *                    C（无升降）→ G（1♯）→ F（1♭）→ D（2♯）→ 降B（2♭），
- *                    这正是视奏教学里调号的经典引入顺序。
- *   和弦（chord） —— 经典走向在当前调下的整小节和弦块（全音符堆叠），
- *                    就近 voicing 平滑连接
- *   琶音（arp）   —— 走向 × 琶音模式展开成八分音符流
+ * 三个阶段的曲目来源：
+ *   识谱（read）  —— 旋律库（48 首策展简谱）+ 练习曲工坊（程序化训练条）
+ *                    + 双手改编（arrange.ts 自动配左手的大谱表版本）
+ *   和弦（chord） —— 走向素材 × 10 个调，整小节和弦块就近 voicing 连接
+ *   琶音（arp）   —— 走向 × 琶音织体 × 调，八分/十六分音符流
+ * 每首都带 level（1 入门 / 2 进阶 / 3 挑战），LCD 难度页签据此二级分类；
+ * 分组（group）按调性自动命名，呼应视奏教学的调号爬坡路径。
  */
 
 import { parseJianpu, type ParsedSheet } from '../parsers/jianpu';
 import { buildScore, type RawEvent, type Score, type Stage } from '../score';
 import {
+  keyDisplayName,
+  keyFifths,
   nearestVoicing,
   stepChordName,
   stepLabel,
   stepQuality,
   stepRootPc,
   QUALITY_MAP,
-  type ProgStep,
+  TONALITY_LABEL,
   type Tonality,
 } from '../theory';
+import { PROGS, type ProgDef } from './progs';
+import { MELODIES, MELODY_MAP, type MelodySeed } from './melodies';
+import { buildEtudes, type EtudeSeed } from './etudes';
+import { arrangeLeftHand, ARRANGE_LABEL, type ArrangeStyle } from './arrange';
 
-// ───────────── 识谱曲目（数字简谱） ─────────────
+// ───────────── 分组命名（调号爬坡：C → G/F → D/降B → 更多） ─────────────
 
-interface SongSeed {
-  id: string;
-  title: string;
-  /** 数字简谱（含 1=X 调号 / 拍号 / 速度头） */
-  jianpu: string;
-  group: string;
-  /** 一句学习提示（选曲后显示在读数区） */
-  tip: string;
+function keyGroupName(keyPc: number, tonality: Tonality): string {
+  const fifths = keyFifths(keyPc, tonality);
+  const n = Math.abs(fifths);
+  const acc = n === 0 ? '无升降号' : fifths > 0 ? `${n} 个升号` : `${n} 个降号`;
+  return `${keyDisplayName(keyPc, tonality)} ${TONALITY_LABEL[tonality]} · ${acc}`;
 }
 
-const READ_SONGS: readonly SongSeed[] = [
-  // ── C 大调 · 无升降号：先认熟中央 C 附近的音 ──
-  {
-    id: 'twinkle',
-    title: '小星星',
-    group: 'C 大调 · 无升降号',
-    jianpu: `1=C 4/4 ♩=92
-1 1 5 5 | 6 6 5 - | 4 4 3 3 | 2 2 1 - |
-5 5 4 4 | 3 3 2 - | 5 5 4 4 | 3 3 2 - |
-1 1 5 5 | 6 6 5 - | 4 4 3 3 | 2 2 1 - |`,
-    tip: '全是白键。先找中央 C（两个黑键左边的白键），跟着 1→5 的五度跳进熟悉线间关系。',
-  },
-  {
-    id: 'mary',
-    title: '玛丽有只小羊羔',
-    group: 'C 大调 · 无升降号',
-    jianpu: `1=C 4/4 ♩=100
-3 2 1 2 | 3 3 3 - | 2 2 2 - | 3 5 5 - |
-3 2 1 2 | 3 3 3 3 | 2 2 3 2 | 1 - - - |`,
-    tip: '只有 1 2 3 5 四个音。注意 3→2→1 的级进下行，是视奏里最常见的形状。',
-  },
-  {
-    id: 'ode',
-    title: '欢乐颂',
-    group: 'C 大调 · 无升降号',
-    jianpu: `1=C 4/4 ♩=104
-3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 3 2_ 2_ 2 - |
-3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 2 1_ 1_ 1 - |
-2 2 3 1 | 2 3_ 4_ 3 1 | 2 3_ 4_ 3 2 | 1 2 5, - |
-3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 2 1_ 1_ 1 - |`,
-    tip: '贝多芬的旋律几乎全是级进。注意第 4 小节出现的八分音符（带符尾），时值减半。',
-  },
-  {
-    id: 'jingle',
-    title: '铃儿响叮当',
-    group: 'C 大调 · 无升降号',
-    jianpu: `1=C 4/4 ♩=108
-3 3 3 - | 3 3 3 - | 3 5 1 2 | 3 - - - |
-4 4 4 4 | 4 4 3 3 | 3 3 3 2 | 2 5 2 - |
-3 3 3 - | 3 3 3 - | 3 5 1 2 | 3 - - - |
-4 4 4 4 | 4 4 3 3 | 5 5 4 2 | 1 - - - |`,
-    tip: '同音反复 + 级进的组合。三个连着的 3 在同一线上，手不动、指头来。',
-  },
-  {
-    id: 'farewell',
-    title: '送别',
-    group: 'C 大调 · 无升降号',
-    jianpu: `1=C 4/4 ♩=84
-5 3 5 1' | 6 1' 5 - | 5 1 2 3 | 2 1 2 - |
-5 3 5 1' | 6 1' 5 - | 5 1 2 3 | 2 3 1 - |`,
-    tip: '出现高音 1′（上加线的音）。谱面往上加线，键盘也往上挪——指示条会跟着你。',
-  },
-  {
-    id: 'firefly',
-    title: '虫儿飞',
-    group: 'C 大调 · 无升降号',
-    jianpu: `1=C 4/4 ♩=88
-3 3 3 2 | 1 2 1 - | 6, 6, 6, 5, | 1 6, - - |
-3 3 4 5 | 4 3 2 - | 1 2 3 2 | 1 - - - |`,
-    tip: '带低音逗号（6, 5,）的音在谱表下方加线。练习低音区的识谱定位。',
-  },
-  // ── G 大调 · 一个升号：F♯ 上线 ──
-  {
-    id: 'rowboat',
-    title: '划小船',
-    group: 'G 大调 · 一个升号',
-    jianpu: `1=G 4/4 ♩=104
-1 1 1 2 | 3 - 3 2 | 3 4 5 - |
-1' 1' 5 5 | 3 3 1 1 | 5 - 4 - | 3 - 2 - | 1 - - - |`,
-    tip: '调号多了一个 ♯（F♯）。本曲没用到它，但谱号旁的 ♯ 已经在提醒你：这不是 C 大调。',
-  },
-  {
-    id: 'birthday',
-    title: '生日歌',
-    group: 'G 大调 · 一个升号',
-    jianpu: `1=G 3/4 ♩=120
-5_ 5_ | 6 5 1' | 7 - 5_ 5_ | 6 5 2' | 1' - 5_ 5_ |
-5' 3' 1' | 7 6 4_ 4_ | 3' 1' 2' | 1' - - |`,
-    tip: '三拍子 + 弱起小节。7 在 G 大调里是 F♯——琴键上它右边的黑键，谱面上它还是写在 F 的线上。',
-  },
-  // ── F 大调 · 一个降号：B♭ 上线 ──
-  {
-    id: 'twinkle-f',
-    title: '小星星（F 调）',
-    group: 'F 大调 · 一个降号',
-    jianpu: `1=F 4/4 ♩=92
-1 1 5 5 | 6 6 5 - | 4 4 3 3 | 2 2 1 - |
-5 5 4 4 | 3 3 2 - | 5 5 4 4 | 3 3 2 - |
-1 1 5 5 | 6 6 5 - | 4 4 3 3 | 2 2 1 - |`,
-    tip: '熟悉的旋律换了个家。4 现在是 B♭——弹黑键，但谱面上音符还在 B 的线上，记号藏在谱号里。',
-  },
-  {
-    id: 'ode-f',
-    title: '欢乐颂（F 调）',
-    group: 'F 大调 · 一个降号',
-    jianpu: `1=F 4/4 ♩=104
-3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 3 2_ 2_ 2 - |
-3 3 4 5 | 5 4 3 2 | 1 1 2 3 | 2 1_ 1_ 1 - |`,
-    tip: '第 1 小节就有 4（B♭）。看谱时先想调号里降了谁，手指就不会找错白键。',
-  },
-  // ── D 大调 · 两个升号 ──
-  {
-    id: 'canon-d',
-    title: '卡农主题（简化）',
-    group: 'D 大调 · 两个升号',
-    jianpu: `1=D 4/4 ♩=96
-3 2 1 7 | 6, 5, 6, 7 | 1 7 6, 5, | 4, 3, 4, 2, |
-1 - 3 2 | 1 7 6, 7 | 1 2 3 2 | 1 - - - |`,
-    tip: '帕赫贝尔的原调。F♯ 和 C♯ 两个升号都在调号里，下行的低音线条像台阶一样好认。',
-  },
-  // ── 降 B 大调 · 两个降号 ──
-  {
-    id: 'edelweiss-bb',
-    title: '雪绒花（降 B 调）',
-    group: '降 B 大调 · 两个降号',
-    jianpu: `1=Bb 3/4 ♩=92
-3 - 5 | 2 - 1 | 5 - 3 | 3 4 5 | 5 - 5 |
-3 - 5 | 2 - 1 | 5 6 7 | 1' - - |`,
-    tip: '三拍子的摇曳感。B♭ 和 E♭ 都降了，看到 4 和 7 的邻居时先想调号。',
-  },
-  {
-    id: 'moon-bb',
-    title: '月亮代表我的心（简化）',
-    group: '降 B 大调 · 两个降号',
-    jianpu: `1=Bb 4/4 ♩=84
-3 2 1 2 | 3 5 3 - | 2 1 6, 5, | 6, 1, - - |
-3 2 1 2 | 3 5 3 - | 2 1 6, 5, | 1 - - - |`,
-    tip: '长音多，适合开节拍器练稳定。两个降号的调号读法和降 B 雪绒花互相印证。',
-  },
-];
+// ───────────── 识谱：旋律 / 练习曲 / 双手 ─────────────
 
-// ───────────── 和弦走向 / 琶音的素材 ─────────────
-
-interface ProgDef {
-  id: string;
-  name: string;
-  steps: readonly ProgStep[];
-  /** 一句话听感 */
-  desc: string;
+function jianpuToScore(
+  parsed: ParsedSheet,
+  opts: { id: string; title: string; level: 1 | 2 | 3; bpm?: number },
+): Score {
+  return buildScore(
+    parsed.events.map((e) => ({ beat: e.beat, dur: e.dur, midis: e.midi === null ? [] : [e.midi] })),
+    {
+      id: opts.id,
+      title: opts.title,
+      stage: 'read',
+      level: opts.level,
+      keyPc: parsed.keyPc ?? 0,
+      tonality: parsed.tonality,
+      beatsPerBar: parsed.beatsPerBar,
+      beatUnit: parsed.beatUnit,
+      bpm: opts.bpm ?? parsed.bpm,
+      group: keyGroupName(parsed.keyPc ?? 0, parsed.tonality),
+    },
+  );
 }
 
-const PROGS: readonly ProgDef[] = [
-  {
-    id: 'p1564',
-    name: '经典流行 1564',
-    desc: 'I–V–vi–IV：流行乐万能骨架',
-    steps: [{ d: 1 }, { d: 5 }, { d: 6 }, { d: 4 }],
-  },
-  {
-    id: 'p4536',
-    name: '华语套路 4536',
-    desc: 'IV–V–iii–vi：情歌上半句标配',
-    steps: [{ d: 4 }, { d: 5 }, { d: 3 }, { d: 6 }],
-  },
-  {
-    id: 'p1645',
-    name: '黄金时代 1645',
-    desc: 'I–vi–IV–V：50 年代心跳',
-    steps: [{ d: 1 }, { d: 6 }, { d: 4 }, { d: 5 }],
-  },
-  {
-    id: 'pcanon',
-    name: '卡农走向',
-    desc: 'I–V–vi–iii–IV–I–IV–V：下行低音的治愈',
-    steps: [{ d: 1 }, { d: 5 }, { d: 6 }, { d: 3 }, { d: 4 }, { d: 1 }, { d: 4 }, { d: 5 }],
-  },
-  {
-    id: 'p6415m',
-    name: '小调抒情 6415',
-    desc: 'i–VI–III–VII：小调暗色循环',
-    steps: [{ d: 1 }, { d: 6 }, { d: 3 }, { d: 7 }],
-  },
-  {
-    id: 'p251',
-    name: '爵士归家 251',
-    desc: 'ii–V–I：两步张力一步落地',
-    steps: [{ d: 2 }, { d: 5 }, { d: 1 }],
-  },
-];
+function melodyToScore(seed: MelodySeed): Score {
+  return jianpuToScore(parseJianpu(seed.jianpu), { id: seed.id, title: seed.title, level: seed.level });
+}
 
-const PROG_MAP: ReadonlyMap<string, ProgDef> = new Map(PROGS.map((p) => [p.id, p]));
+function etudeToScore(seed: EtudeSeed): Score {
+  return buildScore(
+    seed.events.map((e) => ({ beat: e.beat, dur: e.dur, midis: e.midi === null ? [] : [e.midi] })),
+    {
+      id: seed.id,
+      title: seed.title,
+      stage: 'read',
+      level: seed.level,
+      keyPc: seed.keyPc,
+      tonality: seed.tonality,
+      beatsPerBar: seed.beatsPerBar,
+      beatUnit: seed.beatUnit,
+      bpm: seed.bpm,
+      group: `练习曲 · ${keyDisplayName(seed.keyPc, seed.tonality)} ${TONALITY_LABEL[seed.tonality]}`,
+    },
+  );
+}
+
+/** 双手改编清单：旋律 id → 织体（whole=根音长音 L2，broken/alberti=L3） */
+const TWOHAND_PLAN: Readonly<Record<string, readonly ArrangeStyle[]>> = {
+  twinkle: ['whole', 'broken'],
+  mary: ['whole', 'broken'],
+  ode: ['whole', 'broken', 'alberti'],
+  jingle: ['whole', 'broken'],
+  tigers: ['whole', 'broken'],
+  painter: ['whole', 'broken'],
+  newyear: ['whole', 'broken'],
+  london: ['whole', 'broken'],
+  macdonald: ['whole'],
+  rowboat: ['whole'],
+  birthday: ['whole', 'broken'],
+  'twinkle-f': ['whole'],
+  redriver: ['whole', 'broken'],
+  silentnight: ['whole', 'broken'],
+  susanna: ['whole', 'broken'],
+  yankee: ['broken'],
+  auldlangsyne: ['broken', 'alberti'],
+  wewish: ['broken'],
+  minuet: ['broken', 'alberti'],
+  cancan: ['broken'],
+  greensleeves: ['broken', 'alberti'],
+  scarborough: ['broken', 'alberti'],
+  farewell: ['broken'],
+  'canon-d': ['broken', 'alberti'],
+  'edelweiss-bb': ['broken'],
+  'moon-bb': ['alberti'],
+  elise: ['alberti'],
+};
+
+const TWOHAND_TIP: Record<ArrangeStyle, string> = {
+  whole: '左手登场！每小节只管按住一个低音根音，右手旋律照旧——双手的第一次分工。',
+  broken: '左手 1-5-8-5 四分分解，像钟摆一样稳。先单手练熟再合手。',
+  alberti: '古典钢琴的左手标配（低-高-中-高）。八分音符别抢拍，跟着节拍器走。',
+};
+
+function twoHandScore(seed: MelodySeed, style: ArrangeStyle): Score {
+  const parsed = parseJianpu(seed.jianpu);
+  const keyPc = parsed.keyPc ?? 0;
+  const tonality = parsed.tonality;
+  const beatsPerBar = parsed.beatsPerBar;
+  const rh: RawEvent[] = parsed.events.map((e) => ({
+    beat: e.beat,
+    dur: e.dur,
+    midis: e.midi === null ? [] : [e.midi],
+  }));
+  const last = rh[rh.length - 1];
+  const totalBeats = Math.ceil(((last?.beat ?? 0) + (last?.dur ?? 0)) / beatsPerBar) * beatsPerBar;
+  const lh = arrangeLeftHand(
+    parsed.events.filter((e) => e.midi !== null).map((e) => ({ beat: e.beat, dur: e.dur, midi: e.midi! })),
+    { keyPc, tonality, beatsPerBar, totalBeats, style },
+  );
+  const level: 1 | 2 | 3 = style === 'whole' ? 2 : 3;
+  return buildScore([...rh, ...lh], {
+    id: `${seed.id}-2h-${style}`,
+    title: `${seed.title}（${ARRANGE_LABEL[style]}）`,
+    stage: 'read',
+    level,
+    keyPc,
+    tonality,
+    beatsPerBar,
+    beatUnit: parsed.beatUnit,
+    bpm: Math.max(56, parsed.bpm - (style === 'whole' ? 8 : style === 'broken' ? 12 : 16)),
+    group: `${ARRANGE_LABEL[style]} · ${keyDisplayName(keyPc, tonality)} ${TONALITY_LABEL[tonality]}`,
+  });
+}
+
+// ───────────── 和弦走向：走向 × 调 ─────────────
 
 /** 走向 → 和弦块谱面（每小节一个和弦，就近 voicing 连接，弹两轮） */
 function buildChordScore(
-  id: string,
-  title: string,
   prog: ProgDef,
   keyPc: number,
   tonality: Tonality,
-  group: string,
   bpm: number,
 ): Score {
   const beatsPerBar = 4;
@@ -247,46 +179,56 @@ function buildChordScore(
     });
   }
   return buildScore(events, {
-    id,
-    title,
+    id: `ch-${prog.id}-${keyPc}`,
+    title: `${prog.name} · ${keyDisplayName(keyPc, tonality)} ${TONALITY_LABEL[tonality]}`,
     stage: 'chord',
+    level: prog.level,
     keyPc,
     tonality,
     beatsPerBar,
     bpm,
-    group,
+    group: keyGroupName(keyPc, tonality),
   });
 }
 
-type ArpPattern = 'up' | 'updown' | 'alberti' | 'bounce';
+// ───────────── 琶音：走向 × 织体 × 调 ─────────────
+
+type ArpPattern = 'up' | 'down' | 'updown' | 'alberti' | 'bounce' | 'swing' | 'wave' | 'run16';
 
 const ARP_NAME: Record<ArpPattern, string> = {
   up: '上行楼梯',
+  down: '下行瀑布',
   updown: '上下来回',
   alberti: '阿尔贝蒂',
   bounce: '民谣分解',
+  swing: '秋千摆动',
+  wave: '波浪环绕',
+  run16: '十六分跑动',
 };
 
-/** 模式池：把和弦三音 + 高八度根音铺成索引序列，循环取 */
+/** 模式池：把和弦三音 + 高八度根音铺成索引序列，循环取（run16 是十六分） */
 const ARP_SEQ: Record<ArpPattern, readonly number[]> = {
   up: [0, 1, 2, 3, 0, 1, 2, 3],
+  down: [3, 2, 1, 0, 3, 2, 1, 0],
   updown: [0, 1, 2, 3, 2, 1, 0, 1],
   alberti: [0, 2, 1, 2, 0, 2, 1, 2],
   bounce: [0, 1, 2, 1, 3, 1, 2, 1],
+  swing: [0, 3, 1, 3, 2, 3, 1, 3],
+  wave: [0, 1, 3, 2, 0, 1, 3, 2],
+  run16: [0, 1, 2, 3, 0, 1, 2, 3, 2, 1, 0, 1, 2, 3, 2, 1],
 };
 
-/** 走向 × 琶音模式 → 八分音符流谱面（每小节一个和弦，弹两轮） */
+/** 走向 × 琶音织体 → 音符流谱面（每小节一个和弦，弹两轮） */
 function buildArpScore(
-  id: string,
   prog: ProgDef,
   pattern: ArpPattern,
   keyPc: number,
   tonality: Tonality,
-  group: string,
   bpm: number,
 ): Score {
   const beatsPerBar = 4;
   const seq = ARP_SEQ[pattern];
+  const unit = pattern === 'run16' ? 0.25 : 0.5;
   const events: RawEvent[] = [];
   let center = 62;
   for (let round = 0; round < 2; round++) {
@@ -298,10 +240,11 @@ function buildArpScore(
       center = Math.round(voicing.reduce((a, b) => a + b, 0) / voicing.length);
       const pool = [...voicing, voicing[0]! + 12];
       const barBeat = (round * prog.steps.length + i) * beatsPerBar;
-      for (let s = 0; s < beatsPerBar * 2; s++) {
+      const stepsInBar = Math.round(beatsPerBar / unit);
+      for (let s = 0; s < stepsInBar; s++) {
         events.push({
-          beat: barBeat + s * 0.5,
-          dur: 0.5,
+          beat: barBeat + s * unit,
+          dur: unit,
           midis: [pool[seq[s % seq.length]!]!],
           ...(s === 0
             ? { label: stepChordName(keyPc, tonality, st), bassPc: rootPc }
@@ -311,101 +254,132 @@ function buildArpScore(
     });
   }
   return buildScore(events, {
-    id,
-    title: `${prog.name} · ${ARP_NAME[pattern]}`,
+    id: `arp-${prog.id}-${pattern}-${keyPc}`,
+    title: `${prog.name} · ${ARP_NAME[pattern]}（${keyDisplayName(keyPc, tonality)}）`,
     stage: 'arp',
+    level: prog.level,
     keyPc,
     tonality,
     beatsPerBar,
     bpm,
-    group,
+    group: `${ARP_NAME[pattern]} · ${keyDisplayName(keyPc, tonality)} ${TONALITY_LABEL[tonality]}`,
   });
 }
 
 // ───────────── 曲库总装 ─────────────
-
-function jianpuToScore(seed: SongSeed): Score {
-  const parsed: ParsedSheet = parseJianpu(seed.jianpu);
-  return buildScore(
-    parsed.events.map((e) => ({ beat: e.beat, dur: e.dur, midis: e.midi === null ? [] : [e.midi] })),
-    {
-      id: seed.id,
-      title: seed.title,
-      stage: 'read',
-      keyPc: parsed.keyPc ?? 0,
-      tonality: parsed.tonality,
-      beatsPerBar: parsed.beatsPerBar,
-      beatUnit: parsed.beatUnit,
-      bpm: parsed.bpm,
-      group: seed.group,
-    },
-  );
-}
 
 export interface BuiltinSong {
   score: Score;
   tip: string;
 }
 
+/** 大调走向的 10 个调（五度圈两侧铺开，调号逐步加码） */
+const MAJOR_KEYS = [0, 7, 5, 2, 10, 9, 3, 4, 8, 1] as const;
+/** 小调走向的 10 个调 */
+const MINOR_KEYS = [9, 4, 2, 11, 6, 7, 0, 5, 10, 3] as const;
+
 function readSongs(): BuiltinSong[] {
-  return READ_SONGS.map((seed) => {
-    const score = jianpuToScore(seed);
-    return { score, tip: seed.tip };
-  });
+  const out: BuiltinSong[] = [];
+  for (const seed of MELODIES) {
+    out.push({ score: melodyToScore(seed), tip: seed.tip });
+  }
+  for (const seed of buildEtudes()) {
+    out.push({ score: etudeToScore(seed), tip: seed.tip });
+  }
+  for (const [id, styles] of Object.entries(TWOHAND_PLAN)) {
+    const seed = MELODY_MAP.get(id);
+    if (!seed) continue;
+    for (const style of styles) {
+      out.push({ score: twoHandScore(seed, style), tip: TWOHAND_TIP[style] });
+    }
+  }
+  out.sort((a, b) => (a.score.level ?? 2) - (b.score.level ?? 2));
+  return out;
 }
 
 function chordSongs(): BuiltinSong[] {
-  return [
-    {
-      score: buildChordScore('c-canon', '卡农走向（C 大调）', PROG_MAP.get('pcanon')!, 0, 'major', '经典走向', 72),
-      tip: '跟着谱面每小节按齐三和弦。低音线 C-B-A-G-F-E-F-G 一路下行再回家。',
-    },
-    {
-      score: buildChordScore('c-1564', '经典流行（C 大调）', PROG_MAP.get('p1564')!, 0, 'major', '经典走向', 76),
-      tip: 'I–V–vi–IV。弹完一轮注意情绪：明朗 → 推开 → 怀念 → 落地。',
-    },
-    {
-      score: buildChordScore('g-1645', '黄金时代（G 大调）', PROG_MAP.get('p1645')!, 7, 'major', '经典走向', 76),
-      tip: 'G 大调里 vi 是 Em。同一个走向换个调，手感和色彩都变了。',
-    },
-    {
-      score: buildChordScore('c-4536', '华语套路（C 大调）', PROG_MAP.get('p4536')!, 0, 'major', '经典走向', 72),
-      tip: 'IV–V–iii–vi：悬在半空的期待感，华语情歌的上半句。',
-    },
-    {
-      score: buildChordScore('am-6415', '小调抒情（A 小调）', PROG_MAP.get('p6415m')!, 9, 'minor', '小调色彩', 72),
-      tip: '小调版 6415：i–VI–III–VII。暗色循环，适合配圆舞曲或民谣节奏。',
-    },
-    {
-      score: buildChordScore('c-251', '爵士归家（C 大调）', PROG_MAP.get('p251')!, 0, 'major', '小调色彩', 84),
-      tip: 'ii–V–I 只有三小节一轮，张力在最后一拍落地的满足感最强。',
-    },
-  ];
+  const out: BuiltinSong[] = [];
+  const bpmOf = (level: number): number => (level === 1 ? 66 : level === 2 ? 76 : 88);
+  for (const prog of PROGS) {
+    const keys = prog.minor ? MINOR_KEYS : MAJOR_KEYS;
+    const tonality: Tonality = prog.minor ? 'minor' : 'major';
+    for (const keyPc of keys) {
+      out.push({
+        score: buildChordScore(prog, keyPc, tonality, bpmOf(prog.level)),
+        tip: `${prog.desc}。跟着谱面每小节按齐三和弦，听根音（贝斯）的走向。`,
+      });
+    }
+  }
+  out.sort((a, b) => (a.score.level ?? 2) - (b.score.level ?? 2));
+  return out;
 }
 
+const ARP_L1 = {
+  patterns: ['up', 'down', 'updown'] as const,
+  progs: ['p1564', 'p1645', 'p6415', 'p6451'],
+  keys: [0, 7, 5, 2, 10] as const,
+};
+const ARP_L2 = {
+  patterns: ['alberti', 'bounce', 'swing'] as const,
+  progs: ['p4536', 'pcanon', 'p1625', 'p4365'],
+  keys: [0, 7, 5, 9, 3] as const,
+};
+const ARP_L3_MAJOR = {
+  patterns: ['wave', 'run16'] as const,
+  progs: ['p4536251', 'pepic', 'pblues'],
+  keys: [0, 7, 2, 9, 5] as const,
+};
+const ARP_L3_MINOR = {
+  patterns: ['wave', 'run16'] as const,
+  progs: ['pm6415', 'pm1645'],
+  keys: [9, 4, 2, 11, 7] as const,
+};
+
 function arpSongs(): BuiltinSong[] {
-  return [
-    {
-      score: buildArpScore('arp-canon', PROG_MAP.get('pcanon')!, 'updown', 0, 'major', '卡农与流行', 76),
-      tip: '上下来回型：低-中-高-中。稳住八分音符的均匀，伴奏会跟着你走。',
-    },
-    {
-      score: buildArpScore('arp-1564', PROG_MAP.get('p1564')!, 'up', 0, 'major', '卡农与流行', 80),
-      tip: '上行楼梯型：一拍一阶往上爬，到顶回到根音。试试搭配流行八拍伴奏。',
-    },
-    {
-      score: buildArpScore('arp-4536', PROG_MAP.get('p4536')!, 'bounce', 5, 'major', '卡农与流行', 76),
-      tip: 'F 大调的民谣分解。根音和五音之间的弹跳是民谣伴奏的骨架。',
-    },
-    {
-      score: buildArpScore('arp-am', PROG_MAP.get('p6415m')!, 'alberti', 9, 'minor', '小调色彩', 72),
-      tip: '阿尔贝蒂低音（低-高-中-高）是古典钢琴左手最经典的伴奏型。',
-    },
-    {
-      score: buildArpScore('arp-251', PROG_MAP.get('p251')!, 'alberti', 0, 'major', '小调色彩', 88),
-      tip: 'ii–V–I 配摇摆伴奏，三轮下来就有爵士钢琴的味道了。',
-    },
-  ];
+  const out: BuiltinSong[] = [];
+  const progOf = (id: string): ProgDef => PROGS.find((p) => p.id === id)!;
+  for (const pattern of ARP_L1.patterns) {
+    for (const pid of ARP_L1.progs) {
+      for (const keyPc of ARP_L1.keys) {
+        out.push({
+          score: buildArpScore(progOf(pid), pattern, keyPc, 'major', 72),
+          tip: `${ARP_NAME[pattern]}型八分音符。稳住均匀，伴奏会跟着你走。`,
+        });
+      }
+    }
+  }
+  for (const pattern of ARP_L2.patterns) {
+    for (const pid of ARP_L2.progs) {
+      for (const keyPc of ARP_L2.keys) {
+        out.push({
+          score: buildArpScore(progOf(pid), pattern, keyPc, 'major', 80),
+          tip: `${ARP_NAME[pattern]}型：先哼出 pattern 的轮廓再上手，注意和弦切换的小节线。`,
+        });
+      }
+    }
+  }
+  for (const pattern of ARP_L3_MAJOR.patterns) {
+    for (const pid of ARP_L3_MAJOR.progs) {
+      for (const keyPc of ARP_L3_MAJOR.keys) {
+        out.push({
+          score: buildArpScore(progOf(pid), pattern, keyPc, 'major', pattern === 'run16' ? 64 : 92),
+          tip: `${ARP_NAME[pattern]}型挑战：慢练是唯一的捷径，先跟弹再演奏。`,
+        });
+      }
+    }
+  }
+  for (const pattern of ARP_L3_MINOR.patterns) {
+    for (const pid of ARP_L3_MINOR.progs) {
+      for (const keyPc of ARP_L3_MINOR.keys) {
+        out.push({
+          score: buildArpScore(progOf(pid), pattern, keyPc, 'minor', pattern === 'run16' ? 64 : 92),
+          tip: `小调的${ARP_NAME[pattern]}：暗色织体，适合配圆舞曲或民谣节奏。`,
+        });
+      }
+    }
+  }
+  out.sort((a, b) => (a.score.level ?? 2) - (b.score.level ?? 2));
+  return out;
 }
 
 export const BUILTIN_SONGS: Record<Stage, BuiltinSong[]> = {

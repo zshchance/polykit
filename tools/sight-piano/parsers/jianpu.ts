@@ -30,6 +30,8 @@ export interface ParsedSheet {
 
 const LETTER_PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 const MAJOR_OFFSETS = [0, 2, 4, 5, 7, 9, 11] as const;
+/** 自然小调音级（1=Am 时唱名相对小调主音） */
+const MINOR_OFFSETS = [0, 2, 3, 5, 7, 8, 10] as const;
 
 /** 主音落点：让「1」落在中央 C 附近（55–67 之间取最接近 C4 的） */
 function tonicMidi(keyPc: number): number {
@@ -49,6 +51,7 @@ function tonicMidi(keyPc: number): number {
 export function parseJianpu(text: string): ParsedSheet {
   const warnings: string[] = [];
   let keyPc: number | null = null;
+  let tonality: 'major' | 'minor' = 'major';
   let beatsPerBar = 4;
   let beatUnit = 4;
   let bpm = 96;
@@ -62,11 +65,13 @@ export function parseJianpu(text: string): ParsedSheet {
     if (!line) continue;
 
     // 头部记号（整行都是头部时吃掉，混排则在音符扫描时识别）
-    const keyMatch = line.match(/(?:^|\s)1\s*=\s*([A-Ga-g])([#b♯♭]?)(?=\s|$)/);
+    // 1=C 大调；1=Am 小调（唱名相对小调主音，音级走自然小调）
+    const keyMatch = line.match(/(?:^|\s)1\s*=\s*([A-Ga-g])([#b♯♭]?)(m?)(?=\s|$)/);
     if (keyMatch) {
       const base = LETTER_PC[keyMatch[1]!.toUpperCase()]!;
       const acc = keyMatch[2];
       keyPc = (base + (acc === '#' || acc === '♯' ? 1 : acc === 'b' || acc === '♭' ? -1 : 0) + 12) % 12;
+      if (keyMatch[3] === 'm') tonality = 'minor';
     }
     const timeMatch = line.match(/(?:^|\s)([1-9])\s*\/\s*([248])(?=\s|$)/);
     if (timeMatch) {
@@ -85,6 +90,7 @@ export function parseJianpu(text: string): ParsedSheet {
   }
 
   const tonic = tonicMidi(keyPc ?? 0);
+  const offsets = tonality === 'minor' ? MINOR_OFFSETS : MAJOR_OFFSETS;
   const events: ParsedSheet['events'] = [];
   let cursor = 0;
 
@@ -134,7 +140,7 @@ export function parseJianpu(text: string): ParsedSheet {
       dur = Math.round(dur * 1000) / 1000;
 
       const midi =
-        degree === 0 ? null : tonic + MAJOR_OFFSETS[degree - 1]! + acc + octaveShift;
+        degree === 0 ? null : tonic + offsets[degree - 1]! + acc + octaveShift;
       events.push({ beat: Math.round(cursor * 1000) / 1000, dur, midi });
       cursor += dur;
     }
@@ -147,5 +153,5 @@ export function parseJianpu(text: string): ParsedSheet {
     throw new Error('谱面太长了（超过 800 个记号），请截取一个段落导入');
   }
 
-  return { title, keyPc, tonality: 'major', beatsPerBar, beatUnit, bpm, events, warnings };
+  return { title, keyPc, tonality, beatsPerBar, beatUnit, bpm, events, warnings };
 }

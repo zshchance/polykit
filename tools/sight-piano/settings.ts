@@ -12,6 +12,7 @@
 
 import { readJSON, writeJSON } from '@/core/utils/storage';
 import type { Stage } from './score';
+import type { Tonality } from './theory';
 
 const STORAGE_KEY = 'sight-piano:state';
 const CURRENT_VERSION = 1;
@@ -45,6 +46,8 @@ export interface LabState {
   stage: Stage;
   /** 各阶段最后选中的曲目 id */
   songId: Record<Stage, string>;
+  /** 各阶段难度页签（1 入门 / 2 进阶 / 3 挑战） */
+  level: Record<Stage, 1 | 2 | 3>;
   keyCount: 25 | 32;
   windowStart: number;
   mode: PracticeMode;
@@ -56,6 +59,9 @@ export interface LabState {
   pedalOn: boolean;
   /** 当前目标音的键盘引导（犹豫提示之外的常亮引导） */
   keyGuide: boolean;
+  /** 自由弹奏实时谱面的调号（用户自选，可被记忆） */
+  freeKeyPc: number;
+  freeTonality: Tonality;
   progress: Record<string, SongProgress>;
   imported: ImportedSong[];
   /** 最后一次导入的曲目 id（刷新后自动选中） */
@@ -69,7 +75,8 @@ export function clampWindow(start: number, keyCount: 25 | 32): number {
 export function defaultState(): LabState {
   return {
     stage: 'read',
-    songId: { read: 'twinkle', chord: 'c-canon', arp: 'arp-canon' },
+    songId: { read: 'twinkle', chord: 'ch-pcanon-0', arp: 'arp-pcanon-updown-0' },
+    level: { read: 1, chord: 1, arp: 1 },
     keyCount: 32,
     windowStart: 48, // C3 起，32 键覆盖 C3–G5
     mode: 'wait',
@@ -79,6 +86,8 @@ export function defaultState(): LabState {
     bandVolume: 0.7,
     pedalOn: false,
     keyGuide: true,
+    freeKeyPc: 0,
+    freeTonality: 'major',
     progress: {},
     imported: [],
     lastImportedId: null,
@@ -139,6 +148,8 @@ export function loadState(): LabState {
 
   const keyCount: 25 | 32 = parsed.keyCount === 25 ? 25 : 32;
   const songIdRaw = parsed.songId as Record<string, unknown> | undefined;
+  const levelRaw = parsed.level as Record<string, unknown> | undefined;
+  const healLevel = (v: unknown): 1 | 2 | 3 => (v === 1 || v === 2 || v === 3 ? v : 1);
 
   return {
     stage: STAGES.includes(parsed.stage as Stage) ? (parsed.stage as Stage) : def.stage,
@@ -146,6 +157,11 @@ export function loadState(): LabState {
       read: typeof songIdRaw?.read === 'string' ? songIdRaw.read : def.songId.read,
       chord: typeof songIdRaw?.chord === 'string' ? songIdRaw.chord : def.songId.chord,
       arp: typeof songIdRaw?.arp === 'string' ? songIdRaw.arp : def.songId.arp,
+    },
+    level: {
+      read: healLevel(levelRaw?.read),
+      chord: healLevel(levelRaw?.chord),
+      arp: healLevel(levelRaw?.arp),
     },
     keyCount,
     windowStart:
@@ -168,6 +184,11 @@ export function loadState(): LabState {
         : def.bandVolume,
     pedalOn: typeof parsed.pedalOn === 'boolean' ? parsed.pedalOn : def.pedalOn,
     keyGuide: typeof parsed.keyGuide === 'boolean' ? parsed.keyGuide : def.keyGuide,
+    freeKeyPc:
+      typeof parsed.freeKeyPc === 'number' && Number.isInteger(parsed.freeKeyPc)
+        ? Math.min(11, Math.max(0, parsed.freeKeyPc))
+        : def.freeKeyPc,
+    freeTonality: parsed.freeTonality === 'minor' ? 'minor' : 'major',
     progress: healProgress(parsed.progress),
     imported: healImported(parsed.imported),
     lastImportedId: typeof parsed.lastImportedId === 'string' ? parsed.lastImportedId : null,

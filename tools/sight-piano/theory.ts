@@ -265,6 +265,52 @@ export function chordName(rootPc: number, quality: ChordQualityId): string {
   return `${pcName(rootPc)}${QUALITY_MAP.get(quality)!.suffix}`;
 }
 
+const QUALITY_CN: Record<ChordQualityId, string> = {
+  maj: '大三和弦',
+  min: '小三和弦',
+  dim: '减三和弦',
+  aug: '增三和弦',
+  '7': '属七和弦',
+  maj7: '大七和弦',
+  m7: '小七和弦',
+  sus2: '挂二和弦',
+  sus4: '挂四和弦',
+};
+
+/**
+ * 认和弦：给定一组按下的音高（MIDI），找出精确匹配的三/四和弦。
+ * 返回「C 大三和弦」这样的人话名字；最低音不是根音时标注转位（C/E）。
+ * 先按「最低音 = 根音」找（C F G 低 C 是 C 挂四而不是 F 挂二），
+ * 找不到再放宽到任意根音（转位）；认不出来返回 null。
+ */
+export function detectChordName(midis: readonly number[]): string | null {
+  const pcs = pcSetOf(midis);
+  if (pcs.length < 3 || pcs.length > 4) return null;
+  const order: ChordQualityId[] = ['maj', 'min', 'dim', 'aug', 'sus2', 'sus4', '7', 'maj7', 'm7'];
+  const lowest = pcOf(Math.min(...midis));
+
+  const tryRoot = (root: number): ChordQualityId | null => {
+    for (const q of order) {
+      const want = QUALITY_MAP.get(q)!.intervals;
+      if (want.length !== pcs.length) continue;
+      const got = new Set(want.map((i) => pcOf(root + i)));
+      if (got.size === pcs.length && pcs.every((p) => got.has(p))) return q;
+    }
+    return null;
+  };
+
+  const inversions: { root: number; q: ChordQualityId }[] = [];
+  for (const root of pcs) {
+    const q = tryRoot(root);
+    if (q) {
+      if (root === lowest) return `${pcName(root)} ${QUALITY_CN[q]}`;
+      inversions.push({ root, q });
+    }
+  }
+  const inv = inversions[0];
+  return inv ? `${pcName(inv.root)}/${pcName(lowest)} ${QUALITY_CN[inv.q]}（转位）` : null;
+}
+
 // ───────────── 走向（级数 → 和弦） ─────────────
 
 export interface ProgStep {

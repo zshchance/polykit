@@ -5,6 +5,7 @@ import {
   spellInKey,
   spelledName,
   detectKey,
+  detectChordName,
   pcOf,
   midiToFreq,
   stepRootPc,
@@ -120,5 +121,26 @@ describe('走向与 voicing', () => {
   it('midiToFreq：A4=440', () => {
     expect(midiToFreq(69)).toBeCloseTo(440, 6);
     expect(midiToFreq(60)).toBeCloseTo(261.626, 2);
+  });
+});
+
+describe('detectChordName（自由弹奏和弦识别）', () => {
+  it('三和弦原位与转位', () => {
+    expect(detectChordName([60, 64, 67])).toBe('C 大三和弦');
+    expect(detectChordName([57, 60, 64])).toBe('A 小三和弦');
+    // 转位：最低音不是根音
+    expect(detectChordName([55, 60, 64])).toBe('C/G 大三和弦（转位）');
+  });
+
+  it('七和弦与特殊三和弦', () => {
+    expect(detectChordName([62, 65, 69, 72])).toBe('D 小七和弦');
+    expect(detectChordName([59, 62, 65])).toBe('B 减三和弦');
+    expect(detectChordName([60, 65, 67])).toBe('C 挂四和弦');
+  });
+
+  it('太少/太多音或不构成和弦时返回 null', () => {
+    expect(detectChordName([60, 64])).toBeNull();
+    expect(detectChordName([60, 61, 62, 63])).toBeNull();
+    expect(detectChordName([60, 61, 62])).toBeNull();
   });
 });

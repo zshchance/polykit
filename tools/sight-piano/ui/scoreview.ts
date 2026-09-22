@@ -2,56 +2,44 @@
  * 识谱琴房 —— 五线谱卷轴渲染（手写 SVG，零依赖）。
  *
  * 一页会跟着演奏滚动的奶油色谱纸：
- *   - 谱号 + 调号（升降号按五度圈标准位置）+ 拍号 + 小节线 + 小节序号
- *   - 音符状态：墨色待弹 / 呼吸描边 = 当前目标 / 命中变绿 / 演奏模式错过的变灰红
- *   - 和弦事件画音簇（二度错开符头），八分音符同拍内连符杠，附点/加线齐全
- *   - 自动卷动：当前目标始终停在视口约 1/3 处
- *   - 错音星光：sparkle(midi) 在播放头 x × 弹错音的谱面高度 放一颗金色四角星
+ *   - 单谱表（单手曲）或大谱表（双手曲，高低音谱表 + 连谱线）
+ *   - 谱号 + 调号（两谱表各自的标准位置）+ 拍号 + 小节线 + 小节序号
+ *   - 音符状态：墨色待弹 / 琥珀呼吸 = 当前目标 / 命中变绿 / 演奏错过变灰红
+ *   - 连杠按谱表分组（同拍八分成杠、十六分双杠），附点/加线齐全
  *
- * 渲染只消费 buildScore 拼写好的 step/acc，不再算乐理。
- * 状态更新走 class 切换（CSS 过渡），不重建 SVG，动画与星光互不干扰。
+ * 滚动（本条重写的心脏）：一个 rAF 循环独占 transform——
+ *   演奏模式：播放头锁定视口 32% 处，谱面按音频时钟连续左移，
+ *             标志线与谱面同一帧更新，严格同步、速度恒定；
+ *   跟弹模式：目标变化时以临界阻尼滑过去，没有缓动重启的忽快忽慢。
+ * 错音反馈画在谱面坐标系里（fx 层在 SVG 内部，随谱面一起滚）：
+ * 在「弹的那个音」的谱面位置画幽灵音符 + 金星——弹成 C 就标在 C 上。
  */
 
-import type { Score, ScoreEvent } from '../score';
+import { isGrand, type Score, type ScoreEvent } from '../score';
 import { spellInKey, type KeySig } from '../theory';
-
-const SVG_NS = 'http://www.w3.org/2000/svg';
-
-const GAP = 10; // 线间距
-const LINE_Y0 = 118; // 最下面那条线（E4）的 y
-const STEP_E4 = 30; // E4 的绝对音级步（4*7+2）
-const BEAT_W = 36; // 每拍横向宽度
-const MEAS_PAD = 12; // 小节内左右留白
-const LEFT_PAD = 14; // 谱面左缘
-const CLEF_W = 34;
-const TIMESIG_W = 20;
-const END_PAD = 34;
-
-/** 升号在五线谱（高音谱号）上的标准位置（绝对音级步） */
-const SHARP_STEPS = [38, 35, 39, 36, 33, 37, 34] as const; // F♯5 C♯5 G♯5 D♯5 A♯4 E♯5 B♯4
-const FLAT_STEPS = [34, 37, 33, 36, 32, 35, 31] as const; // B♭4 E♭5 A♭4 D♭5 G♭4 C♭5 F♭4
-
-function yOf(step: number): number {
-  return LINE_Y0 - (step - STEP_E4) * (GAP / 2);
-}
-
-interface SvgAttrs {
-  [k: string]: string | number;
-}
-
-function se<K extends keyof SVGElementTagNameMap>(
-  tag: K,
-  attrs: SvgAttrs,
-  children: (SVGElement | Text)[] = [],
-): SVGElementTagNameMap[K] {
-  const el = document.createElementNS(SVG_NS, tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (k === 'textContent') el.appendChild(document.createTextNode(String(v)));
-    else el.setAttribute(k, String(v));
-  }
-  el.append(...children);
-  return el;
-}
+import {
+  BEAT_W,
+  CLEF_W,
+  END_PAD,
+  GAP,
+  LEFT_PAD,
+  MEAS_PAD,
+  TIMESIG_W,
+  drawClefs,
+  drawKeySig,
+  drawNoteCluster,
+  drawRest,
+  drawStaffLines,
+  drawTimeSig,
+  geomFor,
+  keySigWidth,
+  ledgerSteps,
+  se,
+  staffOfStep,
+  yOf,
+  type StaffGeom,
+  type StaffId,
+} from './staff';
 
 export type EventState = 'todo' | 'current' | 'done' | 'passed';
 
@@ -59,22 +47,24 @@ export interface ScoreView {
   el: HTMLElement;
   /** 换谱：重建整个 SVG */
   setScore(score: Score | null): void;
-  /** 设置某事件状态（current 会自动卷动谱面） */
+  /** 设置某事件状态（current 会成为平滑滚动的锚点） */
   setEventState(index: number, state: EventState): void;
   /** 全部重置为 todo */
   resetStates(): void;
-  /** 在「播放头 x × 该音谱面高度」处放一颗错音星光 */
+  /** 错音反馈：在弹错音自己的谱面位置画幽灵音符 + 星光 */
   sparkle(midi: number): void;
   /** 命中时在当前目标上放一个小的命中光圈 */
   hitPop(): void;
-  /** 演奏模式播放头（拍）；wait 模式传 null 隐藏 */
+  /** 演奏模式连续播放头（拍，音频时钟驱动）；跟弹模式传 null 隐藏 */
   setPlayhead(beat: number | null): void;
-  /** 视口宽度变化时重新对齐 */
+  /** 视口宽度变化时重新对齐（滚动循环每帧自取视口宽，这里仅兜底） */
   relayout(): void;
 }
 
 interface EvRef {
   g: SVGGElement;
+  gt: SVGGElement | null;
+  gb: SVGGElement | null;
   x: number;
   beat: number;
 }
@@ -85,21 +75,31 @@ export function createScoreView(): ScoreView {
   el.setAttribute('role', 'img');
   el.setAttribute('aria-label', '五线谱卷轴');
 
-  const fxLayer = document.createElement('div');
-  fxLayer.className = 'sp-fxlayer';
-
   let score: Score | null = null;
+  let sig: KeySig | null = null;
+  let geom: StaffGeom = geomFor(false);
   let svg: SVGSVGElement | null = null;
   let inner: SVGGElement | null = null;
+  let fxG: SVGGElement | null = null;
   let playheadLine: SVGLineElement | null = null;
   let refs: EvRef[] = [];
   let totalWidth = 0;
-  let translateX = 0;
   let currentX = 0;
-  let sig: KeySig | null = null;
+  let translateX = 0;
+  let playheadBeat: number | null = null;
+  let raf = 0;
+  let lastFrame = 0;
 
   function viewportW(): number {
     return el.clientWidth || 720;
+  }
+
+  function anchorX(): number {
+    return viewportW() * 0.32;
+  }
+
+  function clampTx(v: number): number {
+    return Math.min(0, Math.max(viewportW() - totalWidth, v));
   }
 
   function applyTranslate(): void {
@@ -107,13 +107,41 @@ export function createScoreView(): ScoreView {
     svg.style.transform = `translateX(${translateX}px)`;
   }
 
-  /** 让 x 落在视口约 32% 处 */
-  function scrollTo(x: number): void {
-    const target = Math.min(0, Math.max(viewportW() - totalWidth, viewportW() * 0.32 - x));
-    if (Math.abs(target - translateX) > 1) {
-      translateX = target;
-      applyTranslate();
+  /** 滚动主循环：演奏 = 音频时钟直出；跟弹 = 阻尼滑向目标 */
+  function frame(t: number): void {
+    if (!svg || !score) {
+      raf = 0;
+      return;
     }
+    const dt = Math.min(0.05, Math.max(0.001, (t - lastFrame) / 1000));
+    lastFrame = t;
+    if (playheadBeat !== null) {
+      const x = xOfBeat(Math.max(0, playheadBeat));
+      translateX = clampTx(anchorX() - x);
+      if (playheadLine) {
+        playheadLine.setAttribute('x1', String(x));
+        playheadLine.setAttribute('x2', String(x));
+        playheadLine.setAttribute('visibility', 'visible');
+      }
+    } else {
+      if (playheadLine) playheadLine.setAttribute('visibility', 'hidden');
+      const goal = clampTx(anchorX() - currentX);
+      translateX += (goal - translateX) * (1 - Math.exp(-dt * 6.5));
+      if (Math.abs(goal - translateX) < 0.3) translateX = goal;
+    }
+    applyTranslate();
+    raf = requestAnimationFrame(frame);
+  }
+
+  function startLoop(): void {
+    if (raf) return;
+    lastFrame = performance.now();
+    raf = requestAnimationFrame(frame);
+  }
+
+  function stopLoop(): void {
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0;
   }
 
   function xOfBeat(beat: number): number {
@@ -125,118 +153,44 @@ export function createScoreView(): ScoreView {
     return contentX + bar * measureW + MEAS_PAD + inBar * BEAT_W;
   }
 
-  function drawNote(g: SVGGElement, ev: ScoreEvent, x: number): void {
-    if (ev.midis.length === 0) {
-      // 休止符
+  function drawEvent(ev: ScoreEvent, x: number, idx: number): EvRef {
+    const g = se('g', { class: 'sp-ev', 'data-idx': idx }) as SVGGElement;
+    let gt: SVGGElement | null = null;
+    let gb: SVGGElement | null = null;
+
+    // 标签（和弦名 / 级数）在大谱表也始终放在高音谱表上方
+    if (ev.label) {
       g.append(
         se('text', {
           x,
-          y: LINE_Y0 - GAP * 2.4,
-          'font-size': 20,
-          class: 'sp-rest',
+          y: geom.trebleY0 - GAP * 4 - (geom.grand ? 14 : 6),
+          'font-size': 10.5,
+          class: 'sp-evlabel',
           'text-anchor': 'middle',
-          textContent: '𝄽',
-        }),
-      );
-      return;
-    }
-
-    const steps = ev.spelled.map((s) => s.step);
-    const hollow = ev.dur >= 2;
-    const noStem = ev.dur >= 3.5;
-    const eighth = ev.dur <= 0.75;
-
-    // 加线
-    const lineSteps = new Set<number>();
-    for (const s of steps) {
-      for (let ls = STEP_E4 + 10; ls <= s + 1; ls += 2) lineSteps.add(ls);
-      for (let ls = STEP_E4 - 2; ls >= s - 1; ls -= 2) lineSteps.add(ls);
-    }
-    for (const ls of lineSteps) {
-      g.append(
-        se('line', {
-          x1: x - 10,
-          y1: yOf(ls),
-          x2: x + 10,
-          y2: yOf(ls),
-          class: 'sp-ledger',
+          textContent: ev.label,
         }),
       );
     }
 
-    // 二度相邻符头错开
-    const xOffset = new Map<number, number>();
-    for (let i = 1; i < steps.length; i++) {
-      if (steps[i]! - steps[i - 1]! === 1) {
-        const prev = xOffset.get(i - 1) ?? 0;
-        xOffset.set(i, prev === 0 ? -6.5 : 0);
-      }
+    if (ev.spelled.length) {
+      gt = se('g', {}) as SVGGElement;
+      drawNoteCluster(gt, ev.spelled, x, ev.dur, 't', geom);
+      g.append(gt);
+    } else if (!ev.bassSpelled.length) {
+      drawRest(g, x, geom);
     }
-
-    const stemUp = steps.reduce((a, b) => a + b, 0) / steps.length < STEP_E4 + 4;
-
-    ev.spelled.forEach((sp, i) => {
-      const y = yOf(sp.step);
-      const dx = xOffset.get(i) ?? 0;
-      if (sp.acc !== 0) {
-        g.append(
-          se('text', {
-            x: x + dx - 15,
-            y: y + 4.5,
-            'font-size': 13,
-            class: 'sp-acc',
-            'text-anchor': 'middle',
-            textContent: sp.acc === 1 ? '♯' : sp.acc === -1 ? '♭' : '♮',
-          }),
-        );
-      }
-      g.append(
-        se('ellipse', {
-          cx: x + dx,
-          cy: y,
-          rx: 5.4,
-          ry: 4.1,
-          class: 'sp-head' + (hollow ? ' sp-head-hollow' : ''),
-          transform: `rotate(-16 ${x + dx} ${y})`,
-        }),
-      );
-    });
-
-    // 附点（时值含半拍零头的近似判断）
-    if (Math.abs(ev.dur % 1 - 0.5) < 0.01 || Math.abs(ev.dur % 1 - 0.75) < 0.01) {
-      const topY = yOf(steps[steps.length - 1]!);
-      g.append(se('circle', { cx: x + 9.5, cy: topY - 2, r: 1.6, class: 'sp-dot' }));
+    // 左手音：高音谱表侧为空时不再补休止符（右手长音在视觉上延续）
+    if (ev.bassSpelled.length) {
+      gb = se('g', {}) as SVGGElement;
+      drawNoteCluster(gb, ev.bassSpelled, x, ev.dur, 'b', geom);
+      g.append(gb);
     }
-
-    if (noStem) return;
-
-    const topY = yOf(steps[steps.length - 1]!);
-    const botY = yOf(steps[0]!);
-    const stemX = stemUp ? x + 5 : x - 5;
-    const [y1, y2] = stemUp ? [topY - 3 - 30, botY] : [topY, botY + 3 + 30];
-    g.append(se('line', { x1: stemX, y1, x2: stemX, y2, class: 'sp-stem' }));
-
-    // 孤立八分音符画小旗（同拍成对的会由连杠层统一抹掉重画）
-    if (eighth) {
-      const fy = stemUp ? y1 : y2;
-      g.append(
-        se('path', {
-          d: stemUp
-            ? `M ${stemX} ${fy} q 8 2 7 12 q -1 -6 -7 -8 Z`
-            : `M ${stemX} ${fy} q 8 -2 7 -12 q -1 6 -7 8 Z`,
-          class: 'sp-flag',
-        }),
-      );
-    }
-  }
-
-  function keySigWidth(s: KeySig): number {
-    const n = Math.abs(s.fifths);
-    return n === 0 ? 0 : n * 9 + 6;
+    return { g, gt, gb, x, beat: ev.beat };
   }
 
   function render(sc: Score): void {
     sig = sc.sig;
+    geom = geomFor(isGrand(sc));
     const measureW = MEAS_PAD * 2 + sc.beatsPerBar * BEAT_W;
     const barCount = Math.ceil(sc.totalBeats / sc.beatsPerBar);
     const contentX = LEFT_PAD + CLEF_W + keySigWidth(sc.sig) + TIMESIG_W;
@@ -244,94 +198,36 @@ export function createScoreView(): ScoreView {
 
     svg = se('svg', {
       width: totalWidth,
-      height: 176,
-      viewBox: `0 0 ${totalWidth} 176`,
+      height: geom.height,
+      viewBox: `0 0 ${totalWidth} ${geom.height}`,
       class: 'sp-score',
     });
     inner = se('g', {});
     svg.append(inner);
     refs = [];
 
-    // 五线
-    for (let i = 0; i < 5; i++) {
-      const y = LINE_Y0 - i * GAP;
-      inner.append(
-        se('line', { x1: 8, y1: y, x2: totalWidth - 10, y2: y, class: 'sp-line' }),
-      );
-    }
-    // 谱号
-    inner.append(
-      se('text', {
-        x: LEFT_PAD,
-        y: LINE_Y0 + GAP * 0.9,
-        'font-size': 42,
-        class: 'sp-clef',
-        textContent: '𝄞',
-      }),
-    );
-    // 调号
-    const fifths = sc.sig.fifths;
-    const steps = fifths >= 0 ? SHARP_STEPS : FLAT_STEPS;
-    const sym = fifths >= 0 ? '♯' : '♭';
-    for (let i = 0; i < Math.abs(fifths); i++) {
-      inner.append(
-        se('text', {
-          x: LEFT_PAD + CLEF_W + i * 9,
-          y: yOf(steps[i]!) + 4,
-          'font-size': 13,
-          class: 'sp-acc',
-          textContent: sym,
-        }),
-      );
-    }
-    // 拍号
-    const tsX = LEFT_PAD + CLEF_W + keySigWidth(sc.sig) + 2;
-    inner.append(
-      se('text', {
-        x: tsX,
-        y: LINE_Y0 - GAP * 2 + 3,
-        'font-size': 15,
-        class: 'sp-timesig',
-        textContent: String(sc.beatsPerBar),
-      }),
-      se('text', {
-        x: tsX,
-        y: LINE_Y0 + 4,
-        'font-size': 15,
-        class: 'sp-timesig',
-        textContent: String(sc.beatUnit),
-      }),
-    );
+    drawStaffLines(inner, geom, 8, totalWidth - 10);
+    drawClefs(inner, geom);
+    drawKeySig(inner, sc.sig, geom);
+    drawTimeSig(inner, sc.sig, geom, sc.beatsPerBar, sc.beatUnit);
 
-    // 小节线 + 小节序号
+    // 小节线（大谱表连通两层）+ 小节序号
+    const barTop = geom.trebleY0 - GAP * 4;
+    const barBottom = geom.grand ? geom.bassY0 : geom.trebleY0;
     for (let b = 0; b <= barCount; b++) {
       const x = contentX + b * measureW;
       const last = b === barCount;
-      inner.append(
-        se('line', {
-          x1: x,
-          y1: LINE_Y0 - GAP * 4,
-          x2: x,
-          y2: LINE_Y0,
-          class: 'sp-barline',
-        }),
-      );
+      inner.append(se('line', { x1: x, y1: barTop, x2: x, y2: barBottom, class: 'sp-barline' }));
       if (last) {
         inner.append(
-          se('rect', {
-            x: x + 2,
-            y: LINE_Y0 - GAP * 4,
-            width: 3.4,
-            height: GAP * 4,
-            class: 'sp-finalbar',
-          }),
+          se('rect', { x: x + 2, y: barTop, width: 3.4, height: barBottom - barTop, class: 'sp-finalbar' }),
         );
       }
       if (b < barCount) {
         inner.append(
           se('text', {
             x: x + 3,
-            y: LINE_Y0 - GAP * 4 - 16,
+            y: barTop - (geom.grand ? 22 : 16),
             'font-size': 9,
             class: 'sp-barnum',
             textContent: String(b + 1),
@@ -341,64 +237,56 @@ export function createScoreView(): ScoreView {
     }
 
     // 事件
-    const byBar = new Map<number, { ev: ScoreEvent; x: number; ref: EvRef }[]>();
+    const byBar = new Map<number, { ev: ScoreEvent; ref: EvRef }[]>();
     sc.events.forEach((ev, idx) => {
       const x = xOfBeat(ev.beat);
-      const g = se('g', { class: 'sp-ev', 'data-idx': idx }) as SVGGElement;
-      // 和弦名 / 级数标签
-      if (ev.label) {
-        g.append(
-          se('text', {
-            x,
-            y: LINE_Y0 - GAP * 4 - 6,
-            'font-size': 10.5,
-            class: 'sp-evlabel',
-            'text-anchor': 'middle',
-            textContent: ev.label,
-          }),
-        );
-      }
-      const ref: EvRef = { g, x, beat: ev.beat };
+      const ref = drawEvent(ev, x, idx);
+      inner!.append(ref.g);
       refs.push(ref);
       const bar = Math.floor(ev.beat / sc.beatsPerBar);
       const arr = byBar.get(bar) ?? [];
-      arr.push({ ev, x, ref });
+      arr.push({ ev, ref });
       byBar.set(bar, arr);
-      inner!.append(g);
-      drawNote(g, ev, x);
     });
 
-    // 连杠两趟的第二趟：找出同拍八分音符组，抹掉各自的符干/旗，统一画杠
+    // 连杠第二趟：按谱表分组，抹掉组内符干/旗，统一画杠（十六分双杠）
     for (const arr of byBar.values()) {
-      drawBeamsPrep(arr);
+      drawBeams(arr, 't');
+      drawBeams(arr, 'b');
     }
+
+    // fx 层（星光/命中光圈，谱面坐标系，随谱面滚动）
+    fxG = se('g', { class: 'sp-fxg' });
+    inner.append(fxG);
 
     // 播放头
     playheadLine = se('line', {
       x1: 0,
-      y1: 24,
+      y1: 20,
       x2: 0,
-      y2: LINE_Y0 + 24,
+      y2: barBottom + 24,
       class: 'sp-playhead',
       visibility: 'hidden',
     });
     inner.append(playheadLine);
 
-    el.replaceChildren(svg, fxLayer);
+    el.style.height = `${geom.height}px`;
+    el.replaceChildren(svg);
     translateX = 0;
+    currentX = contentX + MEAS_PAD;
     applyTranslate();
+    startLoop();
   }
 
-  /**
-   * 连杠需要两趟：第一趟画音符时还不知道同拍伙伴。
-   * 做法：drawNote 先照单画；这里找出可连杠组，抹掉组内音符的符干/旗，
-   * 再统一画连杠与补齐的符干。
-   */
-  function drawBeamsPrep(barEvents: { ev: ScoreEvent; x: number; ref: EvRef }[]): void {
-    const groups = new Map<number, { ev: ScoreEvent; x: number; ref: EvRef }[]>();
+  /** 连杠：同小节、同谱表、同拍内的八分/十六分成组 */
+  function drawBeams(barEvents: { ev: ScoreEvent; ref: EvRef }[], staff: StaffId): void {
+    if (!score) return;
+    const groups = new Map<number, { ev: ScoreEvent; ref: EvRef }[]>();
     for (const item of barEvents) {
-      if (item.ev.midis.length === 0 || item.ev.dur > 0.75 || item.ev.dur < 0.4) continue;
-      const inBar = item.ev.beat % score!.beatsPerBar;
+      const sub = staff === 't' ? item.ref.gt : item.ref.gb;
+      if (!sub) continue;
+      if (item.ev.dur > 0.75 || item.ev.dur < 0.2) continue;
+      const inBar = item.ev.beat % score.beatsPerBar;
       const key = Math.floor(inBar);
       const arr = groups.get(key) ?? [];
       arr.push(item);
@@ -406,27 +294,31 @@ export function createScoreView(): ScoreView {
     }
     for (const arr of groups.values()) {
       if (arr.length < 2) continue;
-      // 抹掉组内每个事件已画的符干和旗
       for (const it of arr) {
-        it.ref.g.querySelectorAll('.sp-stem, .sp-flag').forEach((n) => n.remove());
+        const sub = (staff === 't' ? it.ref.gt : it.ref.gb)!;
+        sub.querySelectorAll('.sp-stem, .sp-flag').forEach((n) => n.remove());
       }
-      const allSteps = arr.flatMap((it) => it.ev.spelled.map((s) => s.step));
+      const spelledOf = (it: { ev: ScoreEvent }) =>
+        (staff === 't' ? it.ev.spelled : it.ev.bassSpelled).map((s) => s.step);
+      const allSteps = arr.flatMap(spelledOf);
+      if (!allSteps.length) continue;
       const avg = allSteps.reduce((a, b) => a + b, 0) / allSteps.length;
-      const up = avg < STEP_E4 + 4;
+      const centerStep = staff === 't' ? 34 : 22;
+      const up = avg < centerStep;
       const beamY = up
-        ? Math.min(...arr.map((it) => yOf(Math.max(...it.ev.spelled.map((s) => s.step))) - 33))
-        : Math.max(...arr.map((it) => yOf(Math.min(...it.ev.spelled.map((s) => s.step))) + 33));
+        ? Math.min(...arr.map((it) => yOf(Math.max(...spelledOf(it)), staff, geom) - 33))
+        : Math.max(...arr.map((it) => yOf(Math.min(...spelledOf(it)), staff, geom) + 33));
       for (const it of arr) {
-        const steps = it.ev.spelled.map((s) => s.step);
-        const headY = up ? yOf(Math.max(...steps)) - 2 : yOf(Math.min(...steps)) + 2;
-        const sx = it.x + (up ? 5 : -5);
-        it.ref.g.append(
-          se('line', { x1: sx, y1: beamY, x2: sx, y2: headY, class: 'sp-stem' }),
-        );
+        const steps = spelledOf(it);
+        const headY = up ? yOf(Math.max(...steps), staff, geom) - 2 : yOf(Math.min(...steps), staff, geom) + 2;
+        const sx = it.ref.x + (up ? 5 : -5);
+        const sub = (staff === 't' ? it.ref.gt : it.ref.gb)!;
+        sub.append(se('line', { x1: sx, y1: beamY, x2: sx, y2: headY, class: 'sp-stem' }));
       }
-      const x1 = arr[0]!.x + (up ? 5 : -5);
-      const x2 = arr[arr.length - 1]!.x + (up ? 5 : -5);
-      arr[arr.length - 1]!.ref.g.append(
+      const x1 = arr[0]!.ref.x + (up ? 5 : -5);
+      const x2 = arr[arr.length - 1]!.ref.x + (up ? 5 : -5);
+      const lastSub = (staff === 't' ? arr[arr.length - 1]!.ref.gt : arr[arr.length - 1]!.ref.gb)!;
+      lastSub.append(
         se('rect', {
           x: x1 - 0.5,
           y: up ? beamY : beamY - 4.4,
@@ -435,6 +327,18 @@ export function createScoreView(): ScoreView {
           class: 'sp-beam',
         }),
       );
+      // 十六分音符（时值 ≤ 0.3）加第二道杠
+      if (arr.every((it) => it.ev.dur <= 0.3)) {
+        lastSub.append(
+          se('rect', {
+            x: x1 - 0.5,
+            y: up ? beamY + 5.4 : beamY - 9.8,
+            width: x2 - x1 + 1,
+            height: 4.4,
+            class: 'sp-beam',
+          }),
+        );
+      }
     }
   }
 
@@ -442,13 +346,16 @@ export function createScoreView(): ScoreView {
     el,
 
     setScore(sc: Score | null): void {
+      stopLoop();
       score = sc;
+      playheadBeat = null;
       if (!sc) {
         svg = null;
         sig = null;
         refs = [];
-        el.replaceChildren(fxLayer);
-        fxLayer.replaceChildren();
+        fxG = null;
+        playheadLine = null;
+        el.replaceChildren();
         return;
       }
       render(sc);
@@ -459,10 +366,7 @@ export function createScoreView(): ScoreView {
       if (!ref) return;
       ref.g.classList.remove('sp-ev-current', 'sp-ev-done', 'sp-ev-passed');
       if (state !== 'todo') ref.g.classList.add(`sp-ev-${state}`);
-      if (state === 'current') {
-        currentX = ref.x;
-        scrollTo(ref.x);
-      }
+      if (state === 'current') currentX = ref.x;
     },
 
     resetStates(): void {
@@ -470,48 +374,78 @@ export function createScoreView(): ScoreView {
         ref.g.classList.remove('sp-ev-current', 'sp-ev-done', 'sp-ev-passed');
       }
       translateX = 0;
+      playheadBeat = null;
+      fxG?.replaceChildren();
       applyTranslate();
-      fxLayer.replaceChildren();
     },
 
     sparkle(midi: number): void {
-      if (!score || !sig) return;
+      if (!score || !sig || !fxG) return;
       const sp = spellInKey(midi, sig);
-      const star = document.createElement('i');
-      star.className = 'sp-sparkle';
-      star.textContent = '✦';
-      const jitter = (Math.random() - 0.5) * 14;
-      star.style.left = `${currentX + translateX + jitter}px`;
-      star.style.top = `${yOf(sp.step) - 8 + (Math.random() - 0.5) * 8}px`;
-      star.style.animationDuration = `${0.7 + Math.random() * 0.4}s`;
-      fxLayer.append(star);
-      setTimeout(() => star.remove(), 1200);
+      const staff: StaffId = geom.grand ? staffOfStep(sp.step) : 't';
+      const y = yOf(sp.step, staff, geom);
+      const x = currentX;
+      const g = se('g', { class: 'sp-ghost' }) as SVGGElement;
+      // 幽灵音符：加线 + 临时记号 + 符头，精确落在弹错音的谱面位置
+      for (const ls of ledgerSteps(sp.step, staff)) {
+        g.append(
+          se('line', { x1: x - 9, y1: yOf(ls, staff, geom), x2: x + 9, y2: yOf(ls, staff, geom), class: 'sp-ghost-ledger' }),
+        );
+      }
+      if (sp.acc !== 0) {
+        g.append(
+          se('text', {
+            x: x - 14,
+            y: y + 4,
+            'font-size': 12,
+            class: 'sp-ghost-acc',
+            'text-anchor': 'middle',
+            textContent: sp.acc === 1 ? '♯' : sp.acc === -1 ? '♭' : '♮',
+          }),
+        );
+      }
+      g.append(
+        se('ellipse', {
+          cx: x,
+          cy: y,
+          rx: 5.2,
+          ry: 4,
+          class: 'sp-ghost-head',
+          transform: `rotate(-16 ${x} ${y})`,
+        }),
+      );
+      const star = se('text', {
+        x,
+        y: y - 11,
+        'font-size': 17,
+        class: 'sp-ghost-star',
+        'text-anchor': 'middle',
+        textContent: '✦',
+      });
+      g.append(star);
+      fxG.append(g);
+      setTimeout(() => g.remove(), 1300);
     },
 
     hitPop(): void {
-      const pop = document.createElement('i');
-      pop.className = 'sp-hitpop';
-      pop.style.left = `${currentX + translateX}px`;
-      pop.style.top = `${LINE_Y0 - GAP * 2}px`;
-      fxLayer.append(pop);
+      if (!fxG) return;
+      const pop = se('circle', {
+        cx: currentX,
+        cy: geom.trebleY0 - GAP * 2,
+        r: 14,
+        class: 'sp-hitpop',
+      });
+      fxG.append(pop);
       setTimeout(() => pop.remove(), 500);
     },
 
     setPlayhead(beat: number | null): void {
-      if (!playheadLine) return;
-      if (beat === null) {
-        playheadLine.setAttribute('visibility', 'hidden');
-        return;
-      }
-      const x = xOfBeat(beat);
-      playheadLine.setAttribute('x1', String(x));
-      playheadLine.setAttribute('x2', String(x));
-      playheadLine.setAttribute('visibility', 'visible');
-      scrollTo(x + BEAT_W);
+      playheadBeat = beat;
+      if (beat === null && playheadLine) playheadLine.setAttribute('visibility', 'hidden');
     },
 
     relayout(): void {
-      if (refs.length) scrollTo(currentX);
+      applyTranslate();
     },
   };
 }
