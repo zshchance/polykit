@@ -59,6 +59,14 @@ const KEYMAP: Readonly<Record<string, number>> = {
 /** 犹豫多久后给出加强提示（毫秒） */
 const HESITATE_MS = 2600;
 
+/**
+ * 演奏模式判定窗：卡点为主——起始拍 + 0.35 拍容差（不超过音符自身时值）。
+ * 命中变绿仍在按键瞬间；错过变灰红也落在自己的卡点附近，而不是等
+ * 整个时值走完（那样二分音符会比四分晚一整拍才变色，读谱节奏感全无）。
+ * 跟弹模式不受影响（谱面等人，没有时间截止）。
+ */
+const HIT_GRACE_BEATS = 0.35;
+
 const STAGE_DESC: Record<Stage, { icon: string; title: string; desc: string }> = {
   read: {
     icon: '🎼',
@@ -761,12 +769,14 @@ function renderApp(): void {
     }
     view.setPlayhead(scoreBeat);
 
-    // 到点未命中 → 温柔放过（谱面染灰红，不断曲）
+    // 到点未命中 → 温柔放过（谱面染灰红，不断曲）。
+    // 截止 = 起始拍 + 容差：所有音符都在自己的卡点附近结算，
+    // 与时值无关；时值只决定下一个音隔多久来。
     let guard = 0;
     for (;;) {
       const ev = session.current();
       if (!ev) break;
-      const deadline = ev.beat + ev.dur + 0.08;
+      const deadline = ev.beat + Math.min(ev.dur, HIT_GRACE_BEATS) + 0.08;
       if (scoreBeat <= deadline || guard++ > 64) break;
       const idx = session.currentIndex();
       session.advanceMissed();
@@ -778,7 +788,9 @@ function renderApp(): void {
     }
 
     if (session.stats().done) {
-      onSongDone();
+      // 全部判定完：等谱面把最后的长音滚完（贴近终止线）再结算，
+      // 不在最后一个音的卡点后就打断
+      if (scoreBeat >= song.score.totalBeats - 0.4) onSongDone();
       return;
     }
     // 播到结尾兜底
