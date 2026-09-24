@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 调式罗盘图标：五度圈环 + 主和弦紫格 + 红色演奏箭头 -->
+  <circle cx="32" cy="34" r="18" fill="none" stroke="#e2e8f0" stroke-width="11"
+          stroke-dasharray="7.6 1.81" stroke-dashoffset="2.2"/>
+  <circle cx="32" cy="34" r="18" fill="none" stroke="#a78bfa" stroke-width="11"
+          stroke-dasharray="7.6 86.2" stroke-dashoffset="2.2"/>
+  <circle cx="32" cy="34" r="18" fill="none" stroke="#fdba74" stroke-width="11"
+          stroke-dasharray="7.6 86.2" stroke-dashoffset="-7.2"/>
+  <circle cx="32" cy="34" r="18" fill="none" stroke="#93c5fd" stroke-width="11"
+          stroke-dasharray="7.6 86.2" stroke-dashoffset="-16.6"/>
+  <circle cx="32" cy="34" r="5.5" fill="#f8fafc"/>
+  <path d="M 26 2 L 38 2 L 32 13 Z" fill="#ef4444"/>
+</svg>
