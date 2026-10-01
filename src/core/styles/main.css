@@ -72,8 +72,17 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-* {
-  border-color: var(--border);
+/*
+ * 全站默认边框色：给 Tailwind 的 border 宽度类提供主题色默认值。
+ * 必须放在 @layer base 里：tailwindcss 的 import 声明了
+ * @layer theme, base, components, utilities —— 分层样式之间「后层胜出」，
+ * 若写成无层级规则，会反过来压掉 utilities 层的所有边框色工具类
+ * （border-[var(--accent)] / hover:border-red-400 等全部失效）。
+ */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
 }
 
 /* ───────────── 卡片入场动画（stagger）───────────── */

@@ -153,17 +153,7 @@
   transform: scale(1.01);
 }
 
-/* ── 按钮描边（无层级恢复） ──
- * 站点 main.css 的 * { border-color: var(--border) } 未分层，
- * 会压过 Tailwind 工具类层里的 border-[var(--accent)] / hover:border-[var(--accent)]。
- * 本页所有「描边反馈」在无层级样式里显式声明，保证 hover 与选中态可见。 */
-.md-landing button:hover,
-.md-toolbar button:hover,
-[role='dialog'] button:hover {
-  border-color: var(--accent);
-}
-
-/* 导出格式卡片：选中描边用强调色，悬停给轻提示 */
+/* 导出格式卡片：选中态由 .is-selected 类驱动（app.ts 切类），描边/底色在此声明 */
 .md-export-card {
   border-color: var(--border);
 }
