@@ -1,11 +1,12 @@
 // @ts-check
 /**
- * 节假日数据更新：往 src/home/calendar/holidays.json 增补/更新条目。
+ * 节假日数据更新：往 src/home/calendar/holidays.json 增补/更新/删除条目。
  *
  * 两种录入入口：
  *   1. 逐条交互（默认）：运行后按提示逐条录入，空行结束。
  *   2. 批量导入：--file <临时JSON>，格式为
- *        { "<YYYY-MM-DD>": { "type": "legal|workday|festival", "name": "名称", "year": "2027"(可选) } }
+ *        { "<YYYY-MM-DD>": { "type": "legal|workday|festival|delete", "name": "名称", "year": "2027"(可选) } }
+ *      type=delete 表示删除该日期的既有条目（用于下架错误数据），此时 name 可省略。
  *
  * 用法：
  *   npm run holidays:add                           # 逐条交互
@@ -13,8 +14,9 @@
  *   npm run holidays:add -- --file _tmp.json --dry-run      # 只看不写
  *   npm run holidays:add -- --source "国务院办公厅…通知"
  *
- * 校验：日期格式与合法性、type 枚举、name 非空、year 4 位数字。
+ * 校验：日期格式与合法性、type 枚举、name 非空（delete 除外）、year 4 位数字。
  * 合并：按 year→dateKey 注入，同日期覆盖（last-wins，顺带消除重复 key）；
+ *       type=delete 时移除该日期条目（不存在则跳过）；
  *       自动更新顶层 updatedAt（今天）/ version（最大年）/ source（保留或 --source 覆盖）；
  *       输出按 year、dateKey 排序，保持文件整洁。
  * 详见 src/core/types.ts 的 DayInfo / HolidaysData。
@@ -58,8 +60,8 @@ for (let i = 0; i < argv.length; i++) {
 
 /**
  * 校验并归一化单条节假日输入。
- * @param {{date:string,type:string,name:string,year?:string}} raw
- * @returns {{year:string,dateKey:string,type:(typeof VALID_TYPES)[number],name:string}}
+ * @param {{date:string,type:string,name?:string,year?:string}} raw
+ * @returns {{year:string,dateKey:string,type:(typeof VALID_TYPES)[number]|'delete',name:string}}
  * @throws 校验失败抛错（带中文说明）
  */
 function validateEntry(raw) {
@@ -77,8 +79,10 @@ function validateEntry(raw) {
   if (!/^\d{4}$/.test(year)) throw new Error(`年份错误: "${year}"，需 4 位数字`);
 
   const type = String(raw.type ?? '').trim();
+  // delete：下架该日期的既有条目（不需要 name）
+  if (type === 'delete') return { year, dateKey: date, type: 'delete', name: '' };
   if (!VALID_TYPES.includes(/** @type {any} */ (type))) {
-    throw new Error(`type 非法: "${type}"，需为 ${VALID_TYPES.join(' / ')}`);
+    throw new Error(`type 非法: "${type}"，需为 ${VALID_TYPES.join(' / ')} / delete`);
   }
   const name = String(raw.name ?? '').trim();
   if (!name) throw new Error('名称不能为空');
@@ -113,7 +117,9 @@ async function interactiveCollect() {
   /** @type {{year:string,dateKey:string,type:string,name:string}[]} */
   const entries = [];
   console.log('逐条录入节假日（空日期回车结束）：');
-  console.log(`  type 可选：${VALID_TYPES.map((t) => `${t}(${TYPE_HINTS[t]})`).join(' / ')}`);
+  console.log(
+    `  type 可选：${VALID_TYPES.map((t) => `${t}(${TYPE_HINTS[t]})`).join(' / ')} / delete(删除该日期条目)`,
+  );
 
   while (true) {
     const date = (await rl.question('日期 YYYY-MM-DD（空=结束）: ')).trim();
@@ -169,9 +175,20 @@ const years = existing.years || {};
 const log = {};
 let added = 0;
 let changed = 0;
+let removed = 0;
 for (const e of newEntries) {
   if (!years[e.year]) years[e.year] = {};
   const prev = years[e.year][e.dateKey];
+
+  if (e.type === 'delete') {
+    if (prev) {
+      delete years[e.year][e.dateKey];
+      removed++;
+      (log[e.year] ||= []).push({ added: e.dateKey, changed: '删除' });
+    }
+    continue; // 不存在则静默跳过（幂等）
+  }
+
   if (prev && prev.type === e.type && prev.name === e.name) {
     continue; // 完全相同，跳过
   }
@@ -181,7 +198,12 @@ for (const e of newEntries) {
   years[e.year][e.dateKey] = { type: e.type, name: e.name };
 }
 
-if (added === 0 && changed === 0) {
+// 删空的年份块不留守卫对象
+for (const yr of Object.keys(years)) {
+  if (Object.keys(years[yr]).length === 0) delete years[yr];
+}
+
+if (added === 0 && changed === 0 && removed === 0) {
   console.log('所有条目均已存在且相同，无需更新。');
   process.exit(0);
 }
@@ -222,7 +244,7 @@ ${yearBlocks.join(',\n')}
 
 // —— 输出 diff ——
 console.log(
-  `\n本次将 ${added > 0 ? `新增 ${added} 条` : ''}${added > 0 && changed > 0 ? '、' : ''}${changed > 0 ? `覆盖 ${changed} 条` : ''}：`,
+  `\n本次将 ${added > 0 ? `新增 ${added} 条` : ''}${(added > 0 || removed > 0) && changed > 0 ? '、' : ''}${changed > 0 ? `覆盖 ${changed} 条` : ''}${removed > 0 ? `${added + changed > 0 ? '、' : ''}删除 ${removed} 条` : ''}：`,
 );
 for (const yr of Object.keys(log).sort()) {
   console.log(`  [${yr}]`);
