@@ -3,6 +3,7 @@ import { countWords, countChars, computeSyncedScrollTop } from './utils';
 import { parseSessionBlob, isWorthRestoring } from './session';
 import { stripMarkdownExt, htmlExportFilename, mdExportFilename } from './export/html';
 import { isOpenableName } from './io/files';
+import { buildOutlineTree, findHeadingSourceLines, type OutlineHeading } from './outline';
 
 describe('countWords（Typora 风格字数统计）', () => {
   it('CJK 每字计一', () => {
@@ -54,13 +55,20 @@ describe('computeSyncedScrollTop（比例滚动同步）', () => {
 describe('parseSessionBlob（会话数据校验）', () => {
   const valid = { version: 1, doc: '# hi', name: '笔记.md', mode: 'read', savedAt: 1710000000000 };
 
-  it('合法数据原样通过', () => {
+  it('合法数据原样通过（outline 缺省为 false）', () => {
     expect(parseSessionBlob(valid)).toEqual({
       doc: '# hi',
       name: '笔记.md',
       mode: 'read',
+      outline: false,
       savedAt: 1710000000000,
     });
+  });
+
+  it('outline=true 被保留，非布尔值回落 false', () => {
+    expect(parseSessionBlob({ ...valid, outline: true })?.outline).toBe(true);
+    expect(parseSessionBlob({ ...valid, outline: 'yes' })?.outline).toBe(false);
+    expect(parseSessionBlob({ ...valid, outline: 1 })?.outline).toBe(false);
   });
 
   it('非法 mode 回落 split，空名回落 未命名.md', () => {
@@ -81,7 +89,7 @@ describe('parseSessionBlob（会话数据校验）', () => {
 });
 
 describe('isWorthRestoring（是否值得恢复现场）', () => {
-  const base = { doc: '', name: '未命名.md', mode: 'split' as const, savedAt: 0 };
+  const base = { doc: '', name: '未命名.md', mode: 'split' as const, outline: false, savedAt: 0 };
 
   it('空白且未命名 → 不恢复（回欢迎页）', () => {
     expect(isWorthRestoring(base)).toBe(false);
@@ -122,5 +130,72 @@ describe('isOpenableName（可打开的扩展名）', () => {
     expect(isOpenableName('a.html')).toBe(false);
     expect(isOpenableName('a.md.exe')).toBe(false);
     expect(isOpenableName('md')).toBe(false);
+  });
+});
+
+describe('buildOutlineTree（大纲层级树构建）', () => {
+  const mk = (level: number, text: string): OutlineHeading => ({
+    level,
+    text,
+    id: text,
+    el: null as unknown as HTMLElement, // 纯树构建不触碰 DOM
+  });
+  const shape = (roots: ReturnType<typeof buildOutlineTree>): unknown =>
+    roots.map((n) => [n.heading.text, shape(n.children)]);
+
+  it('常规层级：h1 > h2 > h3，同级并列', () => {
+    const tree = buildOutlineTree([mk(1, 'a'), mk(2, 'b'), mk(3, 'c'), mk(2, 'd'), mk(1, 'e')]);
+    expect(shape(tree)).toEqual([
+      [
+        'a',
+        [
+          ['b', [['c', []]]],
+          ['d', []],
+        ],
+      ],
+      ['e', []],
+    ]);
+  });
+
+  it('层级跳变（h1 后直接 h3）：挂到最近祖先', () => {
+    const tree = buildOutlineTree([mk(1, 'a'), mk(3, 'c'), mk(2, 'b')]);
+    expect(shape(tree)).toEqual([
+      [
+        'a',
+        [
+          ['c', []],
+          ['b', []],
+        ],
+      ],
+    ]);
+  });
+
+  it('空列表与全是根级标题', () => {
+    expect(buildOutlineTree([])).toEqual([]);
+    const flat = buildOutlineTree([mk(2, 'x'), mk(2, 'y')]);
+    expect(shape(flat)).toEqual([
+      ['x', []],
+      ['y', []],
+    ]);
+  });
+});
+
+describe('findHeadingSourceLines（源码标题行定位）', () => {
+  it('识别 ATX 标题的 0 基行号', () => {
+    const doc = '引言\n# 一级\n正文\n## 二级\n### 三级\n';
+    expect(findHeadingSourceLines(doc)).toEqual([1, 3, 4]);
+  });
+
+  it('跳过围栏代码块内的 # 行（``` 与 ~~~ 均识别）', () => {
+    const doc = '# 标题\n```ts\n# 这不是标题\nconst a = 1;\n```\n~~~\n# 也不是\n~~~\n## 真标题';
+    expect(findHeadingSourceLines(doc)).toEqual([0, 8]);
+  });
+
+  it('最多 6 个 # 且允许前导空格，7 个 # 不算', () => {
+    expect(findHeadingSourceLines('  ## 二级\n####### 七个')).toEqual([0]);
+  });
+
+  it('# 后必须有空格或行尾', () => {
+    expect(findHeadingSourceLines('#NoSpace\n# 有空格')).toEqual([1]);
   });
 });

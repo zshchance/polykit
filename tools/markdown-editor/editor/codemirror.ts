@@ -34,6 +34,8 @@ export interface CodeMirrorHandle {
   focus(): void;
   /** 重新测量布局（外壳被重新挂载到 DOM 后调用） */
   measure(): void;
+  /** 滚动到 1 基行号所在行（不移动光标），供大纲跳转 */
+  revealLine(line: number): void;
 }
 
 /**
@@ -85,5 +87,10 @@ export function createCodeMirror(parent: HTMLElement, initialDoc: string): CodeM
     onDocChanged: (fn) => docListeners.push(fn),
     focus: () => view.focus(),
     measure: () => view.requestMeasure(),
+    revealLine(line: number) {
+      const n = Math.min(Math.max(1, line), view.state.doc.lines);
+      const pos = view.state.doc.line(n).from;
+      view.dispatch({ effects: EditorView.scrollIntoView(pos, { y: 'start', yMargin: 12 }) });
+    },
   };
 }

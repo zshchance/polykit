@@ -16,8 +16,8 @@
     </script>
   </head>
   <body>
-    <!-- 编辑器类工具需要尽量大的纵向空间：进入编辑现场时由脚本切换为 h-screen（内部滚动） -->
-    <div id="app" class="mx-auto flex min-h-screen max-w-[1700px] flex-col px-4 py-5"></div>
+    <!-- 自然文档流：页眉/页脚随页面滚走，编辑现场的常驻件（工具栏/状态栏/大纲）由样式吸顶吸底 -->
+    <div id="app" class="mx-auto flex min-h-screen w-full max-w-[1700px] flex-col px-4 py-4"></div>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

@@ -16,6 +16,7 @@ import {
 import { buildStandaloneHtml, htmlExportFilename, mdExportFilename } from './export/html';
 import { saveSession, clearSession, type ViewMode } from './session';
 import { buildLanding, buildEditorShell, type EditorShell, type LandingView } from './ui';
+import { OutlinePanel, findHeadingSourceLines, type OutlineHeading } from './outline';
 
 type ExportFormat = 'html' | 'md' | 'pdf';
 
@@ -50,13 +51,14 @@ const FORMAT_OPTIONS: FormatOption[] = [
 /**
  * 手札应用控制器：
  * 空态欢迎页 ↔ 编辑现场两个视图；文件打开/保存/导出（带格式确认）；
- * 防抖实时渲染、比例滚动同步、分栏拖拽、会话记忆（刷新不丢稿）、
- * 站点亮暗主题联动（Mermaid/Shiki）。
+ * 防抖实时渲染、比例滚动同步、分栏拖拽、内容大纲（自动维护/跳转/scroll-spy）、
+ * 会话记忆（刷新不丢稿）、站点亮暗主题联动（Mermaid/Shiki）。
  */
 export class EditorApp {
   private shell: EditorShell | null = null;
   private landing: LandingView | null = null;
   private editor: CodeMirrorHandle | null = null;
+  private outlinePanel: OutlinePanel | null = null;
 
   private fileName = '未命名.md';
   private fileHandle: FileSystemFileHandle | null = null;
@@ -67,6 +69,12 @@ export class EditorApp {
   private lastRenderMs = 0;
   private lastPersistOk = true;
   private lastSavedAt = 0;
+
+  /** 大纲面板是否展开（会话记忆） */
+  private outlineVisible = false;
+  /** 最近一次渲染收集的标题（供 scroll-spy 与点击定位） */
+  private lastHeadings: OutlineHeading[] = [];
+  private spyPending = false;
 
   private noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -84,17 +92,6 @@ export class EditorApp {
     this.bindGlobalDragGuard();
     this.bindShortcuts();
     this.bindUnloadFlush();
-  }
-
-  /**
-   * 视口策略：编辑现场锁定一屏高（内部滚动），
-   * 欢迎页改为自然高度（页脚不被裁切，短窗口可整页滚动）。
-   */
-  private setFixedViewport(fixed: boolean): void {
-    const app = this.content.parentElement;
-    if (!app) return;
-    app.classList.toggle('h-screen', fixed);
-    app.classList.toggle('min-h-screen', !fixed);
   }
 
   /* ───────────────────────── 视图切换 ───────────────────────── */
@@ -116,12 +113,11 @@ export class EditorApp {
       );
     }
     this.content.replaceChildren(this.landing.root);
-    this.setFixedViewport(false);
     document.title = 'Markdown 手札 · 即开宝匣';
   }
 
   /** 进入（或返回）编辑现场 */
-  enterEditor(doc: string, name: string, mode: ViewMode = 'split'): void {
+  enterEditor(doc: string, name: string, mode: ViewMode = 'split', outline = false): void {
     this.ensureShell();
     this.fileName = name;
     this.fileHandle = null;
@@ -129,9 +125,10 @@ export class EditorApp {
     this.editor!.setDoc(doc);
     void this.renderPreview(doc);
     this.content.replaceChildren(this.shell!.root);
-    this.setFixedViewport(true);
     this.editor!.measure();
     this.setMode(mode);
+    this.setOutlineVisible(outline);
+    this.syncChromeHeights();
     this.persistSession();
     this.updateStatus();
     this.updateFileStatus();
@@ -145,9 +142,13 @@ export class EditorApp {
       onSave: () => void this.save(),
       onExport: () => this.openExportDialog(),
       onModeChange: (mode) => this.setMode(mode),
+      onToggleOutline: () => this.setOutlineVisible(!this.outlineVisible),
       onClose: () => void this.closeDoc(),
       onDropFile: (file) => this.loadFile(file),
       onDropReject: (r) => this.flashNotice(rejectText(r)),
+    });
+    this.outlinePanel = new OutlinePanel(this.shell.outline, {
+      onActivate: (heading) => this.revealHeading(heading),
     });
     this.editor = createCodeMirror(this.shell.editorHost, '');
     this.editor.onDocChanged((doc) => {
@@ -163,6 +164,98 @@ export class EditorApp {
     enableDragOpen(this.shell.workspace, (file) => this.loadFile(file));
     this.bindScrollSync();
     this.bindDivider();
+    this.bindChromeSync();
+    this.bindScrollPriority();
+  }
+
+  /**
+   * 滚动优先级：页面级「空间释放」优先于内容滚动。
+   *
+   * 浏览器默认的滚动链是「内层优先」：滚轮在内容区上时先滚 pane，pane 到边界才链到
+   * 页面——于是页眉会一直占着屏直到正文全部滚完，页脚同理要等正文回滚到顶才让位。
+   * 这里在捕获阶段拦截滚轮，把两个「过渡带」的优先级翻过来：
+   * - 向下滚 && 页眉仍占视口（工具栏尚未吸顶）：先滚页面送走页眉；
+   * - 向上滚 && 页脚已进视口：先滚页面送走页脚；
+   * - 其余情况不干预，走默认链（pane 滚动，触边后自然链到页面）。
+   */
+  private bindScrollPriority(): void {
+    const shell = this.shell!;
+    const card = shell.workspace.closest<HTMLElement>('.md-workspace-card');
+    if (!card) return;
+    const toolbar = shell.root.querySelector<HTMLElement>('.md-toolbar');
+    const footer = document.querySelector<HTMLElement>('#app > footer');
+    if (!toolbar) return;
+
+    const onWheel = (e: WheelEvent): void => {
+      if (e.deltaY === 0 || e.defaultPrevented) return;
+      // 页面本身不可滚（矮内容）时不要拦截，否则 pane 永远滚不动
+      if (document.documentElement.scrollHeight <= window.innerHeight + 1) return;
+      const factor = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1;
+      const delta = e.deltaY * factor;
+      const down = delta > 0;
+      // 工具栏还在文档流位置（未吸顶）= 页眉区仍占据视口
+      const headerZone = toolbar.getBoundingClientRect().top > 9;
+      const footerVisible = footer
+        ? footer.getBoundingClientRect().top < window.innerHeight - 1
+        : false;
+
+      if (down && headerZone) {
+        // 钳制在沉浸位（工具栏吸顶、页眉恰好离场），大滚轮格也不冲进页脚区
+        e.preventDefault();
+        const cardTopDoc = card.getBoundingClientRect().top + window.scrollY;
+        const immersiveTop = cardTopDoc - 12 - toolbar.offsetHeight - 8;
+        const max = Math.max(0, immersiveTop - window.scrollY);
+        window.scrollBy({ top: Math.min(delta, max) });
+      } else if (!down && footerVisible) {
+        // 钳制在沉浸位（页脚恰好离场）
+        e.preventDefault();
+        const footerTopDoc = footer!.getBoundingClientRect().top + window.scrollY;
+        const immersiveBottom = footerTopDoc - window.innerHeight;
+        const min = Math.min(0, immersiveBottom - window.scrollY);
+        window.scrollBy({ top: Math.max(delta, min) });
+      }
+    };
+    // 挂在两个滚动 pane 上（捕获阶段抢在原生滚动之前）
+    shell.previewPane.addEventListener('wheel', onWheel, { passive: false, capture: true });
+    this.editor!.scrollElement().addEventListener('wheel', onWheel, {
+      passive: false,
+      capture: true,
+    });
+  }
+
+  /**
+   * 常驻工具条（吸顶工具栏 + 吸底状态栏）的实际高度写入 CSS 变量：
+   * 工作区卡片据此取「一屏高减工具条」、大纲吸顶位据此避开工具栏。
+   * 工具栏窄屏会换行变高，故用 ResizeObserver 跟踪而非写死。
+   */
+  private bindChromeSync(): void {
+    const shell = this.shell!;
+    const apply = (): void => this.syncChromeHeights();
+    new ResizeObserver(apply).observe(shell.root.querySelector('.md-toolbar')!);
+    new ResizeObserver(apply).observe(shell.statusbar.cursor.parentElement!);
+    window.addEventListener('resize', apply);
+  }
+
+  private syncChromeHeights(): void {
+    const shell = this.shell;
+    if (!shell || !shell.root.isConnected) return;
+    const toolbar = shell.root.querySelector<HTMLElement>('.md-toolbar');
+    const statusbar = shell.root.querySelector<HTMLElement>('.md-statusbar');
+    if (!toolbar || !statusbar) return;
+    const toolbarH = toolbar.offsetHeight;
+    const statusH = statusbar.offsetHeight;
+    const gap = 12; // .md-root 的 gap-3
+    // 变量挂在 #app 上：工具链（.md-root）与页脚（margin-bottom 让位）都要读到
+    const appRoot = this.content.parentElement ?? shell.root;
+    // 大纲吸顶位：视口留白 + 工具栏 + 间距；
+    // 卡片高：沉浸位直达视口底（工具栏顶留白 + 工具栏 + 间距以下全是卡片），
+    // 状态栏以毛玻璃浮层悬浮在卡片底部之上，正文底部由 pane 内边距让位
+    appRoot.style.setProperty('--mdt-sticky-top', `${toolbarH + gap + 8}px`);
+    appRoot.style.setProperty('--mdt-status-h', `${statusH}px`);
+    appRoot.style.setProperty(
+      '--mdt-card-h',
+      `${Math.max(window.innerHeight - toolbarH - 8 - gap, 420)}px`,
+    );
   }
 
   /* ───────────────────────── 文件操作 ───────────────────────── */
@@ -176,8 +269,8 @@ export class EditorApp {
     void this.renderPreview(file.text);
     if (this.landing || !this.shell!.root.isConnected) {
       this.content.replaceChildren(this.shell!.root);
-      this.setFixedViewport(true);
       this.editor!.measure();
+      this.syncChromeHeights();
     }
     if (this.mode === 'editor') this.setMode('split');
     this.persistSession();
@@ -389,6 +482,80 @@ export class EditorApp {
     this.lastRenderMs = performance.now() - started;
     this.shell.statusbar.render.textContent =
       this.lastRenderMs > 0 ? `渲染 ${this.lastRenderMs.toFixed(0)}ms` : '';
+    this.refreshOutline();
+  }
+
+  /* ───────────────────────── 内容大纲 ───────────────────────── */
+
+  /** 展开 / 收起大纲面板（浮动手柄 + 工具栏按钮同步状态，随会话记忆） */
+  private setOutlineVisible(visible: boolean): void {
+    if (!this.shell) return;
+    this.outlineVisible = visible;
+    this.shell.outline.classList.toggle('is-open', visible);
+    this.shell.outline.parentElement?.setAttribute('data-open', String(visible));
+    const floatBtn = this.shell.outlineFloatBtn;
+    floatBtn.textContent = visible ? '‹' : '›';
+    floatBtn.setAttribute('aria-expanded', String(visible));
+    floatBtn.setAttribute('aria-label', visible ? '收起大纲' : '展开大纲');
+    floatBtn.title = visible ? '收起大纲' : '展开大纲';
+    this.shell.outlineBtn.setAttribute('aria-pressed', String(visible));
+    this.shell.outlineBtn.classList.toggle('outline-active', visible);
+    if (visible) {
+      this.refreshOutline();
+    }
+    this.persistSession();
+  }
+
+  /** 从预览区重建大纲（每次渲染后调用；面板收起时仅更新数据） */
+  private refreshOutline(): void {
+    if (!this.shell) return;
+    const preview = this.shell.preview;
+    // 跳过空标题（无锚点 id，无法定位）
+    this.lastHeadings = Array.from(
+      preview.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6'),
+    ).flatMap((el) => {
+      const text = el.textContent?.trim() ?? '';
+      if (!text || !el.id) return [];
+      return [{ level: Number(el.tagName[1]), text, id: el.id, el }];
+    });
+    this.outlinePanel?.update(this.lastHeadings);
+    if (this.outlineVisible) this.updateActiveHeading();
+  }
+
+  /** 滚动 spy：rAF 合帧，找视口顶之上最后一个标题 */
+  private queueSpy(): void {
+    if (this.spyPending || !this.outlineVisible) return;
+    this.spyPending = true;
+    requestAnimationFrame(() => {
+      this.spyPending = false;
+      this.updateActiveHeading();
+    });
+  }
+
+  private updateActiveHeading(): void {
+    if (!this.shell || !this.outlineVisible) return;
+    const paneTop = this.shell.previewPane.getBoundingClientRect().top;
+    let active: OutlineHeading | null = null;
+    for (const heading of this.lastHeadings) {
+      if (heading.el.getBoundingClientRect().top - paneTop <= 96) active = heading;
+      else break;
+    }
+    this.outlinePanel?.setActive(active ? active.id : null);
+  }
+
+  /** 点击大纲项：滚动到对应章节（编辑视图跳源码行，其余滚动预览） */
+  private revealHeading(heading: OutlineHeading): void {
+    if (this.mode === 'editor') {
+      // 预览区隐藏时按「第 N 个标题 ↔ 源码第 N 个 ATX 标题行」对位（setext 标题会错位，此时不跳）
+      const srcLines = findHeadingSourceLines(this.editor!.getDoc());
+      const index = this.lastHeadings.indexOf(heading);
+      const line = index >= 0 ? srcLines[index] : undefined;
+      if (line !== undefined) this.editor!.revealLine(line + 1);
+      return;
+    }
+    const pane = this.shell!.previewPane;
+    const offset = heading.el.getBoundingClientRect().top - pane.getBoundingClientRect().top;
+    pane.scrollTo({ top: pane.scrollTop + offset - 12, behavior: 'smooth' });
   }
 
   /* ───────────────────────── 滚动同步 / 分栏拖拽 ───────────────────────── */
@@ -403,6 +570,7 @@ export class EditorApp {
       shell.previewPane.scrollTop = computeSyncedScrollTop(editorScroll.scrollTop, srcMax, dstMax);
     });
     shell.previewPane.addEventListener('scroll', () => {
+      this.queueSpy(); // 大纲高亮跟随（任何视图下预览滚动都要跟踪）
       if (this.mode !== 'split' || this.scrollLock) return;
       const dst = editorScroll;
       const srcMax = shell.previewPane.scrollHeight - shell.previewPane.clientHeight;
@@ -443,7 +611,12 @@ export class EditorApp {
 
   private persistSession(): void {
     if (!this.shell || !this.shell.root.isConnected) return;
-    this.lastPersistOk = saveSession(this.editor!.getDoc(), this.fileName, this.mode);
+    this.lastPersistOk = saveSession(
+      this.editor!.getDoc(),
+      this.fileName,
+      this.mode,
+      this.outlineVisible,
+    );
     if (this.lastPersistOk) {
       this.lastSavedAt = Date.now();
       this.shell.statusbar.autosave.textContent = `自动保存 · ${formatClock(this.lastSavedAt)}`;

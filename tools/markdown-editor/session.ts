@@ -15,6 +15,8 @@ export interface EditorSession {
   doc: string;
   name: string;
   mode: ViewMode;
+  /** 内容大纲面板是否展开（缺省收起） */
+  outline: boolean;
   savedAt: number;
 }
 
@@ -32,7 +34,8 @@ export function parseSessionBlob(raw: unknown): EditorSession | null {
   if (typeof blob.savedAt !== 'number' || !Number.isFinite(blob.savedAt)) return null;
   const mode = MODES.includes(blob.mode as ViewMode) ? (blob.mode as ViewMode) : 'split';
   const name = blob.name.trim() || '未命名.md';
-  return { doc: blob.doc, name, mode, savedAt: blob.savedAt };
+  const outline = blob.outline === true;
+  return { doc: blob.doc, name, mode, outline, savedAt: blob.savedAt };
 }
 
 /**
@@ -52,8 +55,8 @@ export function loadSession(): EditorSession | null {
 }
 
 /** 写入当前会话；存储不可用（隐私模式等）时静默返回 false */
-export function saveSession(doc: string, name: string, mode: ViewMode): boolean {
-  return writeJSON(STORAGE_KEY, { version: 1, doc, name, mode, savedAt: Date.now() });
+export function saveSession(doc: string, name: string, mode: ViewMode, outline: boolean): boolean {
+  return writeJSON(STORAGE_KEY, { version: 1, doc, name, mode, outline, savedAt: Date.now() });
 }
 
 /** 清除会话（关闭文档/放弃现场时），下次进入回到欢迎页 */

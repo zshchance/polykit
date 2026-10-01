@@ -127,6 +127,7 @@ export interface EditorCallbacks {
   onSave: () => void;
   onExport: () => void;
   onModeChange: (mode: ViewMode) => void;
+  onToggleOutline: () => void;
   onClose: () => void;
   onDropFile: (file: OpenedFile) => void;
   onDropReject: (r: DropRejection) => void;
@@ -140,6 +141,11 @@ export interface EditorShell {
   preview: HTMLElement;
   divider: HTMLElement;
   modeBtns: Record<ViewMode, HTMLButtonElement>;
+  outlineBtn: HTMLButtonElement;
+  /** 大纲面板本体（OutlinePanel 填充内容；开合由 app 控制） */
+  outline: HTMLElement;
+  /** 大纲面板旁的浮动手柄：随时点击展开/收起大纲 */
+  outlineFloatBtn: HTMLButtonElement;
   statusbar: {
     file: HTMLElement;
     diskState: HTMLElement;
@@ -213,6 +219,34 @@ export function buildEditorShell(cb: EditorCallbacks): EditorShell {
     divider,
     previewPane,
   ]);
+  // 大纲移出工作区卡片，成为旁侧浮动面板：不受卡片 overflow:hidden 影响，
+  // 才能真正随页滚动吸顶（sticky）；浮动手柄骑在面板右缘，随时开合。
+  const outline = h('aside', {
+    class: 'md-outline w-60 max-w-[45vw] flex-col overflow-y-auto px-2 py-3',
+    'aria-label': '内容大纲',
+  });
+  const outlineFloatBtn = h('button', {
+    type: 'button',
+    class: 'md-outline-float',
+    'aria-label': '展开大纲',
+    'aria-expanded': 'false',
+    title: '展开大纲',
+    textContent: '›',
+    onclick: cb.onToggleOutline,
+  });
+  const outlineWrap = h('div', { class: 'md-outline-wrap self-start', 'data-open': 'false' }, [
+    outline,
+    outlineFloatBtn,
+  ]);
+
+  const outlineBtn = h('button', {
+    type: 'button',
+    class: BTN,
+    textContent: '☰ 大纲',
+    title: '展开 / 收起内容大纲（自动跟踪标题，点击跳转章节）',
+    'aria-pressed': 'false',
+    onclick: cb.onToggleOutline,
+  });
 
   const statusbar = {
     file: fileStat,
@@ -260,6 +294,7 @@ export function buildEditorShell(cb: EditorCallbacks): EditorShell {
         },
         segButtons,
       ),
+      outlineBtn,
       h('span', { class: 'flex-1' }),
       h('button', {
         type: 'button',
@@ -269,15 +304,18 @@ export function buildEditorShell(cb: EditorCallbacks): EditorShell {
         onclick: cb.onClose,
       }),
     ]),
-    // —— 工作区（卡片式容器）——
-    h(
-      'div',
-      {
-        class:
-          'flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]',
-      },
-      [workspace],
-    ),
+    // —— 编辑区组：左侧浮动大纲 + 工作区卡片 ——
+    h('div', { class: 'flex min-h-0 flex-1 items-stretch gap-3' }, [
+      outlineWrap,
+      h(
+        'div',
+        {
+          class:
+            'md-workspace-card flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]',
+        },
+        [workspace],
+      ),
+    ]),
     // —— 状态栏 ——
     h(
       'div',
@@ -306,6 +344,9 @@ export function buildEditorShell(cb: EditorCallbacks): EditorShell {
     preview,
     divider,
     modeBtns,
+    outlineBtn,
+    outline,
+    outlineFloatBtn,
     statusbar,
   };
 }

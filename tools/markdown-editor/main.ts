@@ -22,7 +22,7 @@ async function boot(): Promise<void> {
   // 会话记忆：上次写到一半的手稿直接恢复现场；否则进欢迎页（支持拖文件进来）
   const session = loadSession();
   if (session) {
-    app.enterEditor(session.doc, session.name, session.mode);
+    app.enterEditor(session.doc, session.name, session.mode, session.outline);
   } else {
     app.showLanding();
   }

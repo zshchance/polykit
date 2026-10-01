@@ -2,9 +2,10 @@
  * Markdown 手札 —— 应用外壳样式。
  * 布局骨架与按钮用 Tailwind（main.ts 内联类），这里只放：
  *   1. 站点主题 token → 预览排版变量（--md-*）的映射（亮/暗）
- *   2. 工作区结构（分栏/分隔条/视图模式）
+ *   2. 「自由滚动」布局体系：页眉/页脚随页面滚走，工具栏吸顶、状态栏吸底、
+ *      大纲浮动吸顶，工作区卡片高度 = 一屏减常驻件（JS 写入 --mdt-* 变量）
  *   3. CodeMirror 主题化（贴站点变量）
- *   4. 拖拽态、空态落件区
+ *   4. 拖拽态、空态落件区、大纲分级样式与浮动手柄
  *   5. 打印规则（只打印预览内容）
  */
 
@@ -18,9 +19,74 @@
   --md-quote-bar: var(--border);
   --md-danger: var(--holiday-legal);
   --md-code-bg: color-mix(in srgb, var(--fg) 5%, transparent);
+
+  /* 常驻件高度（app.ts 的 ResizeObserver 实测覆盖；此处为挂载前兜底） */
+  --mdt-sticky-top: 4rem;
+  --mdt-card-h: calc(100vh - 7rem);
 }
 
-/* ── 2. 工作区：编辑 pane ｜ 分隔条 ｜ 预览 pane ── */
+/* ── 2. 自由滚动布局 ──
+ * #app 为自然文档流（min-h-screen）：站点页眉在顶部随滚动离开视野、页脚沉到页尾，
+ * 编辑现场不再被常驻页眉页脚挤占。工具栏与状态栏是「工具自身的操控件」，
+ * 吸顶/吸底常驻（毛玻璃底，内容从下方滚过）。
+ */
+#app > main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.md-toolbar {
+  position: sticky;
+  top: 0.5rem;
+  z-index: 30;
+  border-radius: 0.75rem;
+  padding: 0.375rem 0.5rem;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 1px 8px color-mix(in srgb, var(--fg) 8%, transparent);
+}
+
+/*
+ * 状态栏用 fixed 而非 sticky-bottom：sticky 只能「托住不让太低」，页面回滚时
+ * 它的文档流槽位上移、状态栏跟着飘起来，下方留出一截空白。fixed 恒贴视口底。
+ * 宽度与 #app 内容列对齐（max-w 1700 + px-4）。
+ *
+ * 配套几何：工作区卡片高度取「到视口底」（见 --mdt-card-h），状态栏悬浮在卡片
+ * 底部之上（毛玻璃浮层），沉浸位卡片铺满到屏幕底；卡片与页脚之间零间距，
+ * 页脚过渡时紧跟卡片升起——任何滚动位置都不会露出裸背景。
+ */
+.md-statusbar {
+  position: fixed;
+  bottom: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(calc(100vw - 2rem), calc(1700px - 2rem));
+  z-index: 30;
+  border-radius: 0.625rem;
+  padding: 0.25rem 0.625rem;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 1px 8px color-mix(in srgb, var(--fg) 8%, transparent);
+}
+
+/* 站点页脚自带 mt-16（64px），在编辑器页会让页脚过渡带露出大片裸背景：
+   本页收紧为小间距让页脚紧跟卡片升起；底部保留出让状态栏的高度，
+   滚到绝对底时页脚完整停在浮层栏上方 */
+#app > footer {
+  margin-top: 0.75rem;
+  margin-bottom: calc(var(--mdt-status-h, 1.75rem) + 0.5rem);
+}
+
+/* 工作区卡片：沉浸位直达视口底（高度由 --mdt-card-h 给定），panes 内部滚动 */
+.md-workspace-card {
+  height: var(--mdt-card-h);
+  min-height: 420px;
+}
+
+/* ── 工作区：编辑 pane ｜ 分隔条 ｜ 预览 pane ── */
 .md-workspace {
   display: flex;
   min-height: 0;
@@ -90,7 +156,8 @@
 .md-editor-host .cm-scroller {
   font-family: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   line-height: 1.7;
-  padding: 0.75rem 0 2rem;
+  /* 底部让出悬浮状态栏的高度，文末不被浮层盖住 */
+  padding: 0.75rem 0 calc(var(--mdt-status-h, 1.75rem) + 1.5rem);
 }
 .md-editor-host .cm-gutters {
   background: transparent;
@@ -117,8 +184,7 @@
   color: var(--fg);
 }
 
-/* ── 4. 拖拽态 ── */
-/* 编辑工作区拖入文件时：虚线高亮 + 提示文案 */
+/* ── 4a. 拖拽态 ── */
 .md-workspace.drag-over::after {
   content: '松开以打开 Markdown 文件';
   position: absolute;
@@ -136,7 +202,6 @@
   z-index: 10;
 }
 
-/* 空态落件区（欢迎页）：默认虚线低调，拖入悬停时点亮 */
 .md-dropzone {
   border: 2px dashed var(--border);
   transition:
@@ -151,6 +216,109 @@
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   transform: scale(1.01);
+}
+
+/* ── 4b. 大纲浮动面板（工作区卡片外的旁侧栏） ──
+ * wrap 是吸顶单元：面板开着 = 卡片样式的侧栏；收起 = 宽度归零只剩浮动手柄。
+ * 面板本体（aside）负责滚动；手柄挂在 wrap 上不随内容滚动。 */
+.md-outline-wrap {
+  position: sticky;
+  top: var(--mdt-sticky-top);
+  z-index: 20;
+  width: 0; /* 收起时占位为零；面板打开时由内容撑开 */
+}
+.md-outline-wrap[data-open='true'] {
+  width: min(15rem, 45vw);
+}
+.md-outline {
+  display: none;
+  max-height: calc(100vh - var(--mdt-sticky-top) - 3rem);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--bg-elevated);
+  box-shadow: 0 1px 8px color-mix(in srgb, var(--fg) 8%, transparent);
+}
+.md-outline.is-open {
+  display: flex;
+}
+
+/* 浮动开合手柄：骑在面板右缘的竖条（收起时骑工作区卡片左缘），随时点击 */
+.md-outline-float {
+  position: absolute;
+  top: 3.25rem;
+  left: calc(100% - 0.875rem); /* 手柄宽 1.75rem，中心对齐 wrap 右缘 */
+  z-index: 25;
+  width: 1.75rem;
+  height: 3.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--fg-muted);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  background: var(--bg-elevated);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--fg) 12%, transparent);
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease,
+    background-color 0.18s ease;
+}
+.md-outline-float:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elevated));
+}
+
+/* 大纲条目：hover 轻反馈，当前章节（scroll-spy）高亮 */
+.md-outline-item {
+  color: var(--fg-muted);
+}
+.md-outline-item:hover {
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+}
+.md-outline-item.is-active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.md-outline-item.is-active .md-outline-text {
+  font-weight: 600;
+}
+
+/* 分级强调：级别越深字重越轻、色越淡、字稍小，层级一眼可辨 */
+.md-outline-item[data-level='1'] .md-outline-text {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--fg);
+}
+.md-outline-item[data-level='2'] .md-outline-text {
+  font-weight: 500;
+  color: var(--fg);
+}
+.md-outline-item[data-level='3'] .md-outline-text {
+  color: var(--fg-muted);
+}
+.md-outline-item[data-level='4'] .md-outline-text,
+.md-outline-item[data-level='5'] .md-outline-text,
+.md-outline-item[data-level='6'] .md-outline-text {
+  font-size: 12px;
+  color: var(--fg-muted);
+  opacity: 0.82;
+}
+.md-outline-item.is-active[data-level] .md-outline-text {
+  color: var(--accent);
+}
+.md-outline-caret.cursor-pointer:hover {
+  color: var(--fg);
+}
+
+/* 工具栏「大纲」按钮激活态（与视图分段按钮一致的强调语言） */
+.md-toolbar .outline-active {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* 导出格式卡片：选中态由 .is-selected 类驱动（app.ts 切类），描边/底色在此声明 */
@@ -183,16 +351,28 @@
   .md-toolbar,
   .md-statusbar,
   .md-editor-pane,
-  .md-divider {
+  .md-divider,
+  .md-outline-wrap {
     display: none !important;
   }
   #app {
-    height: auto !important;
+    min-height: 0 !important;
     max-width: none !important;
     padding: 0 !important;
   }
+  #app > main {
+    display: block !important;
+  }
   .md-root {
     display: block !important;
+  }
+  .md-workspace-card {
+    height: auto !important;
+    min-height: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    overflow: visible !important;
   }
   .md-workspace,
   .md-preview-pane {
