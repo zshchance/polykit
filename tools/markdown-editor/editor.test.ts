@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { countWords, countChars, computeSyncedScrollTop } from './utils';
-import { parseSessionBlob, isWorthRestoring } from './session';
+import { parseSessionBlob, isWorthRestoring, normalizeScroll } from './session';
 import { stripMarkdownExt, htmlExportFilename, mdExportFilename } from './export/html';
 import { isOpenableName } from './io/files';
 import { buildOutlineTree, findHeadingSourceLines, type OutlineHeading } from './outline';
@@ -54,13 +54,15 @@ describe('computeSyncedScrollTop（比例滚动同步）', () => {
 
 describe('parseSessionBlob（会话数据校验）', () => {
   const valid = { version: 1, doc: '# hi', name: '笔记.md', mode: 'read', savedAt: 1710000000000 };
+  const zeroScroll = { page: 0, preview: 0, editor: 0 };
 
-  it('合法数据原样通过（outline 缺省为 false）', () => {
+  it('合法数据原样通过（outline/scroll 缺省为 false/顶部）', () => {
     expect(parseSessionBlob(valid)).toEqual({
       doc: '# hi',
       name: '笔记.md',
       mode: 'read',
       outline: false,
+      scroll: zeroScroll,
       savedAt: 1710000000000,
     });
   });
@@ -69,6 +71,14 @@ describe('parseSessionBlob（会话数据校验）', () => {
     expect(parseSessionBlob({ ...valid, outline: true })?.outline).toBe(true);
     expect(parseSessionBlob({ ...valid, outline: 'yes' })?.outline).toBe(false);
     expect(parseSessionBlob({ ...valid, outline: 1 })?.outline).toBe(false);
+  });
+
+  it('滚动位置被保留并取整', () => {
+    const parsed = parseSessionBlob({
+      ...valid,
+      scroll: { page: 137.4, preview: 820.6, editor: 300 },
+    })?.scroll;
+    expect(parsed).toEqual({ page: 137, preview: 821, editor: 300 });
   });
 
   it('非法 mode 回落 split，空名回落 未命名.md', () => {
@@ -88,8 +98,45 @@ describe('parseSessionBlob（会话数据校验）', () => {
   });
 });
 
+describe('normalizeScroll（滚动位置规整）', () => {
+  it('合法三分量通过并取整', () => {
+    expect(normalizeScroll({ page: 10.4, preview: 99.5, editor: 0 })).toEqual({
+      page: 10,
+      preview: 100,
+      editor: 0,
+    });
+  });
+
+  it('非对象（null/数组/字符串）整体回落顶部', () => {
+    expect(normalizeScroll(null)).toEqual({ page: 0, preview: 0, editor: 0 });
+    expect(normalizeScroll([1, 2, 3])).toEqual({ page: 0, preview: 0, editor: 0 });
+    expect(normalizeScroll('scroll')).toEqual({ page: 0, preview: 0, editor: 0 });
+  });
+
+  it('分量缺失/负数/非有限数逐项回落 0，其余保留', () => {
+    expect(normalizeScroll({ page: -5, preview: 88, editor: Number.NaN })).toEqual({
+      page: 0,
+      preview: 88,
+      editor: 0,
+    });
+    expect(normalizeScroll({ preview: 42 })).toEqual({ page: 0, preview: 42, editor: 0 });
+    expect(normalizeScroll({ page: '7', preview: true })).toEqual({
+      page: 0,
+      preview: 0,
+      editor: 0,
+    });
+  });
+});
+
 describe('isWorthRestoring（是否值得恢复现场）', () => {
-  const base = { doc: '', name: '未命名.md', mode: 'split' as const, outline: false, savedAt: 0 };
+  const base = {
+    doc: '',
+    name: '未命名.md',
+    mode: 'split' as const,
+    outline: false,
+    scroll: { page: 0, preview: 0, editor: 0 },
+    savedAt: 0,
+  };
 
   it('空白且未命名 → 不恢复（回欢迎页）', () => {
     expect(isWorthRestoring(base)).toBe(false);

@@ -14,7 +14,7 @@ import {
   type DropRejection,
 } from './io/files';
 import { buildStandaloneHtml, htmlExportFilename, mdExportFilename } from './export/html';
-import { saveSession, clearSession, type ViewMode } from './session';
+import { saveSession, clearSession, ZERO_SCROLL, type ViewMode, type ScrollState } from './session';
 import { buildLanding, buildEditorShell, type EditorShell, type LandingView } from './ui';
 import { OutlinePanel, findHeadingSourceLines, type OutlineHeading } from './outline';
 
@@ -117,17 +117,22 @@ export class EditorApp {
   }
 
   /** 进入（或返回）编辑现场 */
-  enterEditor(doc: string, name: string, mode: ViewMode = 'split', outline = false): void {
+  enterEditor(
+    doc: string,
+    name: string,
+    opts: { mode?: ViewMode; outline?: boolean; scroll?: ScrollState } = {},
+  ): void {
     this.ensureShell();
     this.fileName = name;
     this.fileHandle = null;
     this.diskDirty = doc.trim().length > 0;
     this.editor!.setDoc(doc);
-    void this.renderPreview(doc);
+    // 渲染完成（含 Mermaid 图示高度落定）后再还原滚动位置，避免图示撑高导致漂移
+    void this.renderPreview(doc).then(() => this.restoreScroll(opts.scroll ?? ZERO_SCROLL));
     this.content.replaceChildren(this.shell!.root);
     this.editor!.measure();
-    this.setMode(mode);
-    this.setOutlineVisible(outline);
+    this.setMode(opts.mode ?? 'split');
+    this.setOutlineVisible(opts.outline ?? false);
     this.syncChromeHeights();
     this.persistSession();
     this.updateStatus();
@@ -183,8 +188,9 @@ export class EditorApp {
     const card = shell.workspace.closest<HTMLElement>('.md-workspace-card');
     if (!card) return;
     const toolbar = shell.root.querySelector<HTMLElement>('.md-toolbar');
+    const statusbar = shell.root.querySelector<HTMLElement>('.md-statusbar');
     const footer = document.querySelector<HTMLElement>('#app > footer');
-    if (!toolbar) return;
+    if (!toolbar || !statusbar) return;
 
     const onWheel = (e: WheelEvent): void => {
       if (e.deltaY === 0 || e.defaultPrevented) return;
@@ -207,10 +213,12 @@ export class EditorApp {
         const max = Math.max(0, immersiveTop - window.scrollY);
         window.scrollBy({ top: Math.min(delta, max) });
       } else if (!down && footerVisible) {
-        // 钳制在沉浸位（页脚恰好离场）
+        // 钳制在沉浸位：状态栏恰好重新钉底（其文档流槽底回到视口底 8px 线上，
+        // 页脚随之隐藏）——比「页脚刚离场」更深一档，避免落点半钉不钉
         e.preventDefault();
-        const footerTopDoc = footer!.getBoundingClientRect().top + window.scrollY;
-        const immersiveBottom = footerTopDoc - window.innerHeight;
+        const cardDocBottom = card.getBoundingClientRect().bottom + window.scrollY;
+        const slotBottomDoc = cardDocBottom + 12 + statusbar.offsetHeight;
+        const immersiveBottom = slotBottomDoc - (window.innerHeight - 8);
         const min = Math.min(0, immersiveBottom - window.scrollY);
         window.scrollBy({ top: Math.max(delta, min) });
       }
@@ -221,6 +229,8 @@ export class EditorApp {
       passive: false,
       capture: true,
     });
+    // 页面级滚动（页眉/页脚过渡带位置）同样纳入会话记忆
+    window.addEventListener('scroll', () => this.scheduleSessionSave(), { passive: true });
   }
 
   /**
@@ -564,6 +574,7 @@ export class EditorApp {
     const shell = this.shell!;
     const editorScroll = this.editor!.scrollElement();
     editorScroll.addEventListener('scroll', () => {
+      this.scheduleSessionSave(); // 滚动也是要记忆的「浏览位置」
       if (this.mode !== 'split' || this.scrollLock) return;
       const srcMax = editorScroll.scrollHeight - editorScroll.clientHeight;
       const dstMax = shell.previewPane.scrollHeight - shell.previewPane.clientHeight;
@@ -571,6 +582,7 @@ export class EditorApp {
     });
     shell.previewPane.addEventListener('scroll', () => {
       this.queueSpy(); // 大纲高亮跟随（任何视图下预览滚动都要跟踪）
+      this.scheduleSessionSave(); // 同上
       if (this.mode !== 'split' || this.scrollLock) return;
       const dst = editorScroll;
       const srcMax = shell.previewPane.scrollHeight - shell.previewPane.clientHeight;
@@ -611,11 +623,18 @@ export class EditorApp {
 
   private persistSession(): void {
     if (!this.shell || !this.shell.root.isConnected) return;
+    // 三条滚动带的实时位置一并入会话（浏览位置记忆）
+    const scroll: ScrollState = {
+      page: Math.max(0, Math.round(window.scrollY)),
+      preview: Math.max(0, Math.round(this.shell.previewPane.scrollTop)),
+      editor: Math.max(0, Math.round(this.editor!.scrollElement().scrollTop)),
+    };
     this.lastPersistOk = saveSession(
       this.editor!.getDoc(),
       this.fileName,
       this.mode,
       this.outlineVisible,
+      scroll,
     );
     if (this.lastPersistOk) {
       this.lastSavedAt = Date.now();
@@ -637,6 +656,18 @@ export class EditorApp {
         e.preventDefault();
       }
     });
+  }
+
+  /** 还原上次浏览位置：按当前视图挑滚动分量，页面级（过渡带）最后还原 */
+  private restoreScroll(scroll: ScrollState): void {
+    if (!this.shell || !this.shell.root.isConnected) return;
+    if (this.mode === 'editor') {
+      this.editor!.scrollElement().scrollTop = scroll.editor;
+    } else {
+      // 分栏/阅读：恢复预览位置，滚动同步链会把编辑器带过去
+      this.shell.previewPane.scrollTop = scroll.preview;
+    }
+    if (scroll.page > 0) window.scrollTo(0, scroll.page);
   }
 
   /* ───────────────────────── 状态栏 / 提示 ───────────────────────── */

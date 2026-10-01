@@ -11,6 +11,9 @@ import './styles.css';
 
 initTheme();
 
+// 会话自己记忆滚动位置：关掉浏览器原生滚动恢复，避免还原到「加载中的矮页面」
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
 async function boot(): Promise<void> {
   // Shiki 高亮器就绪后再进现场，避免首屏出现无高亮 → 高亮的跳变
   const highlighter = await createCodeHighlighter();
@@ -19,10 +22,14 @@ async function boot(): Promise<void> {
 
   const app = new EditorApp(content, renderer, welcomeDoc);
 
-  // 会话记忆：上次写到一半的手稿直接恢复现场；否则进欢迎页（支持拖文件进来）
+  // 会话记忆：上次写到一半的手稿直接恢复现场（含浏览位置）；否则进欢迎页（支持拖文件进来）
   const session = loadSession();
   if (session) {
-    app.enterEditor(session.doc, session.name, session.mode, session.outline);
+    app.enterEditor(session.doc, session.name, {
+      mode: session.mode,
+      outline: session.outline,
+      scroll: session.scroll,
+    });
   } else {
     app.showLanding();
   }
