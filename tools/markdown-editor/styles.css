@@ -1,0 +1,219 @@
+/*
+ * Markdown 手札 —— 应用外壳样式。
+ * 布局骨架与按钮用 Tailwind（main.ts 内联类），这里只放：
+ *   1. 站点主题 token → 预览排版变量（--md-*）的映射（亮/暗）
+ *   2. 工作区结构（分栏/分隔条/视图模式）
+ *   3. CodeMirror 主题化（贴站点变量）
+ *   4. 拖拽态、空态落件区
+ *   5. 打印规则（只打印预览内容）
+ */
+
+/* ── 1. 主题映射：预览排版吃站点 token ── */
+:root {
+  --md-fg: var(--fg);
+  --md-muted: var(--fg-muted);
+  --md-border: var(--border);
+  --md-accent: var(--accent);
+  --md-soft: var(--bg-elevated);
+  --md-quote-bar: var(--border);
+  --md-danger: var(--holiday-legal);
+  --md-code-bg: color-mix(in srgb, var(--fg) 5%, transparent);
+}
+
+/* ── 2. 工作区：编辑 pane ｜ 分隔条 ｜ 预览 pane ── */
+.md-workspace {
+  display: flex;
+  min-height: 0;
+  position: relative;
+  flex: 1;
+}
+.md-editor-pane {
+  flex: 1 1 50%;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+.md-preview-pane {
+  flex: 1 1 50%;
+  min-width: 0;
+  overflow: auto;
+  border-left: 1px solid var(--border);
+}
+.md-divider {
+  width: 5px;
+  flex: 0 0 auto;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s;
+  touch-action: none;
+}
+.md-divider:hover,
+.md-divider.active {
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+/* 视图模式：编辑只留编辑区，阅读只留预览区 */
+.md-workspace.mode-editor .md-preview-pane,
+.md-workspace.mode-editor .md-divider {
+  display: none;
+}
+.md-workspace.mode-editor .md-editor-pane {
+  flex-basis: 100%;
+}
+.md-workspace.mode-read .md-editor-pane,
+.md-workspace.mode-read .md-divider {
+  display: none;
+}
+.md-workspace.mode-read .md-preview-pane {
+  flex-basis: 100%;
+  border-left: none;
+}
+.md-workspace.mode-read .md-preview--page {
+  max-width: 860px;
+  padding-top: 3rem;
+}
+
+/* ── 3. CodeMirror：贴站点主题 ── */
+.md-editor-host {
+  height: 100%;
+}
+.md-editor-host .cm-editor {
+  height: 100%;
+  background: transparent;
+  color: var(--fg);
+  font-size: 15px;
+}
+.md-editor-host .cm-editor.cm-focused {
+  outline: none;
+}
+.md-editor-host .cm-scroller {
+  font-family: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  line-height: 1.7;
+  padding: 0.75rem 0 2rem;
+}
+.md-editor-host .cm-gutters {
+  background: transparent;
+  color: var(--fg-muted);
+  border-right: 1px solid var(--border);
+}
+.md-editor-host .cm-activeLine {
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+.md-editor-host .cm-activeLineGutter {
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+  color: var(--fg);
+}
+.md-editor-host .cm-selectionBackground,
+.md-editor-host .cm-editor ::selection {
+  background: color-mix(in srgb, var(--accent) 25%, transparent) !important;
+}
+.md-editor-host .cm-cursor {
+  border-left-color: var(--accent);
+  border-left-width: 2px;
+}
+.md-editor-host .cm-panels {
+  background: var(--bg-elevated);
+  color: var(--fg);
+}
+
+/* ── 4. 拖拽态 ── */
+/* 编辑工作区拖入文件时：虚线高亮 + 提示文案 */
+.md-workspace.drag-over::after {
+  content: '松开以打开 Markdown 文件';
+  position: absolute;
+  inset: 10px;
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  backdrop-filter: blur(1px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+  color: var(--accent);
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* 空态落件区（欢迎页）：默认虚线低调，拖入悬停时点亮 */
+.md-dropzone {
+  border: 2px dashed var(--border);
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    transform 0.18s ease;
+}
+.md-dropzone:hover {
+  border-color: var(--accent);
+}
+.md-dropzone.drag-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  transform: scale(1.01);
+}
+
+/* ── 按钮描边（无层级恢复） ──
+ * 站点 main.css 的 * { border-color: var(--border) } 未分层，
+ * 会压过 Tailwind 工具类层里的 border-[var(--accent)] / hover:border-[var(--accent)]。
+ * 本页所有「描边反馈」在无层级样式里显式声明，保证 hover 与选中态可见。 */
+.md-landing button:hover,
+.md-toolbar button:hover,
+[role='dialog'] button:hover {
+  border-color: var(--accent);
+}
+
+/* 导出格式卡片：选中描边用强调色，悬停给轻提示 */
+.md-export-card {
+  border-color: var(--border);
+}
+.md-export-card:hover {
+  border-color: var(--accent);
+}
+.md-export-card.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+/* ── Shiki 双主题：暗色切到 --shiki-dark 变量（仅屏幕；打印走浅色内联值） ── */
+@media screen {
+  html.dark .md-preview pre.shiki {
+    background-color: var(--shiki-dark-bg, #24292e) !important;
+  }
+  html.dark .md-preview pre.shiki code,
+  html.dark .md-preview pre.shiki span {
+    color: var(--shiki-dark, inherit) !important;
+  }
+}
+
+/* ── 5. 打印：只输出预览内容（配合「导出 PDF」） ── */
+@media print {
+  #app > header,
+  #app > footer,
+  .md-toolbar,
+  .md-statusbar,
+  .md-editor-pane,
+  .md-divider {
+    display: none !important;
+  }
+  #app {
+    height: auto !important;
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  .md-root {
+    display: block !important;
+  }
+  .md-workspace,
+  .md-preview-pane {
+    display: block !important;
+    overflow: visible !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+  }
+  .md-preview--page {
+    max-width: 820px;
+    padding: 0;
+  }
+}

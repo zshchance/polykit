@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="14" fill="#6366f1"/>
+  <rect x="0.5" y="0.5" width="63" height="63" rx="13.5" stroke="#fff" stroke-opacity="0.12"/>
+  <!-- Markdown「M↓」符号 -->
+  <path d="M15 43V21l8.5 11L32 21v22" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M42 23v15" stroke="#fff" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M36 33l6 6 6-6" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,249 @@
+/*
+ * 手札预览排版：对标 Typora 默认主题（GitHub 风 + 衬线正文）。
+ *
+ * 作用域 .md-preview，可同时用于站内预览与独立导出的 HTML。
+ * 颜色一律走 --md-* 变量并带浅色回退值：站内由 styles.css 映射到
+ * 站点主题 token（随亮暗切换）；导出产物无映射时落在回退值上。
+ */
+
+.md-preview {
+  font-family:
+    'Source Han Serif SC', 'Noto Serif CJK SC', 'Songti SC', SimSun, Georgia, 'Times New Roman',
+    serif;
+  font-size: 16px;
+  line-height: 1.85;
+  color: var(--md-fg, #1f2328);
+  word-wrap: break-word;
+}
+
+/* 标题：层级分明，h1/h2 带底边线（Typora/GitHub 风） */
+.md-preview h1,
+.md-preview h2,
+.md-preview h3,
+.md-preview h4,
+.md-preview h5,
+.md-preview h6 {
+  font-family:
+    'Source Han Sans SC',
+    'PingFang SC',
+    'Microsoft YaHei',
+    -apple-system,
+    'Segoe UI',
+    Helvetica,
+    Arial,
+    sans-serif;
+  line-height: 1.35;
+  margin: 1.6em 0 0.7em;
+  scroll-margin-top: 1rem;
+}
+.md-preview h1 {
+  font-size: 1.9em;
+  border-bottom: 1px solid var(--md-border, #d8dee4);
+  padding-bottom: 0.35em;
+  margin-top: 0.8em;
+}
+.md-preview h2 {
+  font-size: 1.5em;
+  border-bottom: 1px solid var(--md-border, #d8dee4);
+  padding-bottom: 0.3em;
+}
+.md-preview h3 {
+  font-size: 1.28em;
+}
+.md-preview h4 {
+  font-size: 1.12em;
+}
+.md-preview h5 {
+  font-size: 1em;
+}
+.md-preview h6 {
+  font-size: 0.94em;
+  color: var(--md-muted, #6e7781);
+}
+
+.md-preview p {
+  margin: 0.8em 0;
+}
+
+/* 链接与图片 */
+.md-preview a {
+  color: var(--md-accent, #0969da);
+  text-decoration: none;
+}
+.md-preview a:hover {
+  text-decoration: underline;
+}
+.md-preview img {
+  max-width: 100%;
+  border-radius: 4px;
+}
+
+/* 列表 */
+.md-preview ul,
+.md-preview ol {
+  padding-left: 1.6em;
+  margin: 0.6em 0;
+}
+.md-preview li {
+  margin: 0.25em 0;
+}
+.md-preview li::marker {
+  color: var(--md-muted, #6e7781);
+}
+
+/* 任务列表：复选框与文字对齐，勾选态淡化 */
+.md-preview li.task-list-item {
+  list-style: none;
+}
+.md-preview li.task-list-item input[type='checkbox'] {
+  margin-right: 0.45em;
+  accent-color: var(--md-accent, #0969da);
+  vertical-align: -2px;
+}
+.md-preview li.task-list-item:has(input:checked) {
+  color: var(--md-muted, #6e7781);
+  text-decoration: line-through solid var(--md-border, #d8dee4);
+}
+
+/* 引用：左侧竖线 + 柔和前景（Typora 风） */
+.md-preview blockquote {
+  margin: 1em 0;
+  padding: 0.35em 1.1em;
+  border-left: 4px solid var(--md-quote-bar, #d0d7de);
+  color: var(--md-muted, #59636e);
+  background: color-mix(in srgb, var(--md-soft, #f6f8fa) 55%, transparent);
+  border-radius: 0 6px 6px 0;
+}
+.md-preview blockquote p {
+  margin: 0.35em 0;
+}
+
+/* 行内代码 */
+.md-preview code {
+  font-family: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.88em;
+  background: var(--md-code-bg, #f6f8fa);
+  border-radius: 4px;
+  padding: 0.15em 0.4em;
+}
+
+/* 代码块：Shiki 自带配色，这里只做容器外观 */
+.md-preview pre {
+  margin: 1em 0;
+  padding: 0.95rem 1.1rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  border: 1px solid var(--md-border, #d8dee4);
+  line-height: 1.6;
+}
+.md-preview pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.86em;
+  display: block;
+}
+.md-preview pre .line {
+  display: inline-block;
+  width: 100%;
+}
+
+/* 表格 */
+.md-preview table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.2em 0;
+  font-size: 0.94em;
+  display: block;
+  overflow-x: auto;
+}
+.md-preview th,
+.md-preview td {
+  border: 1px solid var(--md-border, #d8dee4);
+  padding: 0.45em 0.85em;
+}
+.md-preview th {
+  background: var(--md-soft, #f6f8fa);
+  font-family: 'Source Han Sans SC', 'PingFang SC', sans-serif;
+  font-weight: 600;
+}
+.md-preview tr:nth-child(2n) td {
+  background: color-mix(in srgb, var(--md-soft, #f6f8fa) 45%, transparent);
+}
+
+/* 水平线、脚注、删除线 */
+.md-preview hr {
+  border: none;
+  border-top: 2px solid var(--md-border, #d8dee4);
+  margin: 2em auto;
+  width: 88%;
+}
+.md-preview del {
+  color: var(--md-muted, #6e7781);
+}
+.md-preview .footnotes {
+  font-size: 0.86em;
+  color: var(--md-muted, #6e7781);
+}
+.md-preview .footnotes hr.footnote-sep {
+  width: 5em;
+  margin: 1.5em 0;
+  border-top: 1px solid var(--md-border, #d8dee4);
+}
+
+/* 数学公式 */
+.md-preview .katex {
+  font-size: 1.05em;
+}
+.md-preview .katex-display {
+  margin: 1.2em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.2em 0;
+}
+
+/* Mermaid 图示：居中卡片式 */
+.md-preview .md-mermaid {
+  display: flex;
+  justify-content: center;
+  margin: 1.4em 0;
+  padding: 0.8em;
+  border-radius: 8px;
+}
+.md-preview .md-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.md-preview .md-mermaid-error {
+  display: block;
+  border: 1px solid var(--md-border, #d8dee4);
+  border-left: 4px solid var(--md-danger, #cf222e);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  background: var(--md-soft, #f6f8fa);
+}
+.md-preview .md-mermaid-error-title {
+  font-weight: 600;
+  color: var(--md-danger, #cf222e);
+  margin-bottom: 0.5rem;
+  font-family: 'PingFang SC', sans-serif;
+}
+.md-preview .md-mermaid-error-message {
+  white-space: pre-wrap;
+  font-size: 0.82rem;
+  color: var(--md-muted, #6e7781);
+  margin: 0;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+}
+
+/* 站内预览版心（导出产物用 --standalone 的更宽留白） */
+.md-preview--page {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 2.2rem 2.5rem 4rem;
+}
+.md-preview--standalone {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 3rem 2rem 5rem;
+}
