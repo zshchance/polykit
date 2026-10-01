@@ -76,6 +76,16 @@ export class EditorApp {
   private lastHeadings: OutlineHeading[] = [];
   private spyPending = false;
 
+  /**
+   * 滚动恢复窗口：恢复后约 0.9s 内字体/图示/滚动条出现仍会引发回流移动内容，
+   * 若放任滚动同步与防抖保存运行，瞬态值会被写回会话——下次刷新从漂移位置
+   * 继续漂，形成「每刷新一次多滚一截」的累积漂移。窗口内压制同步与保存，
+   * 并多轮校准回目标位置；用户真实滚动立即停手。
+   */
+  private restoring = false;
+  private userScrolledSinceRestore = false;
+  private lastRestoredScroll: ScrollState | null = null;
+
   private noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
   private readonly scheduleRender = debounce((doc: string) => void this.renderPreview(doc), 200);
@@ -171,6 +181,21 @@ export class EditorApp {
     this.bindDivider();
     this.bindChromeSync();
     this.bindScrollPriority();
+    this.bindUserScrollTracking();
+  }
+
+  /** 用户真实滚动信号（滚轮/触摸/翻页键）：出现即停用恢复期校准，避免抢滚动权 */
+  private bindUserScrollTracking(): void {
+    const mark = (): void => {
+      this.userScrolledSinceRestore = true;
+    };
+    document.addEventListener('wheel', mark, { capture: true, passive: true });
+    document.addEventListener('touchmove', mark, { capture: true, passive: true });
+    document.addEventListener('keydown', (e) => {
+      if (['PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown', ' '].includes(e.key)) {
+        mark();
+      }
+    });
   }
 
   /**
@@ -575,7 +600,7 @@ export class EditorApp {
     const editorScroll = this.editor!.scrollElement();
     editorScroll.addEventListener('scroll', () => {
       this.scheduleSessionSave(); // 滚动也是要记忆的「浏览位置」
-      if (this.mode !== 'split' || this.scrollLock) return;
+      if (this.restoring || this.mode !== 'split' || this.scrollLock) return;
       const srcMax = editorScroll.scrollHeight - editorScroll.clientHeight;
       const dstMax = shell.previewPane.scrollHeight - shell.previewPane.clientHeight;
       shell.previewPane.scrollTop = computeSyncedScrollTop(editorScroll.scrollTop, srcMax, dstMax);
@@ -583,7 +608,7 @@ export class EditorApp {
     shell.previewPane.addEventListener('scroll', () => {
       this.queueSpy(); // 大纲高亮跟随（任何视图下预览滚动都要跟踪）
       this.scheduleSessionSave(); // 同上
-      if (this.mode !== 'split' || this.scrollLock) return;
+      if (this.restoring || this.mode !== 'split' || this.scrollLock) return;
       const dst = editorScroll;
       const srcMax = shell.previewPane.scrollHeight - shell.previewPane.clientHeight;
       const dstMax = dst.scrollHeight - dst.clientHeight;
@@ -621,14 +646,20 @@ export class EditorApp {
 
   /* ───────────────────────── 会话记忆 ───────────────────────── */
 
-  private persistSession(): void {
+  private persistSession(force = false): void {
     if (!this.shell || !this.shell.root.isConnected) return;
-    // 三条滚动带的实时位置一并入会话（浏览位置记忆）
-    const scroll: ScrollState = {
-      page: Math.max(0, Math.round(window.scrollY)),
-      preview: Math.max(0, Math.round(this.shell.previewPane.scrollTop)),
-      editor: Math.max(0, Math.round(this.editor!.scrollElement().scrollTop)),
-    };
+    // 恢复窗口内布局未稳定，写入只会把瞬态漂移固化成记忆；pagehide 强制写时用恢复值兜底
+    if (this.restoring && !force) return;
+    let scroll: ScrollState;
+    if (this.restoring && this.lastRestoredScroll) {
+      scroll = this.lastRestoredScroll;
+    } else {
+      scroll = {
+        page: Math.max(0, Math.round(window.scrollY)),
+        preview: Math.max(0, Math.round(this.shell.previewPane.scrollTop)),
+        editor: Math.max(0, Math.round(this.editor!.scrollElement().scrollTop)),
+      };
+    }
     this.lastPersistOk = saveSession(
       this.editor!.getDoc(),
       this.fileName,
@@ -648,7 +679,7 @@ export class EditorApp {
   private bindUnloadFlush(): void {
     window.addEventListener('pagehide', () => {
       this.scheduleSessionSave.cancel();
-      this.persistSession();
+      this.persistSession(true);
     });
     window.addEventListener('beforeunload', (e) => {
       // 仅当「自动保存失败 + 有未落盘内容」才拦：正常刷新都有会话兜底
@@ -658,16 +689,41 @@ export class EditorApp {
     });
   }
 
-  /** 还原上次浏览位置：按当前视图挑滚动分量，页面级（过渡带）最后还原 */
+  /**
+   * 还原上次浏览位置。
+   * 双面板直接按保存值恢复（不经比例同步，避免在未稳定的 maxima 上算出瞬态）；
+   * 页面级最后还原。恢复窗口内多轮校准对抗字体/图示/滚动条回流，
+   * 用户真实滚动立即停手；窗口结束后恢复正常保存与同步。
+   */
   private restoreScroll(scroll: ScrollState): void {
     if (!this.shell || !this.shell.root.isConnected) return;
-    if (this.mode === 'editor') {
+    this.restoring = true;
+    this.userScrolledSinceRestore = false;
+    this.lastRestoredScroll = scroll;
+    this.scheduleSessionSave.cancel();
+
+    const apply = (): void => {
+      if (!this.shell?.root.isConnected) return;
       this.editor!.scrollElement().scrollTop = scroll.editor;
-    } else {
-      // 分栏/阅读：恢复预览位置，滚动同步链会把编辑器带过去
       this.shell.previewPane.scrollTop = scroll.preview;
-    }
-    if (scroll.page > 0) window.scrollTo(0, scroll.page);
+      if (scroll.page > 0) window.scrollTo(0, scroll.page);
+    };
+    const settle = (): void => {
+      if (this.userScrolledSinceRestore) return; // 用户已接管滚动，不再校准
+      apply();
+    };
+
+    apply();
+    // 回流校准：双 rAF 后、350ms 后、字体就绪后各一次
+    requestAnimationFrame(() => requestAnimationFrame(settle));
+    setTimeout(settle, 350);
+    void document.fonts?.ready.then(settle).catch(() => {});
+    // 结束恢复窗口：恢复正常的滚动同步与防抖保存
+    setTimeout(() => {
+      this.restoring = false;
+      this.scheduleSessionSave.cancel();
+      this.persistSession();
+    }, 900);
   }
 
   /* ───────────────────────── 状态栏 / 提示 ───────────────────────── */
