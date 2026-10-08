@@ -1,9 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { countWords, countChars, computeSyncedScrollTop } from './utils';
+import {
+  countWords,
+  countChars,
+  computeSyncedScrollTop,
+  previewTopForLine,
+  lineForPreviewTop,
+  type SyncAnchor,
+} from './utils';
 import { parseSessionBlob, isWorthRestoring, normalizeScroll } from './session';
 import { stripMarkdownExt, htmlExportFilename, mdExportFilename } from './export/html';
 import { isOpenableName } from './io/files';
 import { buildOutlineTree, findHeadingSourceLines, type OutlineHeading } from './outline';
+import { createMarkdownIt } from './renderer/markdown';
 
 describe('countWords（Typora 风格字数统计）', () => {
   it('CJK 每字计一', () => {
@@ -49,6 +57,81 @@ describe('computeSyncedScrollTop（比例滚动同步）', () => {
 
   it('目标不可滚动时收敛为 0', () => {
     expect(computeSyncedScrollTop(50, 100, 0)).toBe(0);
+  });
+});
+
+describe('previewTopForLine / lineForPreviewTop（锚点插值滚动同步）', () => {
+  // 模拟「源码 50 行 → 预览 2400px」、中段一块在预览侧被表格撑高的分布
+  const anchors: SyncAnchor[] = [
+    { line: 0, top: 0 },
+    { line: 10, top: 500 },
+    { line: 40, top: 2000 },
+    { line: 50, top: 2400 },
+  ];
+
+  it('锚点之间分段线性插值（非全局比例）', () => {
+    expect(previewTopForLine(5, anchors, 2400)).toBe(250); // 第一段 50px/行
+    expect(previewTopForLine(25, anchors, 2400)).toBe(1250); // 第二段 50px/行
+    expect(previewTopForLine(45, anchors, 2400)).toBe(2200); // 末段 40px/行
+  });
+
+  it('锚点上取精确值，越界钳制到首尾', () => {
+    expect(previewTopForLine(10, anchors, 2400)).toBe(500);
+    expect(previewTopForLine(-5, anchors, 2400)).toBe(0);
+    expect(previewTopForLine(99, anchors, 2400)).toBe(2400);
+  });
+
+  it('结果不超过 previewMax', () => {
+    expect(previewTopForLine(50, anchors, 2000)).toBe(2000);
+    expect(previewTopForLine(99, anchors, 2000)).toBe(2000);
+  });
+
+  it('lineForPreviewTop 与 previewTopForLine 互逆（块内进度无损往返）', () => {
+    for (const line of [0, 3.5, 10, 25, 39.9, 40, 50]) {
+      const top = previewTopForLine(line, anchors, 2400);
+      expect(lineForPreviewTop(top, anchors)).toBeCloseTo(line, 6);
+    }
+  });
+
+  it('lineForPreviewTop 越界钳制到首尾锚点行', () => {
+    expect(lineForPreviewTop(-10, anchors)).toBe(0);
+    expect(lineForPreviewTop(9999, anchors)).toBe(50);
+  });
+
+  it('零跨度锚点不产生 NaN，退化为边界值', () => {
+    const dup: SyncAnchor[] = [
+      { line: 0, top: 0 },
+      { line: 0, top: 0 },
+      { line: 10, top: 100 },
+    ];
+    expect(previewTopForLine(0, dup, 100)).toBe(0);
+    expect(lineForPreviewTop(0, dup)).toBe(0);
+  });
+
+  it('空锚点表安全返回 0', () => {
+    expect(previewTopForLine(5, [], 100)).toBe(0);
+    expect(lineForPreviewTop(50, [])).toBe(0);
+  });
+});
+
+describe('createMarkdownIt（块级源码行戳）', () => {
+  const md = createMarkdownIt();
+
+  it('标题/段落/列表等默认渲染路径保留 data-source-line（0 基）', () => {
+    const html = md.render('# 标题\n\n段落一\n\n- 甲\n- 乙\n');
+    expect(html).toContain('data-source-line="0"'); // h1（第 0 行）
+    expect(html).toContain('data-source-line="2"'); // 段落（第 2 行）
+    expect(html).toContain('data-source-line="4"'); // 列表（第 4 行）
+  });
+
+  it('普通围栏降级路径的 pre 带行戳', () => {
+    const html = md.render('```txt\n纯文本\n```\n');
+    expect(html).toContain('<pre data-source-line="0"');
+  });
+
+  it('mermaid 占位 div 带行戳', () => {
+    const html = md.render('前言\n\n```mermaid\ngraph TD\nA-->B\n```\n');
+    expect(html).toContain('<div class="md-mermaid" data-source-line="2"');
   });
 });
 

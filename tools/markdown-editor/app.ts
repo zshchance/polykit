@@ -3,7 +3,15 @@ import { createDialog, confirmDialog } from '@/core/components/Dialog';
 import type { Renderer } from './renderer';
 import { renderMermaidIn, setMermaidThemePref, reapplyMermaidTheme } from './renderer/mermaid';
 import { createCodeMirror, type CodeMirrorHandle } from './editor/codemirror';
-import { debounce, computeSyncedScrollTop, countWords, countChars } from './utils';
+import {
+  debounce,
+  computeSyncedScrollTop,
+  countWords,
+  countChars,
+  previewTopForLine,
+  lineForPreviewTop,
+  type SyncAnchor,
+} from './utils';
 import {
   openMarkdownFile,
   saveMarkdownFile,
@@ -51,7 +59,8 @@ const FORMAT_OPTIONS: FormatOption[] = [
 /**
  * 手札应用控制器：
  * 空态欢迎页 ↔ 编辑现场两个视图；文件打开/保存/导出（带格式确认）；
- * 防抖实时渲染、比例滚动同步、分栏拖拽、内容大纲（自动维护/跳转/scroll-spy）、
+ * 防抖实时渲染、锚点滚动同步（块级源码行戳分段插值）、分栏拖拽、
+ * 内容大纲（自动维护/跳转/scroll-spy）、
  * 会话记忆（刷新不丢稿）、站点亮暗主题联动（Mermaid/Shiki）。
  */
 export class EditorApp {
@@ -75,6 +84,14 @@ export class EditorApp {
   /** 最近一次渲染收集的标题（供 scroll-spy 与点击定位） */
   private lastHeadings: OutlineHeading[] = [];
   private spyPending = false;
+
+  /**
+   * 分栏滚动同步锚点表：预览块（data-source-line 戳）的 (0 基源码行, 预览内像素顶)。
+   * 预览高度一变（重渲染/图片/字体/分栏拖拽）整体重建，滚动事件里按总高变化惰性发现。
+   */
+  private syncAnchors: SyncAnchor[] = [];
+  /** 采集锚点时的预览 scrollHeight，用于滚动时探测「迟到的高度变化」 */
+  private syncAnchorScrollHeight = -1;
 
   /**
    * 滚动恢复窗口：恢复后约 0.9s 内字体/图示/滚动条出现仍会引发回流移动内容，
@@ -177,6 +194,14 @@ export class EditorApp {
       this.shell!.statusbar.cursor.textContent = `行 ${pos.line}，列 ${pos.col}`;
     });
     enableDragOpen(this.shell.workspace, (file) => this.loadFile(file));
+    // 图片/SVG 迟到加载会撑高预览：捕获不冒泡的 load 事件，及时重采同步锚点
+    this.shell.preview.addEventListener(
+      'load',
+      (e) => {
+        if (e.target instanceof HTMLElement) this.rebuildSyncAnchors();
+      },
+      true,
+    );
     this.bindScrollSync();
     this.bindDivider();
     this.bindChromeSync();
@@ -265,7 +290,10 @@ export class EditorApp {
    */
   private bindChromeSync(): void {
     const shell = this.shell!;
-    const apply = (): void => this.syncChromeHeights();
+    const apply = (): void => {
+      this.syncChromeHeights();
+      this.rebuildSyncAnchors(); // 视口尺寸变化 → 两侧换行/高度重排，锚点需重采
+    };
     new ResizeObserver(apply).observe(shell.root.querySelector('.md-toolbar')!);
     new ResizeObserver(apply).observe(shell.statusbar.cursor.parentElement!);
     window.addEventListener('resize', apply);
@@ -504,6 +532,7 @@ export class EditorApp {
         : 'px-3 py-1.5 text-sm text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]';
       btn.setAttribute('aria-pressed', String(active));
     }
+    if (mode === 'split') this.rebuildSyncAnchors(); // 单栏期间预览高度无效，切回即重采
     this.persistSession();
   }
 
@@ -518,6 +547,7 @@ export class EditorApp {
     this.shell.statusbar.render.textContent =
       this.lastRenderMs > 0 ? `渲染 ${this.lastRenderMs.toFixed(0)}ms` : '';
     this.refreshOutline();
+    this.rebuildSyncAnchors(); // 渲染产物高度已落定，滚动同步锚点随之更新
   }
 
   /* ───────────────────────── 内容大纲 ───────────────────────── */
@@ -595,27 +625,101 @@ export class EditorApp {
 
   /* ───────────────────────── 滚动同步 / 分栏拖拽 ───────────────────────── */
 
+  /** 采集分栏同步锚点：预览区每个带源码行戳的顶层块 → (0 基行, 预览内像素顶) */
+  private rebuildSyncAnchors(): void {
+    const shell = this.shell;
+    if (!shell?.root.isConnected) return;
+    const pane = shell.previewPane;
+    const paneTop = pane.getBoundingClientRect().top;
+    const max = Math.max(pane.scrollHeight - pane.clientHeight, 0);
+    const anchors: SyncAnchor[] = [{ line: 0, top: 0 }];
+    let lastLine = 0;
+    let lastTop = 0;
+    for (const el of Array.from(shell.preview.children)) {
+      if (!(el instanceof HTMLElement)) continue;
+      const line = Number(el.dataset.sourceLine);
+      if (!Number.isInteger(line) || line < lastLine) continue;
+      const top = Math.round(el.getBoundingClientRect().top - paneTop + pane.scrollTop);
+      if (top < lastTop) continue; // 跳过非流序/零高元素，锚点保持单调
+      anchors.push({ line, top });
+      lastLine = line;
+      lastTop = top;
+    }
+    // 文档终点虚拟锚：插值覆盖到预览底部（脚注区等无行戳内容也落进最后一段）
+    anchors.push({
+      line: Math.max(lastLine, this.editor?.lineCount() ?? 0),
+      top: Math.max(max, lastTop),
+    });
+    this.syncAnchors = anchors;
+    this.syncAnchorScrollHeight = pane.scrollHeight;
+  }
+
+  /** 滚动同步用锚点：表缺失、预览总高变化（图片/公式字体迟到撑高）或滚动位超出表覆盖时先重建 */
+  private ensureSyncAnchors(): SyncAnchor[] {
+    const pane = this.shell!.previewPane;
+    const last = this.syncAnchors[this.syncAnchors.length - 1];
+    if (
+      this.syncAnchors.length < 2 ||
+      pane.scrollHeight !== this.syncAnchorScrollHeight ||
+      (last !== undefined && pane.scrollTop > last.top + 1)
+    ) {
+      this.rebuildSyncAnchors();
+    }
+    return this.syncAnchors;
+  }
+
+  /**
+   * 分栏双向滚动同步（锚点插值）：
+   * 预览块带 data-source-line 戳，滚动时在相邻锚点间分段线性插值——
+   * 块边界严格对齐、块内按行数分摊，替代「全文档统一比例」
+   * （表格/图示让两侧高度分布不均，比例映射会随篇幅累积成章节级错位）。
+   * 双向都加锁抑制程序性滚动的回声；锚点不可用（如空预览）回退比例映射。
+   */
   private bindScrollSync(): void {
     const shell = this.shell!;
     const editorScroll = this.editor!.scrollElement();
+    const settle = (): void => {
+      requestAnimationFrame(() => (this.scrollLock = false));
+    };
     editorScroll.addEventListener('scroll', () => {
       this.scheduleSessionSave(); // 滚动也是要记忆的「浏览位置」
       if (this.restoring || this.mode !== 'split' || this.scrollLock) return;
-      const srcMax = editorScroll.scrollHeight - editorScroll.clientHeight;
-      const dstMax = shell.previewPane.scrollHeight - shell.previewPane.clientHeight;
-      shell.previewPane.scrollTop = computeSyncedScrollTop(editorScroll.scrollTop, srcMax, dstMax);
+      const pane = shell.previewPane;
+      const previewMax = pane.scrollHeight - pane.clientHeight;
+      const anchors = this.ensureSyncAnchors();
+      const target =
+        anchors.length >= 2
+          ? previewTopForLine(this.editor!.firstVisibleLine() - 1, anchors, previewMax)
+          : computeSyncedScrollTop(
+              editorScroll.scrollTop,
+              editorScroll.scrollHeight - editorScroll.clientHeight,
+              previewMax,
+            );
+      if (Math.abs(target - pane.scrollTop) < 1) return;
+      this.scrollLock = true;
+      pane.scrollTop = target;
+      settle();
     });
     shell.previewPane.addEventListener('scroll', () => {
       this.queueSpy(); // 大纲高亮跟随（任何视图下预览滚动都要跟踪）
       this.scheduleSessionSave(); // 同上
       if (this.restoring || this.mode !== 'split' || this.scrollLock) return;
-      const dst = editorScroll;
-      const srcMax = shell.previewPane.scrollHeight - shell.previewPane.clientHeight;
-      const dstMax = dst.scrollHeight - dst.clientHeight;
-      const target = computeSyncedScrollTop(shell.previewPane.scrollTop, srcMax, dstMax);
+      const anchors = this.ensureSyncAnchors();
+      if (anchors.length < 2) {
+        const srcMax = shell.previewPane.scrollHeight - shell.previewPane.clientHeight;
+        const dstMax = editorScroll.scrollHeight - editorScroll.clientHeight;
+        this.scrollLock = true;
+        editorScroll.scrollTop = computeSyncedScrollTop(
+          shell.previewPane.scrollTop,
+          srcMax,
+          dstMax,
+        );
+        settle();
+        return;
+      }
       this.scrollLock = true;
-      dst.scrollTop = target;
-      requestAnimationFrame(() => (this.scrollLock = false));
+      this.editor!.syncScrollToLine(lineForPreviewTop(shell.previewPane.scrollTop, anchors));
+      settle();
     });
   }
 
@@ -639,6 +743,7 @@ export class EditorApp {
     const stop = () => {
       dragging = false;
       divider.classList.remove('active');
+      this.rebuildSyncAnchors(); // 分栏比例变了，两侧换行重排，锚点需重采
     };
     divider.addEventListener('pointerup', stop);
     divider.addEventListener('pointercancel', stop);
@@ -707,6 +812,7 @@ export class EditorApp {
       this.editor!.scrollElement().scrollTop = scroll.editor;
       this.shell.previewPane.scrollTop = scroll.preview;
       if (scroll.page > 0) window.scrollTo(0, scroll.page);
+      this.rebuildSyncAnchors(); // 每轮校准后高度可能仍在变，锚点随校准刷新
     };
     const settle = (): void => {
       if (this.userScrolledSinceRestore) return; // 用户已接管滚动，不再校准
@@ -782,6 +888,7 @@ export class EditorApp {
         await reapplyMermaidTheme();
         if (this.shell?.preview.querySelector('.md-mermaid')) {
           await renderMermaidIn(this.shell.preview, { force: true });
+          this.rebuildSyncAnchors(); // 图示主题重渲可能改变高度
         }
       })();
     }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
