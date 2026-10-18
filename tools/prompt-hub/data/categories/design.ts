@@ -8,6 +8,8 @@ import type { Prompt } from '../../types';
 export const DESIGN_PROMPTS: Prompt[] = [
   {
     id: 'ghibli-transform',
+    need: ['image-gen'],
+    directPrompt: `Studio Ghibli / Hayao Miyazaki style illustration: {{scene}}. Soft hand-painted watercolor texture, lush clouds and warm light, gentle linework, rich background detail with plants and everyday life, nostalgic healing atmosphere, wide-open composition with breathing space. --ar 16:9`,
     title: '照片变吉卜力风',
     icon: '🍃',
     category: 'design',
@@ -40,6 +42,8 @@ export const DESIGN_PROMPTS: Prompt[] = [
   },
   {
     id: 'cyberpunk-transform',
+    need: ['image-gen'],
+    directPrompt: `Cyberpunk scene: {{scene}}, reimagined as a neon-lit futuristic megacity. Rain-slicked streets reflecting holographic signage, dense neon lights in magenta and cyan, towering skyscrapers, mist and volumetric glow, cinematic wide shot, blade-runner mood. --ar 16:9`,
     title: '场景变赛博朋克',
     icon: '🌃',
     category: 'design',
@@ -71,6 +75,8 @@ export const DESIGN_PROMPTS: Prompt[] = [
   },
   {
     id: 'ink-wash-transform',
+    need: ['image-gen'],
+    directPrompt: `Traditional Chinese ink wash painting (shui-mo): {{scene}}. Expressive brushwork with layered ink tones, generous negative space, scattered-point perspective, distant mountains fading into mist, a small vermilion seal accent, restrained elegant Eastern aesthetics, no vivid colors. --ar 16:9`,
     title: '照片变水墨画',
     icon: '🖌️',
     category: 'design',
@@ -229,6 +235,8 @@ export const DESIGN_PROMPTS: Prompt[] = [
   },
   {
     id: 'avatar-design',
+    need: ['image-gen'],
+    directPrompt: `Avatar / profile picture: {{desc}}. Art style: {{style}}. Clean centered composition, simple background, pleasant lighting, crisp edges, suitable as a square avatar. --ar 1:1`,
     title: '专属头像生成',
     icon: '🙂',
     category: 'design',

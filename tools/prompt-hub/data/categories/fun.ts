@@ -123,6 +123,8 @@ export const FUN_PROMPTS: Prompt[] = [
   },
   {
     id: 'worry-lyrics',
+    need: ['audio-gen'],
+    directPrompt: `Write and produce a {{genre}} song about this trouble: {{worry}}. Structure: verse (narrative) - chorus (emotional hook with a catchy repeatable line) - bridge (turn) - chorus. Concrete imagery, emotional dynamics, style matched to the genre.`,
     title: '把烦恼写成歌词',
     icon: '🎵',
     category: 'fun',

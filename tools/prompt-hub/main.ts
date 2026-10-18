@@ -3,9 +3,11 @@ import { h } from '@/core/components/element';
 import { renderToolLayout } from '@/core/components/ToolLayout';
 import { initTheme } from '@/core/components/ThemeToggle';
 import { createCopyButton } from '@/core/components/CopyButton';
+import { createAiRunner } from '@/core/ai/ai-assist';
+import { modelCapabilityLabel, type ModelCapability } from '@/core/ai';
 import { CATEGORIES, categoryName, type Prompt } from './types';
 import { ALL_PROMPTS, FUN_PROMPTS_ONLY, FEATURED_PROMPTS, topTags } from './data';
-import { renderVariant, resolveVariables } from './template';
+import { renderTemplate, renderVariant, resolveVariables } from './template';
 import { loadFilter, saveFilter, type FilterState } from './settings';
 import { loadFavorites, saveFavorites, type FavoritesState } from './favorites';
 
@@ -393,6 +395,39 @@ function renderPromptHub(): void {
     // 复制按钮：点击瞬间取最新预览值（preview 跨方向持久，getter 始终拿到当前值）
     const copyBtn = createCopyButton(() => preview.value, '复制提示词', '已复制 ✓');
 
+    // —— ⚡ 直接生成：走全局 AI 配置直连（框架运行器），流式展示 / 图片网格 ——
+    const need: ModelCapability[] = p.need ?? ['text'];
+    const isGenCard = !(need.length === 1 && need[0] === 'text');
+    const runner = createAiRunner({
+      toolSlug: 'prompt-hub',
+      conversationTitle: p.title,
+      need,
+    });
+    const genBtnLabel =
+      need[0] === 'image-gen'
+        ? '🎨 直接生成图片'
+        : need[0] === 'audio-gen'
+          ? '🎵 直接生成歌曲'
+          : need[0] === 'video-gen'
+            ? '🎬 直接生成视频'
+            : '⚡ 直接生成';
+    const genBtn = h('button', {
+      type: 'button',
+      class:
+        'rounded-md border border-[var(--accent)] px-3 py-1.5 text-sm text-[var(--accent)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--accent-fg)]',
+      textContent: genBtnLabel,
+      title: isGenCard
+        ? `需要已配置「${modelCapabilityLabel(need[0]!)}」能力的模型，未配置时会给出引导`
+        : '用「AI 接入设置」里配置的模型直接生成，流式展示结果',
+      onclick: () => {
+        // 直连优先用面向生成模型的 directPrompt；普通卡片用预览全文
+        const prompt = p.directPrompt
+          ? renderTemplate({ ...p, template: p.directPrompt }, values)
+          : preview.value;
+        runner.run(prompt);
+      },
+    });
+
     // 当前翻译方向（仅 p.variants 存在时使用）
     let currentVariantId: string | undefined = p.variants ? p.variants[0]?.id : undefined;
 
@@ -464,14 +499,15 @@ function renderPromptHub(): void {
               }),
             ]),
         h('div', { class: 'space-y-2' }, [
-          h('div', { class: 'flex items-center justify-between' }, [
+          h('div', { class: 'flex flex-wrap items-center justify-between gap-2' }, [
             h('span', {
               class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
-              textContent: '生成结果（复制后粘贴给 AI）',
+              textContent: '生成结果（复制后粘贴给 AI，或直接生成）',
             }),
-            copyBtn,
+            h('div', { class: 'flex items-center gap-2' }, [genBtn, copyBtn]),
           ]),
           preview,
+          runner.el,
         ]),
       );
       refreshPreview();
@@ -543,6 +579,16 @@ function renderPromptHub(): void {
                           class:
                             'rounded-full bg-[var(--accent)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--accent)]',
                           textContent: '✨ 彩蛋',
+                        }),
+                      ]
+                    : []),
+                  // 生成类卡片标注所需模型能力（直接生成按钮的可用性提示）
+                  ...(isGenCard
+                    ? [
+                        h('span', {
+                          class:
+                            'rounded-full border border-[var(--accent)]/40 px-2 py-0.5 text-[10px] text-[var(--accent)]',
+                          textContent: `${need[0] === 'image-gen' ? '🎨' : need[0] === 'audio-gen' ? '🎵' : '🎬'} 需${modelCapabilityLabel(need[0]!)}模型`,
                         }),
                       ]
                     : []),

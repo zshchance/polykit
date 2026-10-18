@@ -51,13 +51,13 @@ ai-settings/           # 系统配置页（非工具：不进首页网格/sitema
 
 ```ts
 type ProviderProtocol = 'openai' | 'anthropic';
-// openai    = OpenAI 兼容协议（OpenAI / DeepSeek / Kimi / GLM / Ollama / 多数中转）
+// openai    = OpenAI 兼容协议（OpenAI / DeepSeek / Kimi / Ollama / 多数中转）
 // anthropic = Anthropic Messages API（需加浏览器直连头，见第 5 节）
 
-type ModelCapability = 'text' | 'image' | 'audio';
-// text  = 文本对话（语言大模型的基础能力）
-// image = 图片输入（视觉理解 / 多模态）
-// audio = 音频输入（语音理解）
+// 能力标签分理解（输入侧）与生成（输出侧）两类，路由按超集匹配
+type ModelCapability =
+  | 'text' | 'image' | 'audio'          // 理解：文本对话 / 图片输入 / 音频输入
+  | 'image-gen' | 'audio-gen' | 'video-gen'; // 生成：图片 / 音频(音乐·语音) / 视频
 
 interface AIProvider {
   id: string;              // crypto.randomUUID（非安全上下文回退随机串）
@@ -149,6 +149,16 @@ type ContentPart =
 - `testProvider()`：`GET /models`，成功返回模型 id 列表（设置页「拉取模型列表」直接用它批量建模型）。
 - 部分兼容网关不实现 `/models` → 模型行「测试」按钮走 `probeChat()`：max_tokens=1 的极小请求，测真实通路并计延迟。
 
+### 生成类模型调用约定
+
+- **图片生成**：`aiGenerateImage()` 走 OpenAI Images API 兼容端点
+  `POST {base}/images/generations`（`{model, prompt, n, size?}`），响应归一化 `url` 直链与
+  `b64_json`（转 data URL）两种形态；Anthropic 协议明确报错引导换 OpenAI 兼容供应商。
+- **音频/视频生成**：无统一 REST 标准，按对话式调用（`aiChat` + 对应能力路由）——
+  多数生视频/音乐网关（及 OpenRouter 类聚合）以对话接口返回结果链接，流式展示即可。
+- 配置守卫按能力定制文案：如卡片需要图片生成而无对应模型，引导弹窗显示
+  「尚未配置可用的图片生成模型」并在检测时按该能力判断。
+
 ## 6. 导入导出与多域名迁移（transfer.ts）
 
 双域名部署（Cloudflare Pages / GitHub Pages）= 两个独立 origin，配置互不可见。迁移方案：
@@ -202,7 +212,11 @@ runner.run(buildAIPrompt(input));   // 未配置 → 统一引导模态框，自
 不走 runner 的自定义调用，用 `ensureAIConfigured()` 获得同样的守卫：
 `if (!(await ensureAIConfigured())) return;`
 
-已接入：password-generator（⚡ 直接生成口令，候选点选复制；原「生成提示词」手动路径保留为兜底）。
+已接入：password-generator（⚡ 直接生成口令，候选点选复制；原「生成提示词」手动路径保留为兜底）、
+prompt-hub（灵感卡片「⚡ 直接生成」：文本卡流式出结果；生成类卡片按 `need` 能力声明路由——
+图片生成卡走 images/generations 出图片网格，音乐卡走对话式音频生成；未配置对应能力模型时
+守卫针对性引导）。卡片数据模型支持 `need`（所需能力）与 `directPrompt`（面向生成模型的模板，
+去掉「输出提示词」类元指令）两个字段。
 待接入：color-extractor（色值注入玩法）、ascii-art / quote-card / qr-code（代码回填类，直连后自动填入第三步）。
 
 UX 约定：工具内 AI 入口旁放「⚙ 设置」链接；调用失败按 `AIError.code` 分支提示；

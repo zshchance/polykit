@@ -314,6 +314,9 @@ const CAPABILITY_CHECKS: Array<{ value: ModelCapability; label: string; hint: st
   { value: 'text', label: '文本对话', hint: '语言大模型基础能力' },
   { value: 'image', label: '图片输入', hint: '视觉理解 / 多模态' },
   { value: 'audio', label: '音频输入', hint: '语音理解' },
+  { value: 'image-gen', label: '图片生成', hint: '文生图（images/generations 端点）' },
+  { value: 'audio-gen', label: '音频生成', hint: '音乐 / 语音合成（对话式网关）' },
+  { value: 'video-gen', label: '视频生成', hint: '文生视频（对话式网关）' },
 ];
 
 /** 模型编辑对话框（新增 / 编辑共用） */

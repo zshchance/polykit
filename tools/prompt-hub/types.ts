@@ -8,6 +8,8 @@
  * 新增提示词时：在对应 data/categories/*.ts 里加一项即可，data/index.ts 自动聚合。
  */
 
+import type { ModelCapability } from '@/core/ai';
+
 /** 用户需在详情弹层里填写的变量 */
 export interface Variable {
   /** 变量键，对应模板里的 {{key}} */
@@ -51,6 +53,18 @@ export interface Prompt {
    * base 的 template 仍作默认方向的兜底。
    */
   variants?: PromptVariant[];
+  /**
+   * 可选：「⚡ 直接生成」按钮所需的模型能力（缺省 ['text'] 流式对话）。
+   * 生成类卡片声明如 ['image-gen'] / ['audio-gen'] / ['video-gen']——
+   * 用户未配置对应能力模型时，框架引导弹窗会针对性提示。
+   */
+  need?: ModelCapability[];
+  /**
+   * 可选：直连生成模型时使用的模板（变量占位语法同 template）。
+   * template 面向「让 AI 写提示词」（含输出格式元指令），生成模型不需要；
+   * directPrompt 只保留画面/内容与风格要求本身。缺省回退 template。
+   */
+  directPrompt?: string;
 }
 
 /** 一个翻译/生成方向（用于支持同卡片内双向切换） */

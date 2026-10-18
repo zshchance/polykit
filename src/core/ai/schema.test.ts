@@ -115,9 +115,27 @@ describe('guessCapabilities', () => {
     expect(guessCapabilities('claude-sonnet-4-5')).toContain('image');
   });
 
-  it('纯文本模型只有 text；音频模型补 audio', () => {
+  it('纯文本模型只有 text；音频理解模型补 audio', () => {
     expect(guessCapabilities('deepseek-chat')).toEqual(['text']);
     expect(guessCapabilities('whisper-1')).toContain('audio');
     expect(guessCapabilities('glm-4-voice')).toContain('audio');
+  });
+
+  it('生成类模型名识别对应生成能力', () => {
+    expect(guessCapabilities('dall-e-3')).toContain('image-gen');
+    expect(guessCapabilities('gpt-image-1')).toContain('image-gen');
+    expect(guessCapabilities('flux-schnell')).toContain('image-gen');
+    expect(guessCapabilities('seedream-4.0')).toContain('image-gen');
+    expect(guessCapabilities('cogview-4')).toContain('image-gen');
+    expect(guessCapabilities('sora-2')).toContain('video-gen');
+    expect(guessCapabilities('kling-v2')).toContain('video-gen');
+    expect(guessCapabilities('hunyuan-video')).toContain('video-gen');
+    expect(guessCapabilities('tts-1')).toContain('audio-gen');
+    expect(guessCapabilities('suno-v5')).toContain('audio-gen');
+  });
+
+  it('生成类命名不误标理解类能力（tts 不等于音频输入）', () => {
+    expect(guessCapabilities('tts-1')).not.toContain('audio');
+    expect(guessCapabilities('dall-e-3')).not.toContain('image');
   });
 });

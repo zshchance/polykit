@@ -560,7 +560,15 @@ function modelsArea(provider: AIProvider, models: AIModel[]): HTMLElement {
 }
 
 function capLabel(c: ModelCapability): string {
-  return c === 'text' ? '文本' : c === 'image' ? '图片输入' : '音频输入';
+  const labels: Record<ModelCapability, string> = {
+    text: '文本',
+    image: '图片输入',
+    audio: '音频输入',
+    'image-gen': '图片生成',
+    'audio-gen': '音频生成',
+    'video-gen': '视频生成',
+  };
+  return labels[c];
 }
 
 // ─────────────────────────── 能力路由预览 ───────────────────────────
@@ -570,6 +578,9 @@ function renderRouting(): void {
     { label: '文本对话（语言大模型）', need: ['text'] },
     { label: '图片理解（多模态）', need: ['text', 'image'] },
     { label: '音频理解', need: ['text', 'audio'] },
+    { label: '图片生成（文生图）', need: ['image-gen'] },
+    { label: '音频生成（音乐/语音）', need: ['audio-gen'] },
+    { label: '视频生成', need: ['video-gen'] },
   ];
   routingCard.replaceChildren(
     h('div', { class: 'rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5' }, [

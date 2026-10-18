@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildChatBody,
   extractDelta,
+  normalizeImagesResponse,
   parseSSE,
   providerEndpoints,
   providerHeaders,
@@ -133,6 +134,28 @@ describe('parseSSE', () => {
   it('容忍 \\r\\n 分隔', () => {
     const { events } = parseSSE('data: x\r\n\r\ndata: [DONE]\r\n\r\n');
     expect(events).toEqual(['x', '[DONE]']);
+  });
+});
+
+describe('normalizeImagesResponse', () => {
+  it('url 与 b64_json 两种形态归一化', () => {
+    expect(
+      normalizeImagesResponse({ data: [{ url: 'https://cdn.example.com/a.png' }] }),
+    ).toEqual(['https://cdn.example.com/a.png']);
+    expect(normalizeImagesResponse({ data: [{ b64_json: 'QUJD' }] })).toEqual([
+      'data:image/png;base64,QUJD',
+    ]);
+    expect(
+      normalizeImagesResponse({
+        data: [{ url: 'https://x/1.png' }, { b64_json: 'REVG' }, { url: '' }],
+      }),
+    ).toEqual(['https://x/1.png', 'data:image/png;base64,REVG']);
+  });
+
+  it('缺 data 数组或无可用图片时抛 AIError', () => {
+    expect(() => normalizeImagesResponse({})).toThrow(AIError);
+    expect(() => normalizeImagesResponse({ data: [] })).toThrow(AIError);
+    expect(() => normalizeImagesResponse({ data: [{ url: '' }] })).toThrow(AIError);
   });
 });
 

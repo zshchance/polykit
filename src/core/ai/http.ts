@@ -371,3 +371,68 @@ export async function probeChat(
   );
   return Math.round(performance.now() - started);
 }
+
+// ─────────────────────────── 图片生成（OpenAI Images API 兼容） ───────────────────────────
+
+/**
+ * 归一化 images/generations 响应为图片地址数组（纯函数）。
+ * 兼容 {url} 直链与 {b64_json}（转为 data URL）两种形态；空结果抛错。
+ */
+export function normalizeImagesResponse(j: unknown): string[] {
+  const data = (j as { data?: unknown })?.data;
+  if (!Array.isArray(data)) {
+    throw new AIError('http', '图片生成响应格式异常（缺少 data 数组）');
+  }
+  const out: string[] = [];
+  for (const item of data) {
+    if (!item || typeof item !== 'object') continue;
+    const d = item as Record<string, unknown>;
+    if (typeof d.url === 'string' && d.url) out.push(d.url);
+    else if (typeof d.b64_json === 'string' && d.b64_json) {
+      out.push(`data:image/png;base64,${d.b64_json}`);
+    }
+  }
+  if (out.length === 0) {
+    throw new AIError('http', '图片生成响应中没有可用图片（url / b64_json 均为空）');
+  }
+  return out;
+}
+
+/**
+ * 文生图调用：POST {base}/images/generations（OpenAI Images API 兼容，
+ * OpenAI / 多数国产与中转网关均实现此端点）。
+ * Anthropic 协议无此端点，明确报错引导用 OpenAI 兼容供应商。
+ */
+export async function generateImages(
+  provider: AIProvider,
+  modelName: string,
+  prompt: string,
+  opts: { n?: number; size?: string; signal?: AbortSignal } = {},
+  fetchImpl: FetchLike = fetch,
+): Promise<string[]> {
+  if (provider.protocol === 'anthropic') {
+    throw new AIError(
+      'bad-request',
+      'Anthropic 协议暂不支持图片生成，请在「AI 接入设置」使用 OpenAI 兼容供应商的生图模型',
+    );
+  }
+  const endpoints = providerEndpoints(provider.baseUrl, provider.protocol);
+  if (!endpoints) throw new AIError('bad-request', `baseUrl 无效：${provider.baseUrl}`);
+  const resp = await fetchOrAIError(
+    `${endpoints.root}/images/generations`,
+    {
+      method: 'POST',
+      headers: providerHeaders(provider),
+      body: JSON.stringify({
+        model: modelName,
+        prompt,
+        n: opts.n ?? 1,
+        ...(opts.size ? { size: opts.size } : {}),
+      }),
+      signal: opts.signal,
+    },
+    fetchImpl,
+  );
+  const j: unknown = await resp.json();
+  return normalizeImagesResponse(j);
+}

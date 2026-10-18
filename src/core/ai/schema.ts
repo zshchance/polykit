@@ -133,7 +133,17 @@ export function guessCapabilities(modelName: string): ModelCapability[] {
   ) {
     caps.push('image');
   }
-  // 常见音频命名：gpt-4o-audio / *-audio / auido 拼错常见 / glm-4-voice ...
-  if (/audio|voice|tts|asr|whisper/i.test(modelName)) caps.push('audio');
+  // 常见音频理解命名：gpt-4o-audio / *-audio / glm-4-voice / whisper ...
+  if (/audio|voice|asr|whisper/i.test(modelName)) caps.push('audio');
+  // 生成类命名（猜中的直接标生成能力；生成模型同时保留 text 以便对话式网关调用）
+  if (/dall-e|gpt-image|image-?gen|imggen|flux|seedream|seededit|cogview|wanx|ideogram|recraft|stable-?diffusion|sd3|midjourney|mj-|irag/i.test(modelName)) {
+    caps.push('image-gen');
+  }
+  if (/sora|veo[\s-]?\d|kling|runway|pika|hunyuan-?(video)?|vidu|cogvideo|wan-?video|jimeng-?video|seedance|video-?gen/i.test(modelName)) {
+    caps.push('video-gen');
+  }
+  if (/tts|speech|audio-?gen|music|suno|udio|bark|voice-?(gen|clone)|fish-?(audio|speech)/i.test(modelName)) {
+    caps.push('audio-gen');
+  }
   return caps;
 }

@@ -11,14 +11,45 @@ export type ProviderProtocol = 'openai' | 'anthropic';
 
 /**
  * 模型能力标签。
- * - text  文本对话（语言大模型基础能力）
- * - image 图片输入（视觉理解）
- * - audio 音频输入（语音理解）
+ * 理解类（输入侧）：
+ * - text       文本对话（语言大模型基础能力）
+ * - image      图片输入（视觉理解）
+ * - audio      音频输入（语音理解）
+ * 生成类（输出侧）：
+ * - image-gen  图片生成（文生图/改图，走 images/generations 或对话式生图网关）
+ * - audio-gen  音频生成（音乐/语音合成；对话式网关）
+ * - video-gen  视频生成（对话式网关）
  * 路由规则：模型能力需为请求所需能力集合的超集（见 router.ts）。
  */
-export type ModelCapability = 'text' | 'image' | 'audio';
+export type ModelCapability =
+  | 'text'
+  | 'image'
+  | 'audio'
+  | 'image-gen'
+  | 'audio-gen'
+  | 'video-gen';
 
-export const MODEL_CAPABILITIES: readonly ModelCapability[] = ['text', 'image', 'audio'];
+export const MODEL_CAPABILITIES: readonly ModelCapability[] = [
+  'text',
+  'image',
+  'audio',
+  'image-gen',
+  'audio-gen',
+  'video-gen',
+];
+
+/** 能力标签的中文短名（设置页与引导文案共用；不在表内时原样返回） */
+export function modelCapabilityLabel(c: ModelCapability): string {
+  const labels: Record<ModelCapability, string> = {
+    text: '文本对话',
+    image: '图片输入',
+    audio: '音频输入',
+    'image-gen': '图片生成',
+    'audio-gen': '音频生成',
+    'video-gen': '视频生成',
+  };
+  return labels[c];
+}
 
 /** 一个大模型供应商（数组顺序即调用优先级，见 AIConfig.providers） */
 export interface AIProvider {

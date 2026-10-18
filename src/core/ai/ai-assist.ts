@@ -25,11 +25,13 @@ import { ensureAIConfigured } from './ai-config-guard';
 import {
   AIError,
   aiChat,
+  aiGenerateImage,
   aiSettingsUrl,
   appendMessage,
   createConversation,
   hydrateForApi,
   type ChatMessage,
+  type ModelCapability,
 } from './index';
 
 export interface AiRunnerOptions {
@@ -37,13 +39,23 @@ export interface AiRunnerOptions {
   toolSlug: string;
   /** 会话标题；缺省用首条提示词前 50 字 */
   conversationTitle?: string;
-  /** 完成回调：原始全文 + 实际使用的模型信息 */
+  /**
+   * 所需模型能力，缺省 ['text']（流式对话）。
+   * 传 ['image-gen'] 时走图片生成路径（images/generations，结果为图片网格）；
+   * 传 ['video-gen'] / ['audio-gen'] 时走对话式调用（多数生视频/音频网关以
+   * 对话接口返回链接），流式展示返回文本。
+   */
+  need?: ModelCapability[];
+  /** 文本完成回调：原始全文 + 实际使用的模型信息 */
   onDone?: (
     text: string,
     meta: { providerName: string; modelName: string; latencyMs: number },
   ) => void;
-  /** 输出区最小高度（Tailwind 类，默认 min-h-20） */
-  outputClass?: string;
+  /** 图片生成完成回调（need 含 image-gen 时使用） */
+  onImages?: (
+    images: string[],
+    meta: { providerName: string; modelName: string; latencyMs: number },
+  ) => void;
 }
 
 export interface AiRunner {
@@ -64,13 +76,66 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
   let lastFullText = '';
 
   // —— DOM ——
+  const need = opts.need ?? ['text'];
+  const isImageMode = need.length === 1 && need[0] === 'image-gen';
   const metaLine = h('span', { class: 'text-[11px] text-[var(--fg-muted)]' });
   const outputPre = h('pre', {
     class:
       'max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 font-mono text-[12px] leading-relaxed text-[var(--fg)]',
     textContent: '',
   });
+  /** 图片生成结果网格（image-gen 模式使用） */
+  const imagesWrap = h('div', { class: 'hidden grid gap-3 sm:grid-cols-2' });
   const errorBox = h('div', { class: 'hidden rounded-lg border border-[var(--holiday-legal)] px-3 py-2 text-xs leading-relaxed text-[var(--holiday-legal)]' });
+
+  function renderImages(images: string[]): void {
+    outputPre.classList.add('hidden');
+    imagesWrap.classList.remove('hidden');
+    imagesWrap.replaceChildren(
+      ...images.map((src) =>
+        h('div', { class: 'space-y-1.5' }, [
+          h('img', {
+            src,
+            alt: 'AI 生成图片',
+            class: 'w-full rounded-lg border border-[var(--border)]',
+          }),
+          h('div', { class: 'flex gap-1.5' }, [
+            h(
+              'a',
+              {
+                href: src,
+                target: '_blank',
+                rel: 'noopener',
+                class:
+                  'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-[10px] text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+                textContent: '打开原图',
+              },
+            ),
+            h('button', {
+              type: 'button',
+              class:
+                'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-[10px] text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+              textContent: '复制图片',
+              title: '复制图片链接（data URL 则复制完整数据）',
+              onclick: () => {
+                void copyText(src).then((ok) => {
+                  showToastInline(`${ok ? '已复制 ✓' : '复制失败'}`);
+                });
+              },
+            }),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  // 图片模式没有文本流，提示替代：运行器自身没有 toast 依赖，用 errorBox 同款样式的信息条
+  function showToastInline(msg: string): void {
+    metaLine.textContent = msg;
+    setTimeout(() => {
+      if (metaLine.textContent === msg) metaLine.textContent = '';
+    }, 1500);
+  }
 
   const stopBtn = h('button', {
     type: 'button',
@@ -93,7 +158,13 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
       metaLine,
     ]),
     outputPre,
-    h('div', { class: 'flex items-center justify-end gap-2' }, [stopBtn, regenBtn, createCopyButton(() => lastFullText, '复制全文', '已复制 ✓')]),
+    imagesWrap,
+    h('div', { class: 'flex items-center justify-end gap-2' }, [
+      stopBtn,
+      regenBtn,
+      // 图片模式的「全文复制」无意义，仅文本模式显示
+      ...(isImageMode ? [] : [createCopyButton(() => lastFullText, '复制全文', '已复制 ✓')]),
+    ]),
     errorBox,
   ]);
 
@@ -116,9 +187,9 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
 
   async function run(prompt: string): Promise<void> {
     if (busy || !prompt.trim()) return;
-    // 配置守卫（框架级统一引导）：未配置时弹全站一致的模态框，本次不发起调用。
-    // 用 runner 的工具无需各自检查——收口在此处。
-    if (!(await ensureAIConfigured())) return;
+    // 配置守卫（框架级统一引导，能力感知）：所需能力无可路由模型时弹统一
+    // 引导弹窗（文案随能力定制，如「尚未配置可用的图片生成模型」），本次不发起调用。
+    if (!(await ensureAIConfigured(need))) return;
     busy = true;
     lastPrompt = prompt;
     lastFullText = '';
@@ -126,7 +197,10 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
     el.classList.remove('hidden');
     errorBox.classList.add('hidden');
     outputPre.textContent = '';
-    metaLine.textContent = '生成中…';
+    outputPre.classList.toggle('hidden', isImageMode);
+    imagesWrap.classList.add('hidden');
+    imagesWrap.replaceChildren();
+    metaLine.textContent = isImageMode ? '🎨 生成图片中…' : '生成中…';
     stopBtn.classList.remove('hidden');
     regenBtn.disabled = true;
 
@@ -141,9 +215,15 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
       await appendMessage(convId, 'user', prompt).catch(() => undefined);
     }
 
+    if (isImageMode) {
+      await runImage(prompt);
+      return;
+    }
+
     try {
       const res = await aiChat({
         messages: [...history, { role: 'user', content: prompt }],
+        need,
         signal: controller.signal,
         onDelta: (d) => {
           if (d.content) outputPre.textContent += d.content;
@@ -161,28 +241,60 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
         latencyMs: res.latencyMs,
       });
     } catch (err) {
-      if (err instanceof AIError && err.code === 'aborted') {
-        metaLine.textContent = '已停止';
-        // 已流出的部分仍算结果：可复制 / 记账
-        lastFullText = outputPre.textContent;
-        if (convId !== null && lastFullText) {
-          await appendMessage(convId, 'assistant', lastFullText).catch(() => undefined);
-        }
-      } else if (err instanceof AIError && err.code === 'no-model') {
-        showError(err.message, true);
-        metaLine.textContent = '';
-      } else {
-        showError(err instanceof Error ? err.message : String(err), false);
-        metaLine.textContent = '';
-        // 已流出的部分仍可复制
-        if (outputPre.textContent) lastFullText = outputPre.textContent;
-      }
+      handleRunError(err);
     } finally {
-      busy = false;
-      controller = null;
-      stopBtn.classList.add('hidden');
-      regenBtn.disabled = false;
+      finishRun();
     }
+  }
+
+  /** 图片生成路径（images/generations，无流式；结果渲染为图片网格） */
+  async function runImage(prompt: string): Promise<void> {
+    try {
+      const res = await aiGenerateImage({ prompt, signal: controller?.signal });
+      renderImages(res.images);
+      metaLine.textContent = `${res.model.providerName} / ${res.model.modelName} · ${res.latencyMs}ms`;
+      lastFullText = res.images.join('\n');
+      if (convId !== null) {
+        await appendMessage(convId, 'assistant', `[生成图片]\n${res.images.join('\n')}`).catch(
+          () => undefined,
+        );
+      }
+      opts.onImages?.(res.images, {
+        providerName: res.model.providerName,
+        modelName: res.model.modelName,
+        latencyMs: res.latencyMs,
+      });
+    } catch (err) {
+      handleRunError(err);
+    } finally {
+      finishRun();
+    }
+  }
+
+  function handleRunError(err: unknown): void {
+    if (err instanceof AIError && err.code === 'aborted') {
+      metaLine.textContent = '已停止';
+      // 已流出的部分仍算结果：可复制 / 记账
+      lastFullText = outputPre.textContent || lastFullText;
+      if (convId !== null && lastFullText) {
+        void appendMessage(convId, 'assistant', lastFullText).catch(() => undefined);
+      }
+    } else if (err instanceof AIError && err.code === 'no-model') {
+      showError(err.message, true);
+      metaLine.textContent = '';
+    } else {
+      showError(err instanceof Error ? err.message : String(err), false);
+      metaLine.textContent = '';
+      // 已流出的部分仍可复制
+      if (outputPre.textContent) lastFullText = outputPre.textContent;
+    }
+  }
+
+  function finishRun(): void {
+    busy = false;
+    controller = null;
+    stopBtn.classList.add('hidden');
+    regenBtn.disabled = false;
   }
 
   return { el, run: (p) => void run(p), isBusy: () => busy, abort: () => controller?.abort() };
