@@ -13,6 +13,7 @@
 
 import { h } from '@/core/components/element';
 import { createCopyButton } from '@/core/components/CopyButton';
+import { createAiRunner, extractCodeBlock } from '@/core/ai/ai-assist';
 import type { QuoteCardState } from './state';
 import { addCustomAnim, dryRunCheck, parseAIOutput, buildAIPrompt } from './custom-animations';
 import {
@@ -21,6 +22,36 @@ import {
   parseTemplateAIOutput,
   buildTemplatePrompt,
 } from './custom-templates';
+
+/**
+ * 三步向导第②步的「⚡ 直接生成」附件（两个对话框共用）：
+ * 直连运行器 + 按钮；完成后提取代码围栏自动填入第③步粘贴框（仍走既有
+ * dryRun 校验 + 手动保存，不自动应用）。
+ */
+function buildDirectGen(opts: {
+  conversationTitle: string;
+  getPrompt: () => string;
+  fill: (code: string) => void;
+  notify: () => void;
+}): { btn: HTMLElement; runnerEl: HTMLElement } {
+  const runner = createAiRunner({
+    toolSlug: 'quote-card',
+    conversationTitle: opts.conversationTitle,
+    onDone: (text) => {
+      opts.fill(extractCodeBlock(text) ?? text);
+      opts.notify();
+    },
+  });
+  const btn = h('button', {
+    type: 'button',
+    class:
+      'rounded-md border border-[var(--accent)] px-3 py-1.5 text-sm text-[var(--accent)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--accent-fg)]',
+    textContent: '⚡ 直接生成',
+    title: '用「AI 接入设置」里配置的模型直接生成，代码自动填入第③步',
+    onclick: () => runner.run(opts.getPrompt()),
+  });
+  return { btn, runnerEl: runner.el };
+}
 
 /** createAiDialogs 的依赖（由 main.ts 注入，替代原闭包变量） */
 export interface AiDialogsDeps {
@@ -125,16 +156,28 @@ export function createAiDialogs(deps: AiDialogsDeps): AiDialogs {
       readonly: true,
       'aria-label': '生成的 AI 提示词',
     }) as HTMLTextAreaElement;
+    const animDirect = buildDirectGen({
+      conversationTitle: 'AI 自定义动画',
+      getPrompt: () => promptArea.value,
+      fill: (code) => {
+        pasteInput.value = code;
+        pasteInput.scrollTop = 0;
+      },
+      notify: () => flashOk('AI 已返回并自动填入 ③，请检查后点「保存并应用」'),
+    });
+
     const step2 = h('div', { class: 'hidden space-y-2' }, [
       h('p', {
         class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
         textContent:
-          '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，AI 会返回一段「名称 + 代码」。把 AI 的整段回复粘到下面框里，点保存即可。',
+          '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，或点「直接生成」走已配置的模型；AI 会返回一段「名称 + 代码」。',
       }),
       promptArea,
-      h('div', { class: 'flex items-center justify-end' }, [
+      h('div', { class: 'flex items-center justify-end gap-2' }, [
         createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
+        animDirect.btn,
       ]),
+      animDirect.runnerEl,
     ]);
 
     // —— 步骤 3：粘贴 AI 返回的代码（含名称行）+ 保存按钮 ——
@@ -326,16 +369,28 @@ export function createAiDialogs(deps: AiDialogsDeps): AiDialogs {
       readonly: true,
       'aria-label': '生成的 AI 提示词',
     }) as HTMLTextAreaElement;
+    const tplDirect = buildDirectGen({
+      conversationTitle: 'AI 自定义模板',
+      getPrompt: () => promptArea.value,
+      fill: (code) => {
+        pasteInput.value = code;
+        pasteInput.scrollTop = 0;
+      },
+      notify: () => flashOk('AI 已返回并自动填入 ③，请检查后点「保存并应用」'),
+    });
+
     const step2 = h('div', { class: 'hidden space-y-2' }, [
       h('p', {
         class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
         textContent:
-          '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，AI 会返回一段「名称 + 背景 + 图标色 + 代码」。把 AI 的整段回复粘到下面框里，点保存即可。',
+          '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，或点「直接生成」走已配置的模型；AI 会返回一段「名称 + 背景 + 图标色 + 代码」。',
       }),
       promptArea,
-      h('div', { class: 'flex items-center justify-end' }, [
+      h('div', { class: 'flex items-center justify-end gap-2' }, [
         createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
+        tplDirect.btn,
       ]),
+      tplDirect.runnerEl,
     ]);
 
     // —— 步骤 3：粘贴 AI 返回的代码 + 保存 ——

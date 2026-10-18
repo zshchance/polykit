@@ -322,6 +322,15 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
   return { el, run: (p) => void run(p), isBusy: () => busy, abort: () => controller?.abort() };
 }
 
+/**
+ * 提取首个 Markdown 代码围栏内容（代码回填类工具共用：AI 直连返回后自动
+ * 填入「粘贴 AI 返回」框）。无围栏时返回 null（调用方回退全文）。
+ */
+export function extractCodeBlock(raw: string): string | null {
+  const m = /```[a-zA-Z0-9_-]*[^\S\n]*\n([\s\S]*?)```/.exec(raw);
+  return m ? m[1]!.trim() : null;
+}
+
 /** 候选结果一键复制按钮（password-generator 等按行取结果的工具用） */
 export function createCandidateCopyButton(candidate: string): HTMLButtonElement {
   const btn = h('button', {

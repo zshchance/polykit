@@ -216,12 +216,19 @@ runner.run(buildAIPrompt(input));   // 未配置 → 统一引导模态框，自
 不走 runner 的自定义调用，用 `ensureAIConfigured()` 获得同样的守卫：
 `if (!(await ensureAIConfigured())) return;`
 
-已接入：password-generator（⚡ 直接生成口令，候选点选复制；原「生成提示词」手动路径保留为兜底）、
-prompt-hub（灵感卡片「⚡ 直接生成」：文本卡流式出结果；生成类卡片按 `need` 能力声明路由——
-图片生成卡走 images/generations 出图片网格，音乐卡走对话式音频生成；未配置对应能力模型时
-守卫针对性引导）。卡片数据模型支持 `need`（所需能力）与 `directPrompt`（面向生成模型的模板，
-去掉「输出提示词」类元指令）两个字段。
-待接入：color-extractor（色值注入玩法）、ascii-art / quote-card / qr-code（代码回填类，直连后自动填入第三步）。
+已接入（9 个工具，全站 AI 路径覆盖完成）：
+- **password-generator**：⚡ 直接生成口令，候选点选复制（提示词手动路径保留兜底）
+- **prompt-hub**：灵感卡片直接生成；生成类卡片按 `need` 能力声明路由（图片生成卡走
+  images/generations 出图片网格、音乐卡走对话式音频生成），支持 `directPrompt` 字段
+- **color-extractor**：每个配色玩法提示词就地直连（流式展示结果）
+- **color-prompt**：色系提示词直接生成配色方案
+- **contact-obfuscator**：「AI 加密提示词」直接产出 3 个加密版本
+- **ascii-art / qr-code / quote-card（动画+模板两向导）**：代码回填类——⚡ 直接生成后
+  自动提取代码围栏填入第③步粘贴框，仍走既有 dryRun 校验 + 手动保存（共享
+  `extractCodeBlock`）
+- **rhythm-arp-lab**：组合提示词按 `need: ['audio-gen']` 路由到音频生成模型
+未接入及理由：image-compress（提示词是给 Tabbit 类 AI 浏览器的操作指令，非对话模型场景）、
+style-atlas（AI 参考图为离线构建期资产，无运行时 AI 路径）。
 
 UX 约定：工具内 AI 入口旁放「⚙ 设置」链接；调用失败按 `AIError.code` 分支提示；
 会话自动进会话库（IndexedDB），临时上下文放内存即可。

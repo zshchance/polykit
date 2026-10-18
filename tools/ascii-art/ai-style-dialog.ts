@@ -12,6 +12,7 @@
 
 import { h } from '@/core/components/element';
 import { createCopyButton } from '@/core/components/CopyButton';
+import { createAiRunner, extractCodeBlock } from '@/core/ai/ai-assist';
 import {
   addCustomStyle,
   buildStylePrompt,
@@ -95,16 +96,37 @@ export function createAiStyleDialog(deps: AiStyleDialogDeps): AiStyleDialog {
       class:
         'w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 font-mono text-[12px] leading-relaxed text-[var(--fg)] outline-none',
     });
+    // ⚡ 直连运行器：用全局 AI 配置直接生成，返回的 JSON 围栏自动填入第③步粘贴框
+    const runner = createAiRunner({
+      toolSlug: 'ascii-art',
+      conversationTitle: 'AI 自定义风格',
+      onDone: (text) => {
+        const code = extractCodeBlock(text) ?? text;
+        pasteInput.value = code;
+        pasteInput.scrollTop = 0;
+        flashOk('AI 已返回并自动填入下方 ③，请检查后点「保存并应用」');
+      },
+    });
+
     const step2 = h('div', { class: 'hidden space-y-2' }, [
       h('p', {
         class: 'text-xs text-[var(--fg-muted)]',
         textContent:
-          '② 把下面的提示词发给任意 AI（ChatGPT / Claude / GLM 等），让它生成终端风格参数。',
+          '② 把下面的提示词发给任意 AI（ChatGPT / Claude / GLM 等），或点「直接生成」走已配置的模型。',
       }),
       promptArea,
-      h('div', { class: 'flex justify-end' }, [
+      h('div', { class: 'flex justify-end gap-2' }, [
         createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
+        h('button', {
+          type: 'button',
+          class:
+            'rounded-md border border-[var(--accent)] px-3 py-1.5 text-sm text-[var(--accent)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--accent-fg)]',
+          textContent: '⚡ 直接生成',
+          title: '生成结果会自动填入第③步粘贴框',
+          onclick: () => runner.run(promptArea.value),
+        }),
       ]),
+      runner.el,
     ]);
 
     // 步骤 3：粘贴 AI 返回 + 保存

@@ -4,6 +4,7 @@
 
 import { h } from '@/core/components/element';
 import { createCopyButton } from '@/core/components/CopyButton';
+import { createAiRunner, extractCodeBlock } from '@/core/ai/ai-assist';
 import type { QrConfig } from './types';
 import {
   addCustomStyle,
@@ -91,16 +92,36 @@ export function createStyleDialog(deps: StyleDialogDeps): StyleDialog {
       readonly: true,
       'aria-label': '生成的 AI 提示词',
     }) as HTMLTextAreaElement;
+    // ⚡ 直连运行器：用全局 AI 配置直接生成，返回代码自动填入第③步粘贴框
+    const runner = createAiRunner({
+      toolSlug: 'qr-code',
+      conversationTitle: 'AI 码点风格',
+      onDone: (text) => {
+        pasteInput.value = extractCodeBlock(text) ?? text;
+        pasteInput.scrollTop = 0;
+        flashOk('AI 已返回并自动填入下方 ③，请检查后点「保存并应用」');
+      },
+    });
+
     const step2 = h('div', { class: 'hidden space-y-2' }, [
       h('p', {
         class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
         textContent:
-          '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，AI 会返回一段「名称 + 配色 + 代码」。把 AI 的整段回复粘到下面框里，点保存即可。',
+          '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，或点「直接生成」走已配置的模型；AI 会返回一段「名称 + 配色 + 代码」。',
       }),
       promptArea,
-      h('div', { class: 'flex items-center justify-end' }, [
+      h('div', { class: 'flex items-center justify-end gap-2' }, [
         createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
+        h('button', {
+          type: 'button',
+          class:
+            'rounded-md border border-[var(--accent)] px-3 py-1.5 text-sm text-[var(--accent)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--accent-fg)]',
+          textContent: '⚡ 直接生成',
+          title: '生成结果会自动填入第③步粘贴框',
+          onclick: () => runner.run(promptArea.value),
+        }),
       ]),
+      runner.el,
     ]);
 
     // 步骤 3：粘贴 AI 返回的代码 + 保存

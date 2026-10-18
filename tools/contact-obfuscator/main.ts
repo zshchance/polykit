@@ -13,6 +13,7 @@ import {
   type ObfuscateResult,
 } from './obfuscate';
 import { buildEncryptPrompt, buildInlineRules, HINT_SUFFIX } from './ai-prompt';
+import { createAiRunner } from '@/core/ai/ai-assist';
 import { loadOptions, saveOptions, loadInput, saveInput } from './settings';
 import { loadHistory, addResult, removeResult, clearHistory, type StoredResult } from './history';
 
@@ -318,6 +319,12 @@ function renderObfuscator() {
     onclick: generateEncryptPrompt,
   });
 
+  // 直连运行器：「AI 直接产出加密版本」提示词的一键执行（结果就地展示）
+  const aiEncryptRunner = createAiRunner({
+    toolSlug: 'contact-obfuscator',
+    conversationTitle: 'AI 加密版本',
+  });
+
   /** 生成「让 AI 直接产出加密文本」的提示词，展示在按钮下方 */
   function generateEncryptPrompt(): void {
     const prompt = buildEncryptPrompt(inputArea.value, state);
@@ -334,9 +341,18 @@ function renderObfuscator() {
           '⚠ 这段提示词携带你的联系方式原文，发给 AI 意味着原文经第三方。敏感账号建议用上方本地生成（数据不出浏览器）。',
       }),
       promptArea,
-      h('div', { class: 'flex items-center justify-end' }, [
+      h('div', { class: 'flex items-center justify-end gap-2' }, [
         createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
+        h('button', {
+          type: 'button',
+          class:
+            'rounded-md border border-[var(--accent)] px-3 py-1.5 text-sm text-[var(--accent)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--accent-fg)]',
+          textContent: '⚡ 直接生成',
+          title: '用「AI 接入设置」里配置的模型直接产出 3 个加密版本',
+          onclick: () => aiEncryptRunner.run(promptArea.value),
+        }),
       ]),
+      aiEncryptRunner.el,
     );
     promptWrap.classList.remove('hidden');
     promptArea.scrollTop = 0;

@@ -6,6 +6,7 @@ import { createCopyButton } from '@/core/components/CopyButton';
 import { PALETTES, MOODS, getPaletteById, type Palette } from './data/palettes';
 import { renderWebsitePreview, renderSlidePreview, previewHeader } from './preview';
 import { buildPromptZh, buildPromptEn } from './templates';
+import { createAiRunner } from '@/core/ai/ai-assist';
 import { loadSelection, saveSelection } from './settings';
 
 initTheme();
@@ -138,6 +139,8 @@ function renderColorPrompt(): void {
 
   // ────────── 3 & 4. 预览 + 色值 + 提示词（随选中刷新） ──────────
   const resultArea = h('div', { class: 'space-y-6' });
+  // 直连运行器：用已配置模型直接基于当前提示词生成配色方案（结果就地展示）
+  const aiRunner = createAiRunner({ toolSlug: 'color-prompt' });
 
   function renderResult(): void {
     const p = selected();
@@ -220,7 +223,18 @@ function renderColorPrompt(): void {
       promptCard('English Prompt', promptEn, () => promptEn),
     ]);
 
-    resultArea.replaceChildren(previewBlock, colorList, promptBlock);
+    // 直接生成区：按钮 + 运行器输出（用中文提示词发起）
+    const directBlock = h('div', { class: 'flex justify-end' }, [
+      h('button', {
+        type: 'button',
+        class:
+          'rounded-md border border-[var(--accent)] px-3 py-1.5 text-sm text-[var(--accent)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--accent-fg)]',
+        textContent: '⚡ 直接生成',
+        title: '用「AI 接入设置」里配置的模型直接生成配色方案',
+        onclick: () => aiRunner.run(promptZh),
+      }),
+    ]);
+    resultArea.replaceChildren(previewBlock, colorList, promptBlock, directBlock, aiRunner.el);
   }
 
   /** 单段提示词卡片：标题 + 复制按钮 + 只读文本框 */

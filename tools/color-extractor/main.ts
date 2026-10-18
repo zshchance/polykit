@@ -8,6 +8,7 @@ import { extractPalette, type ExtractedColor } from './extractor';
 import { loadImage, revokeImage, type LoadedImage } from './image';
 import { formatPalette, FORMAT_OPTIONS, formatName, type OutputFormat } from './palette-format';
 import { PROMPT_RECIPES } from './ai-prompts';
+import { createAiRunner } from '@/core/ai/ai-assist';
 import { colorName, readableForeground } from './color-utils';
 import {
   loadPrefs,
@@ -369,6 +370,12 @@ function renderColorExtractor(): void {
     const recipe = PROMPT_RECIPES.find((r) => r.id === activePromptId) ?? PROMPT_RECIPES[0]!;
     const text = recipe.build(currentColors);
 
+    // 直连运行器（随玩法切换重建：每个玩法一条会话线）
+    const runner = createAiRunner({
+      toolSlug: 'color-extractor',
+      conversationTitle: recipe.label,
+    });
+
     // 芯片行
     const chipRow = h(
       'div',
@@ -406,12 +413,21 @@ function renderColorExtractor(): void {
         h('p', { class: 'mt-3 mb-2 text-xs text-[var(--fg-muted)]', textContent: recipe.hint }),
         h('div', { class: 'flex items-center justify-end gap-2 mb-2' }, [
           createCopyButton(() => preview.value, '复制提示词', '已复制 ✓'),
+          h('button', {
+            type: 'button',
+            class:
+              'rounded-md border border-[var(--accent)] px-3 py-1.5 text-sm text-[var(--accent)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--accent-fg)]',
+            textContent: '⚡ 直接生成',
+            title: '用「AI 接入设置」里配置的模型直接生成，结果就地展示',
+            onclick: () => runner.run(preview.value),
+          }),
         ]),
         preview,
+        runner.el,
         h('p', {
           class: 'mt-2 text-[11px] text-[var(--fg-muted)]',
           textContent:
-            '色值在浏览器本地提取，复制提示词后可丢给任意 AI（GLM / Kimi / 通义 / ChatGPT 等）。',
+            '色值在浏览器本地提取：可复制提示词丢给任意 AI，或点「直接生成」走已配置的模型。',
         }),
       ]),
     );
