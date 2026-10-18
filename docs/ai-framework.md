@@ -28,6 +28,8 @@ src/core/ai/
 ├── http.ts         # 请求构建（纯函数）+ SSE 流式解析 + 连通性测试
 ├── store.ts        # localStorage CRUD + 跨页订阅（薄壳，逻辑在 schema）
 ├── transfer.ts     # 导出/导入 + {ORIGIN} 占位 + 域名替换（纯函数为主）
+├── chat-core.ts    # 会话库纯逻辑：内容规划（data URL→资产）/ LRU 淘汰计划 / 记录清洗
+├── chat-store.ts   # IndexedDB 会话库（conversations/messages/assets/usage + 配额守卫）
 └── index.ts        # 门面：aiChat() —— 各工具唯一需要 import 的入口
 
 tools/ai-settings/  # 设置页（工具页形态，自动进首页与 sitemap）
@@ -185,14 +187,20 @@ UX 约定：工具内 AI 入口旁放「⚙ 设置」链接；调用失败按 `A
 结论：纯文本对话在 IndexedDB 下几乎不可能触顶（1 条消息 1~4 KB，一年重度使用约百 MB 级），
 大头是多模态资产（图 0.5~2 MB / 分钟音频约 1 MB）。
 
-**Phase 2 规划（本期不实现，接口预留）**：
+**Phase 2 已落地**（`chat-core.ts` 纯逻辑 + `chat-store.ts` IndexedDB 层）：
 
-- IndexedDB 独立库 `polykit-ai`：`conversations`（元信息）/ `messages`（按 `[conversationId, seq]` 索引，
-  多模态部分只存资产 id）/ `assets`（Blob 原生存储，禁 base64）/ `usage`（按日 token 聚合）。
-- **绝不存完整请求体**：每轮请求会重发全部历史，按原始日志存会近似平方级膨胀；上下文由 messages 即时拼装。
-- 配额管理器：统一写入包装捕获 QuotaExceededError → LRU 先清资产再清归档会话 → 引导导出；
-  设置页展示 `navigator.storage.estimate()` 用量条；首次配置时调用 `navigator.storage.persist()`；
-  隐私模式（storage 不可写）时明示警告。
+- IndexedDB 独立库 `polykit-ai`：`conversations`（元信息，bytes 含其资产字节）/ `messages`
+  （按 `[conversationId, seq]` 复合索引，多模态部分只存资产 id）/ `assets`（**Blob 原生存储**，
+  sha-256 去重 + lastAccessed 供 LRU）/ `usage`（按日聚合调用量与 token）。
+- **绝不存完整请求体**：每轮请求会重发全部历史，按原始日志存会近似平方级膨胀；
+  上下文由 `hydrateForApi()` 从 messages 即时拼装（资产还原为 data URL）。
+- 配额管理：配置 `budgetMB`（缺省 500，50~5000，随配置导出导入）；所有写入经配额守卫——
+  遇 `QuotaExceededError` 先按预算自动 LRU 清理再重试一次，仍失败抛 `AIError('quota')`。
+  淘汰策略纯函数化（`computeEvictionPlan`）：先清最久未访问的孤儿资产，再按 updatedAt 删最旧会话
+  （连带消息与独占资产；sha-256 去重的共享资产按引用计数决定去留）。
+- 设置页面板：会话/消息/资产统计、今日调用量、预算调整、「整理存储」手动清理、
+  会话列表（单条导出自包含 JSON / 删除）、「清空会话数据」。
+- `aiChat()` 成功后自动记账当日调用次数（fire-and-forget，会话库不可用时静默跳过）。
 
 ## 9. CORS 现状备忘（2026-10）
 
@@ -215,6 +223,6 @@ UX 约定：工具内 AI 入口旁放「⚙ 设置」链接；调用失败按 `A
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| P1 | 配置框架（schema/router/http/store/transfer）+ AI 接入设置页 + 工具页头部设置入口 | ✅ 本次交付 |
-| P2 | IndexedDB 会话库 + 配额管理器 + 设置页用量面板 | 设计定稿（第 8 节），待实施 |
-| P3 | 各工具 AI 增强迁移（提示词组装 → 直连调用），Gemini 原生协议适配 | 候选 |
+| P1 | 配置框架（schema/router/http/store/transfer）+ AI 接入设置页 + 工具页头部设置入口 | ✅ 已交付 |
+| P2 | IndexedDB 会话库（chat-core/chat-store）+ 配额守卫与 LRU 淘汰 + 设置页会话数据面板 | ✅ 已交付（见第 8 节） |
+| P3 | 各工具 AI 增强迁移（提示词组装 → 直连调用 + 会话记忆），Gemini 原生协议适配 | 候选 |

@@ -53,6 +53,8 @@ export interface AIConfig {
   /** ★ 数组顺序即供应商调用优先级（第 0 个最优先） */
   providers: AIProvider[];
   models: AIModel[];
+  /** 会话库存储预算（MB），缺省 500，夹在 50~5000；超预算按 LRU 自动清理 */
+  budgetMB?: number;
 }
 
 // ─────────────────────────── 调用层消息类型（http.ts / 各工具共用） ───────────────────────────
@@ -87,7 +89,7 @@ export interface AIChatResult {
 }
 
 /** 统一错误。code 语义见 docs/ai-framework.md 第 5 节 */
-export type AIErrorCode = 'no-model' | 'bad-request' | 'http' | 'network' | 'aborted';
+export type AIErrorCode = 'no-model' | 'bad-request' | 'http' | 'network' | 'aborted' | 'quota';
 
 export class AIError extends Error {
   readonly code: AIErrorCode;

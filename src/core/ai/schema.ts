@@ -103,7 +103,14 @@ export function sanitizeAIConfig(raw: unknown): AIConfig | null {
     }
   }
 
-  return { version: 1, providers, models };
+  return {
+    version: 1,
+    providers,
+    models,
+    ...(typeof r.budgetMB === 'number' && r.budgetMB >= 50 && r.budgetMB <= 5000
+      ? { budgetMB: Math.round(r.budgetMB) }
+      : {}),
+  };
 }
 
 /** 判断配置是否已实际可用（至少一条可路由路径：启用的供应商下有启用的模型） */

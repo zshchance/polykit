@@ -25,6 +25,13 @@ import {
   importAIConfigJSON,
   currentSiteRoot,
   aiConfigExportFilename,
+  chatStats,
+  listConversations,
+  deleteConversation,
+  exportConversationJSON,
+  enforceBudget,
+  clearChatData,
+  saveBudgetMB,
   type AIConfig,
   type AIModel,
   type AIProvider,
@@ -106,6 +113,131 @@ function renderStorageCard(): void {
     },
   });
 
+  // —— AI 会话数据（IndexedDB）面板 ——
+  const aiStatsLine = h('p', { class: 'text-xs text-[var(--fg-muted)]', textContent: '查询会话数据…' });
+  const budgetInput = h('input', {
+    type: 'number',
+    min: '50',
+    max: '5000',
+    step: '50',
+    value: String(loadAIConfig().budgetMB ?? 500),
+    class:
+      'w-20 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--fg)] outline-none focus:border-[var(--accent)]',
+    title: '会话数据存储预算（MB），超出后自动按「先旧资产、后旧会话」清理',
+  });
+  budgetInput.addEventListener('change', () => {
+    const mb = Number(budgetInput.value);
+    if (!Number.isFinite(mb)) return;
+    saveBudgetMB(mb);
+    showToast(`已保存会话存储预算 ${Math.min(5000, Math.max(50, Math.round(mb)))} MB`);
+  });
+
+  const tidyBtn = h('button', {
+    type: 'button',
+    class: BTN_ICON,
+    textContent: '🧹 整理存储',
+    title: '立即按预算执行 LRU 清理',
+    onclick: () => {
+      tidyBtn.disabled = true;
+      tidyBtn.textContent = '整理中…';
+      void enforceBudget()
+        .then((plan) => {
+          showToast(
+            plan.freedBytes > 0
+              ? `已释放 ${fmtBytes(plan.freedBytes)}（清理资产 ${plan.evictAssetIds.length} 个、会话 ${plan.deleteConversationIds.length} 个）`
+              : '已在预算内，无需清理',
+            3600,
+          );
+        })
+        .catch((err: Error) => showToast(`✗ ${err.message}`, 3600))
+        .finally(() => {
+          tidyBtn.disabled = false;
+          tidyBtn.textContent = '🧹 整理存储';
+          refreshChatData();
+        });
+    },
+  });
+
+  const clearChatBtn = h('button', {
+    type: 'button',
+    class: `${BTN_ICON} hover:border-[var(--holiday-legal)] hover:text-[var(--holiday-legal)]`,
+    textContent: '🗑 清空会话数据',
+    title: '删除全部会话、消息与资产（不影响供应商配置）',
+    onclick: () => {
+      void confirmDialog('确定清空全部 AI 会话数据（会话/消息/图片资产/用量记录）？供应商配置与密钥不受影响。', {
+        title: '清空会话数据',
+        danger: true,
+        confirmText: '清空',
+      }).then((ok) => {
+        if (!ok) return;
+        void clearChatData()
+          .then(() => {
+            showToast('已清空全部会话数据');
+            refreshChatData();
+          })
+          .catch((err: Error) => showToast(`✗ ${err.message}`, 3600));
+      });
+    },
+  });
+
+  const convList = h('div', { class: 'hidden mt-3 max-h-56 space-y-1.5 overflow-y-auto' });
+
+  function refreshChatData(): void {
+    void chatStats()
+      .then((st) => {
+        aiStatsLine.textContent = `${st.conversations} 会话 · ${st.messages} 消息 · ${st.assets} 资产（${fmtBytes(st.assetBytes)}）· 今日调用 ${st.todayCalls} 次`;
+      })
+      .catch(() => {
+        aiStatsLine.textContent = '会话数据不可用（可能处于隐私模式）';
+      });
+    void listConversations()
+      .then((convs) => {
+        convList.classList.toggle('hidden', convs.length === 0);
+        convList.replaceChildren(
+          ...convs.slice(0, 50).map((c) =>
+            h('div', {
+              class: 'flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5',
+            }, [
+              h('span', { class: 'rounded bg-[var(--bg-elevated)] px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)]', textContent: c.toolSlug }),
+              h('span', { class: 'max-w-40 truncate text-xs text-[var(--fg)]', textContent: c.title, title: c.title }),
+              h('span', { class: 'text-[10px] text-[var(--fg-muted)]', textContent: `${c.messageCount} 条 · ${fmtBytes(c.bytes)}` }),
+              h('span', { class: 'ml-auto flex gap-1' }, [
+                h('button', {
+                  type: 'button',
+                  class: BTN_ICON,
+                  textContent: '导出',
+                  title: '导出为自包含 JSON（含图片资产）',
+                  onclick: () => {
+                    void exportConversationJSON(c.id).then((json) => {
+                      if (!json) {
+                        showToast('会话已不存在');
+                        return;
+                      }
+                      downloadText(json, `polykit-ai-conv-${c.id}.json`, 'application/json');
+                      showToast('已导出会话');
+                    });
+                  },
+                }),
+                h('button', {
+                  type: 'button',
+                  class: `${BTN_ICON} hover:border-[var(--holiday-legal)] hover:text-[var(--holiday-legal)]`,
+                  textContent: '删',
+                  title: '删除此会话',
+                  onclick: () => {
+                    void deleteConversation(c.id).then(() => {
+                      showToast('已删除会话');
+                      refreshChatData();
+                    });
+                  },
+                }),
+              ]),
+            ]),
+          ),
+        );
+      })
+      .catch(() => undefined);
+  }
+
   storageCard.replaceChildren(
     h('div', { class: 'rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5' }, [
       h('div', { class: 'flex flex-wrap items-center justify-between gap-3' }, [
@@ -116,9 +248,29 @@ function renderStorageCard(): void {
       h('p', {
         class: 'mt-2 text-xs leading-relaxed text-[var(--fg-muted)]',
         textContent: writable
-          ? '配置存于 localStorage（上限 5 MB，本配置远小于此）。将来的对话历史会存 IndexedDB（容量为磁盘比例配额），此处先展示用量。'
+          ? '供应商配置存于 localStorage；AI 会话、消息与图片资产存于 IndexedDB（容量为磁盘比例配额，远大于前者）。'
           : '⚠ 当前处于隐私模式或已禁用本地存储：配置无法保存，刷新后丢失。',
       }),
+      h('div', { class: 'mt-4 border-t border-[var(--border)] pt-4' }, [
+        h('div', { class: 'flex flex-wrap items-center justify-between gap-3' }, [
+          h('h3', { class: 'text-sm font-semibold text-[var(--fg)]', textContent: 'AI 会话数据' }),
+          aiStatsLine,
+        ]),
+        h('div', { class: 'mt-3 flex flex-wrap items-center gap-2' }, [
+          h('label', { class: 'flex items-center gap-1.5 text-xs text-[var(--fg-muted)]' }, [
+            '预算',
+            budgetInput,
+            'MB',
+          ]),
+          tidyBtn,
+          clearChatBtn,
+        ]),
+        h('p', {
+          class: 'mt-2 text-xs leading-relaxed text-[var(--fg-muted)]',
+          textContent: '超出预算时自动按「最久未用的图片资产 → 最旧会话」顺序清理；写入前若遇浏览器配额满也会先自动整理再重试。',
+        }),
+        convList,
+      ]),
     ]),
   );
 
@@ -128,6 +280,7 @@ function renderStorageCard(): void {
     bar.append(h('div', { class: 'h-full rounded-full bg-[var(--accent)]', style: `width:${Math.max(pct, 1)}%` }));
     usageText.textContent = `${fmtBytes(usage)} / ${fmtBytes(quota)}`;
   });
+  refreshChatData();
 }
 
 function fmtBytes(n: number): string {

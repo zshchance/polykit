@@ -11,6 +11,7 @@
 import { chatStream } from './http';
 import { resolveCandidates } from './router';
 import { loadAIConfig } from './store';
+import { recordUsage } from './chat-store';
 import {
   AIError,
   type AIChatResult,
@@ -52,6 +53,31 @@ export {
   importAIConfigJSON,
   aiConfigExportFilename,
 } from './transfer';
+export {
+  createConversation,
+  appendMessage,
+  listConversations,
+  getMessages,
+  deleteConversation,
+  putAssetFromDataUrl,
+  getAssetBlob,
+  hydrateForApi,
+  exportConversationJSON,
+  recordUsage,
+  chatStats,
+  enforceBudget,
+  clearChatData,
+  budgetBytesOf,
+  saveBudgetMB,
+  type ChatStats,
+} from './chat-store';
+export type {
+  StoredConversation,
+  StoredMessage,
+  StoredAsset,
+  StoredUsage,
+  StoredPart,
+} from './chat-core';
 
 export interface AIChatRequest {
   messages: ChatMessage[];
@@ -107,6 +133,8 @@ export async function aiChat(req: AIChatRequest): Promise<AIChatResult> {
           },
         },
       );
+      // 用量记账（fire-and-forget：会话库不可用时静默跳过，不影响调用）
+      void recordUsage({ calls: 1 }).catch(() => undefined);
       return {
         content,
         reasoning,
