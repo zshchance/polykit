@@ -23,6 +23,8 @@ import {
 } from './history';
 import { loadOptions, saveOptions } from './settings';
 import { buildAIPrompt, PROMPT_STYLES, type PromptStyleId } from './ai-prompt';
+import { extractCandidates } from './candidates';
+import { createAiRunner, createCandidateCopyButton } from '@/core/ai/ai-assist';
 
 initTheme();
 
@@ -543,6 +545,36 @@ function renderPasswordGenerator() {
       flashOk('提示词已生成，复制后发给 AI 即可。');
     }
 
+    // ④-bis 直连 AI（可选路径）：已在「AI 接入设置」配置模型时，跳过复制粘贴直接拿口令。
+    // 未配置时 runner 会就地显示引导链接，不弹窗打断；输出流式渲染，候选口令点选即复制。
+    const candidatesRow = h('div', { class: 'flex flex-wrap gap-2' });
+    const candidatesWrap = h('div', { class: 'hidden space-y-2' }, [
+      h('p', {
+        class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
+        textContent: '点口令即可复制。AI 生成口令经第三方服务、非密码学随机，适合低敏感场景。',
+      }),
+      candidatesRow,
+    ]);
+    const runner = createAiRunner({
+      toolSlug: 'password-generator',
+      conversationTitle: 'AI 口令生成',
+      onDone: (text) => {
+        const list = extractCandidates(text);
+        candidatesRow.replaceChildren();
+        candidatesWrap.classList.toggle('hidden', list.length === 0);
+        for (const c of list) candidatesRow.append(createCandidateCopyButton(c));
+      },
+    });
+    function runDirect(): void {
+      runner.run(
+        buildAIPrompt({
+          description: descInput.value.trim(),
+          style,
+          pageOptions: includePageSettings ? { ...state } : undefined,
+        }),
+      );
+    }
+
     const card = h(
       'div',
       {
@@ -587,16 +619,26 @@ function renderPasswordGenerator() {
           }),
           includeSettingsRow,
         ]),
-        h('div', { class: 'mt-3 flex items-center justify-end' }, [
+        h('div', { class: 'mt-3 flex flex-wrap items-center justify-end gap-2' }, [
+          h('button', {
+            type: 'button',
+            class:
+              'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-1.5 text-sm text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+            textContent: '生成提示词',
+            title: '组装提示词，复制到你自己的 AI 对话使用',
+            onclick: generatePrompt,
+          }),
           h('button', {
             type: 'button',
             class:
               'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
-            textContent: '生成提示词',
-            onclick: generatePrompt,
+            textContent: '⚡ 直接生成',
+            title: '用「AI 接入设置」里配置的模型直接生成口令（未配置时会给出引导）',
+            onclick: runDirect,
           }),
         ]),
-        h('div', { class: 'mt-3' }, [promptWrap]),
+        h('div', { class: 'mt-3 space-y-3' }, [runner.el, candidatesWrap]),
+        h('div', { class: 'mt-1' }, [promptWrap]),
         statusRow,
         h('p', {
           class:
@@ -615,7 +657,7 @@ function renderPasswordGenerator() {
     'button',
     {
       type: 'button',
-      title: '用 AI 生成口令：描述需求 → 生成提示词 → 复制给 AI 直接拿口令',
+      title: '用 AI 生成口令：描述需求 → 直连生成（或复制提示词发给任意 AI）',
       'aria-label': '用 AI 生成口令',
       class:
         'w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-2 text-sm text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',

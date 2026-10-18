@@ -30,6 +30,7 @@ src/core/ai/
 ├── transfer.ts     # 导出/导入 + {ORIGIN} 占位 + 域名替换（纯函数为主）
 ├── chat-core.ts    # 会话库纯逻辑：内容规划（data URL→资产）/ LRU 淘汰计划 / 记录清洗
 ├── chat-store.ts   # IndexedDB 会话库（conversations/messages/assets/usage + 配额守卫）
+├── ai-assist.ts    # 共享 UI 运行器 createAiRunner：流式渲染/错误分支/会话记账/候选复制
 └── index.ts        # 门面：aiChat() —— 各工具唯一需要 import 的入口
 
 tools/ai-settings/  # 设置页（工具页形态，自动进首页与 sitemap）
@@ -174,8 +175,26 @@ const res = await aiChat({
 //   `${import.meta.env.BASE_URL}tools/ai-settings/`
 ```
 
+**首选路径：共享运行器 `createAiRunner`（ai-assist.ts）**——流式渲染、停止/重生成/复制、
+错误分支（未配置模型显示设置页链接）、会话记账（同一工具内复用会话形成多轮上下文）
+全部内置，工具只负责组装提示词与解析产物：
+
+```ts
+import { createAiRunner } from '@/core/ai/ai-assist';
+
+const runner = createAiRunner({
+  toolSlug: 'password-generator',
+  onDone: (text) => render(extractCandidates(text)),  // 工具自定义解析
+});
+dialog.append(runner.el);
+runner.run(buildAIPrompt(input));
+```
+
+已接入：password-generator（⚡ 直接生成口令，候选点选复制；原「生成提示词」手动路径保留为兜底）。
+待接入：color-extractor（色值注入玩法）、ascii-art / quote-card / qr-code（代码回填类，直连后自动填入第三步）。
+
 UX 约定：工具内 AI 入口旁放「⚙ 设置」链接；调用失败按 `AIError.code` 分支提示；
-工具产生的**临时上下文**放内存即可，需要跨会话保留的结构化对话/多模态资产走 Phase 2 会话库（下一节）。
+会话自动进会话库（IndexedDB），临时上下文放内存即可。
 
 ## 8. 浏览器存储容量调研（会话库 Phase 2 的依据）
 
@@ -225,4 +244,4 @@ UX 约定：工具内 AI 入口旁放「⚙ 设置」链接；调用失败按 `A
 |---|---|---|
 | P1 | 配置框架（schema/router/http/store/transfer）+ AI 接入设置页 + 工具页头部设置入口 | ✅ 已交付 |
 | P2 | IndexedDB 会话库（chat-core/chat-store）+ 配额守卫与 LRU 淘汰 + 设置页会话数据面板 | ✅ 已交付（见第 8 节） |
-| P3 | 各工具 AI 增强迁移（提示词组装 → 直连调用 + 会话记忆），Gemini 原生协议适配 | 候选 |
+| P3 | 各工具 AI 增强迁移（提示词组装 → 直连调用 + 会话记忆），Gemini 原生协议适配 | 🔄 进行中：共享运行器与 password-generator 已接入，见第 7 节 |

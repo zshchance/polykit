@@ -25,10 +25,12 @@
 
 ## 🧪 进行中 / 近期
 
-- **AI 接入框架 P1 已落地**：全站 BYOK 大模型配置（`src/core/ai/` + AI 接入设置页）——
+- **AI 接入框架 P1/P2 已落地，P3 进行中**：全站 BYOK 大模型配置（`src/core/ai/` + AI 接入设置页）——
   供应商/模型/能力/优先级管理、OpenAI 兼容与 Anthropic 直连、流式调用、连通性测试、
-  模型列表拉取、配置导出导入（跨域名地址自动替换）。零新增运行时依赖。
-  P2（IndexedDB 会话库 + 配额管理）与 P3（各工具 AI 增强迁移、Gemini 原生协议）见
+  模型列表拉取、配置导出导入（跨域名地址自动替换）；IndexedDB 会话库（Blob 资产去重、
+  LRU 预算清理、用量记账）。P3 首个工具已接入：密码生成器「⚡ 直接生成」直连路径
+  （共享运行器 `createAiRunner`，候选口令点选复制；提示词手动路径保留兜底）。
+  后续接入 color-extractor / ascii-art / quote-card / qr-code，详见
   [docs/ai-framework.md](./ai-framework.md) 路线图。
 
 ---
