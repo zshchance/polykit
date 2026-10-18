@@ -506,3 +506,88 @@ export function saveBudgetMB(mb: number): void {
   config.budgetMB = Math.min(5000, Math.max(50, Math.round(mb)));
   saveAIConfig(config);
 }
+
+// ─────────────────────────── 全站备份：会话库整体导出 / 恢复 ───────────────────────────
+
+/** 备份资产：元信息 + dataUrl（Blob 不可序列化） */
+export interface BackupAsset extends StoredAsset {
+  dataUrl: string;
+}
+
+export interface ConversationsBackup {
+  format: 'polykit-ai-conversations';
+  version: 1;
+  /** 全库资产一次列出（sha-256 去重后本就无冗余） */
+  assets: BackupAsset[];
+  items: Array<{ conversation: StoredConversation; messages: StoredMessage[] }>;
+}
+
+/** 导出全部会话（含消息与资产，id 原样保留，供全站备份携带） */
+export async function exportAllConversations(): Promise<ConversationsBackup> {
+  const cache = new Map<string, string>();
+  async function assetDataUrl(row: AssetRow): Promise<string> {
+    let url = cache.get(row.id);
+    if (url === undefined) {
+      url = await blobToDataUrl(row.blob);
+      cache.set(row.id, url);
+    }
+    return url;
+  }
+  return withStore(['conversations', 'messages', 'assets'], 'readonly', async (s) => {
+    const convs = await promisify(s.conversations.getAll() as IDBRequest<StoredConversation[]>);
+    const assets = await promisify(s.assets.getAll() as IDBRequest<AssetRow[]>);
+    const backupAssets: BackupAsset[] = [];
+    for (const a of assets) {
+      const { blob: _b, ...meta } = a;
+      backupAssets.push({ ...meta, dataUrl: await assetDataUrl(a) });
+    }
+    const items: ConversationsBackup['items'] = [];
+    for (const c of convs) {
+      const msgs = await promisify(
+        s.messages.index('by-conv').getAll(convKeyRange(c.id)) as IDBRequest<StoredMessage[]>,
+      );
+      items.push({ conversation: c, messages: msgs.sort((a, b) => a.seq - b.seq) });
+    }
+    return { format: 'polykit-ai-conversations', version: 1, assets: backupAssets, items };
+  });
+}
+
+/**
+ * 从备份恢复会话库（默认先清空现有数据；id / 资产引用原样还原）。
+ * 返回恢复计数。备份结构非法时抛错（由调用方提示「文件无效」）。
+ */
+export async function restoreConversations(
+  backup: unknown,
+  opts: { clearExisting?: boolean } = {},
+): Promise<{ conversations: number; messages: number; assets: number }> {
+  const b = backup as Partial<ConversationsBackup>;
+  if (!b || b.format !== 'polykit-ai-conversations' || b.version !== 1 || !Array.isArray(b.items)) {
+    throw new AIError('bad-request', '会话备份格式无效');
+  }
+  const { clearExisting = true } = opts;
+  return withStore(['conversations', 'messages', 'assets'], 'readwrite', async (s) => {
+    if (clearExisting) {
+      s.conversations.clear();
+      s.messages.clear();
+      s.assets.clear();
+    }
+    for (const a of (b.assets ?? []) as BackupAsset[]) {
+      if (typeof a?.id !== 'string' || typeof a?.dataUrl !== 'string') continue;
+      const { bytes, mime } = dataUrlToBytes(a.dataUrl);
+      const { dataUrl: _d, ...meta } = a;
+      s.assets.put({ ...meta, mime, size: bytes.length, blob: new Blob([bytes as unknown as BlobPart], { type: mime }) });
+    }
+    let messages = 0;
+    for (const item of b.items!) {
+      const conv = item?.conversation;
+      if (!conv || typeof conv.id !== 'string') continue;
+      s.conversations.put(conv);
+      for (const m of item.messages ?? []) {
+        if (!m || m.conversationId !== conv.id) continue;
+        s.messages.put(m);
+        messages++;
+      }
+    }
+    return { conversations: b.items!.length, messages, assets: (b.assets ?? []).length };
+  });
+}

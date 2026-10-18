@@ -49,8 +49,9 @@ export function normalizeSiteRoot(root: string): string {
   return `${noTrail}/`;
 }
 
-/** 去掉尾斜杠（占位符路径用：内容中的路径斜杠原样保留，如 {ORIGIN}/api/proxy） */
-function slashless(root: string): string {
+/** 去掉尾斜杠（占位符路径用：内容中的路径斜杠原样保留，如 {ORIGIN}/api/proxy）。
+ *  导出供全站备份（core/backup.ts）共用同一套替换锚点语义。 */
+export function slashlessRoot(root: string): string {
   return root.replace(/\/+$/, '');
 }
 
@@ -79,7 +80,7 @@ export function rewriteOrigin(node: unknown, from: string, to: string): unknown 
  * - includeKeys=false 时密钥置空（脱敏分享版）。
  */
 export function exportAIConfigJSON(config: AIConfig, siteRoot: string, includeKeys: boolean): string {
-  const portable = rewriteOrigin(config, slashless(normalizeSiteRoot(siteRoot)), ORIGIN_TOKEN);
+  const portable = rewriteOrigin(config, slashlessRoot(normalizeSiteRoot(siteRoot)), ORIGIN_TOKEN);
   const sanitized = sanitizeAIConfig(portable) ?? emptyAIConfig();
   const file: ExportFile = {
     meta: {
@@ -125,7 +126,7 @@ export function importAIConfigJSON(text: string, siteRoot: string): ImportOutcom
   const to = normalizeSiteRoot(siteRoot);
   let working: unknown = file.config ?? {};
   // 第一道：占位符还原（无斜杠锚点 ↔ 无斜杠站点根，内容路径斜杠保持）
-  working = rewriteOrigin(working, ORIGIN_TOKEN, slashless(to));
+  working = rewriteOrigin(working, ORIGIN_TOKEN, slashlessRoot(to));
   // 第二道：旧站前缀精确替换（exportedFrom 带 / 结尾，天然只匹配完整 URL 前缀）
   const from = typeof file.meta.exportedFrom === 'string' ? normalizeSiteRoot(file.meta.exportedFrom) : '';
   let replaced = false;

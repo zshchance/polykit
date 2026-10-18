@@ -21,6 +21,7 @@
 import { h } from '@/core/components/element';
 import { createCopyButton } from '@/core/components/CopyButton';
 import { copyText } from '@/core/utils/clipboard';
+import MarkdownIt from 'markdown-it';
 import { ensureAIConfigured } from './ai-config-guard';
 import {
   AIError,
@@ -33,6 +34,23 @@ import {
   type ChatMessage,
   type ModelCapability,
 } from './index';
+
+/**
+ * 输出区的 Markdown 渲染器：html:false（转义原始 HTML，防注入）、
+ * linkify（裸链接成链）、breaks（单换行成 <br>，贴合聊天输出的排版习惯）。
+ * 链接强制新标签打开。
+ */
+const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
+const defaultLinkOpen = md.renderer.rules.link_open;
+md.renderer.rules.link_open = (...args) => {
+  const [tokens, idx, options, env, self] = args;
+  tokens[idx]!.attrSet('target', '_blank');
+  tokens[idx]!.attrSet('rel', 'noopener');
+  // link_open 的默认规则始终存在；兜底分支仅为类型完备
+  return defaultLinkOpen
+    ? defaultLinkOpen(tokens, idx, options, env, self)
+    : self.renderToken(tokens, idx, options);
+};
 
 export interface AiRunnerOptions {
   /** 所属工具 slug（会话库分组用） */
@@ -74,22 +92,23 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
   let convId: string | null = null;
   let controller: AbortController | null = null;
   let lastFullText = '';
+  /** 本轮流式的原始 Markdown 全文（渲染用原始文本，复制也用它） */
+  let streamRaw = '';
 
   // —— DOM ——
   const need = opts.need ?? ['text'];
   const isImageMode = need.length === 1 && need[0] === 'image-gen';
   const metaLine = h('span', { class: 'text-[11px] text-[var(--fg-muted)]' });
-  const outputPre = h('pre', {
-    class:
-      'max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 font-mono text-[12px] leading-relaxed text-[var(--fg)]',
-    textContent: '',
+  /** 流式输出区：Markdown 渲染（样式见 main.css 的 .ai-md） */
+  const outputArea = h('div', {
+    class: 'ai-md max-h-64 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5',
   });
   /** 图片生成结果网格（image-gen 模式使用） */
   const imagesWrap = h('div', { class: 'hidden grid gap-3 sm:grid-cols-2' });
   const errorBox = h('div', { class: 'hidden rounded-lg border border-[var(--holiday-legal)] px-3 py-2 text-xs leading-relaxed text-[var(--holiday-legal)]' });
 
   function renderImages(images: string[]): void {
-    outputPre.classList.add('hidden');
+    outputArea.classList.add('hidden');
     imagesWrap.classList.remove('hidden');
     imagesWrap.replaceChildren(
       ...images.map((src) =>
@@ -157,7 +176,7 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
       h('span', { class: 'text-xs font-medium text-[var(--fg-muted)]', textContent: 'AI 输出' }),
       metaLine,
     ]),
-    outputPre,
+    outputArea,
     imagesWrap,
     h('div', { class: 'flex items-center justify-end gap-2' }, [
       stopBtn,
@@ -193,11 +212,12 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
     busy = true;
     lastPrompt = prompt;
     lastFullText = '';
+    streamRaw = '';
     controller = new AbortController();
     el.classList.remove('hidden');
     errorBox.classList.add('hidden');
-    outputPre.textContent = '';
-    outputPre.classList.toggle('hidden', isImageMode);
+    outputArea.replaceChildren();
+    outputArea.classList.toggle('hidden', isImageMode);
     imagesWrap.classList.add('hidden');
     imagesWrap.replaceChildren();
     metaLine.textContent = isImageMode ? '🎨 生成图片中…' : '生成中…';
@@ -226,8 +246,10 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
         need,
         signal: controller.signal,
         onDelta: (d) => {
-          if (d.content) outputPre.textContent += d.content;
-          outputPre.scrollTop = outputPre.scrollHeight;
+          if (!d.content) return;
+          streamRaw += d.content;
+          outputArea.innerHTML = md.render(streamRaw);
+          outputArea.scrollTop = outputArea.scrollHeight;
         },
       });
       lastFullText = res.content;
@@ -275,7 +297,7 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
     if (err instanceof AIError && err.code === 'aborted') {
       metaLine.textContent = '已停止';
       // 已流出的部分仍算结果：可复制 / 记账
-      lastFullText = outputPre.textContent || lastFullText;
+      lastFullText = streamRaw || lastFullText;
       if (convId !== null && lastFullText) {
         void appendMessage(convId, 'assistant', lastFullText).catch(() => undefined);
       }
@@ -286,7 +308,7 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
       showError(err instanceof Error ? err.message : String(err), false);
       metaLine.textContent = '';
       // 已流出的部分仍可复制
-      if (outputPre.textContent) lastFullText = outputPre.textContent;
+      if (streamRaw) lastFullText = streamRaw;
     }
   }
 

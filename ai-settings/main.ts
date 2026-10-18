@@ -21,10 +21,6 @@ import {
   saveAIConfig,
   subscribeAIConfig,
   genId,
-  exportAIConfigJSON,
-  importAIConfigJSON,
-  currentSiteRoot,
-  aiConfigExportFilename,
   chatStats,
   listConversations,
   deleteConversation,
@@ -605,74 +601,13 @@ function renderRouting(): void {
 // ─────────────────────────── 导出 / 导入 / 清空 ───────────────────────────
 
 function renderMigrate(): void {
-  const includeKeysBox = h('input', { type: 'checkbox', checked: true, class: 'accent-[var(--accent)]' });
-  const exportBtn = h('button', {
-    type: 'button',
-    class: 'rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
-    textContent: '⬇ 导出配置',
-    onclick: () => {
-      if (config.providers.length === 0) {
-        showToast('当前没有可导出的配置');
-        return;
-      }
-      const includeKeys = includeKeysBox.checked;
-      const json = exportAIConfigJSON(config, currentSiteRoot(), includeKeys);
-      downloadText(json, aiConfigExportFilename(includeKeys), 'application/json');
-      showToast(includeKeys ? '已导出（含密钥，请妥善保管文件）' : '已导出脱敏版（不含密钥）', 3200);
-    },
-  });
-
-  const fileInput = h('input', { type: 'file', accept: 'application/json,.json', class: 'hidden' }) as HTMLInputElement;
-  fileInput.addEventListener('change', () => {
-    const file = fileInput.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const outcome = importAIConfigJSON(String(reader.result ?? ''), currentSiteRoot());
-      if (!outcome) {
-        showToast('文件无效或格式不符', 3200);
-        return;
-      }
-      const proceed = (): void => {
-        config = outcome.config;
-        saveAIConfig(config);
-        render();
-        showToast(
-          `已导入 ${config.providers.length} 个供应商、${config.models.length} 个模型${outcome.note ? `；${outcome.note}` : ''}`,
-          4200,
-        );
-      };
-      // 导入会整体覆盖现有配置：已有配置时先确认
-      if (config.providers.length > 0) {
-        void confirmDialog(
-          `导入将覆盖当前 ${config.providers.length} 个供应商、${config.models.length} 个模型的配置，确定继续？`,
-          { title: '导入配置', danger: true, confirmText: '覆盖导入' },
-        ).then((ok) => {
-          if (ok) proceed();
-        });
-      } else {
-        proceed();
-      }
-    };
-    reader.onerror = () => showToast('读取失败，请重试');
-    reader.readAsText(file);
-    fileInput.value = '';
-  });
-
-  const importBtn = h('button', {
-    type: 'button',
-    class: 'rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
-    textContent: '⬆ 导入配置',
-    onclick: () => fileInput.click(),
-  });
-
   const clearBtn = h('button', {
     type: 'button',
     class:
       'rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--fg-muted)] transition-colors hover:border-[var(--holiday-legal)] hover:text-[var(--holiday-legal)]',
     textContent: '🗑 清空全部',
     onclick: () => {
-      void confirmDialog('确定清空全部供应商、模型与密钥？此操作不可撤销（可先导出备份）。', {
+      void confirmDialog('确定清空全部供应商、模型与密钥？此操作不可撤销（可先在首页 ⚙ 面板导出备份）。', {
         title: '清空 AI 配置',
         danger: true,
         confirmText: '清空',
@@ -691,16 +626,21 @@ function renderMigrate(): void {
     h('div', { class: 'rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5' }, [
       h('h2', { class: 'text-sm font-semibold text-[var(--fg)]', textContent: '备份与迁移' }),
       h('p', {
-        class: 'mt-0.5 mb-3 text-xs leading-relaxed text-[var(--fg-muted)]',
-        textContent: '导出的 JSON 可在另一域名（如 GitHub Pages ↔ Cloudflare Pages）或另一台设备导入：指向旧站点的地址会自动替换为当前域名，外部 API 地址保持不变。',
+        class: 'mt-0.5 text-xs leading-relaxed text-[var(--fg-muted)]',
+        textContent: '配置的导出/导入已统一到全站备份：首页右上角 ⚙「我的设置」→ 导出备份，可勾选是否包含 AI 配置与对话记录，一个文件在任意设备或域名恢复（站内地址自动替换）。',
       }),
-      h('div', { class: 'flex flex-wrap items-center gap-3' }, [
-        exportBtn,
-        h('label', { class: 'flex items-center gap-1.5 text-xs text-[var(--fg-muted)]' }, [includeKeysBox, '包含 API 密钥']),
-        importBtn,
+      h('div', { class: 'mt-3 flex items-center gap-3' }, [
+        h(
+          'a',
+          {
+            href: import.meta.env.BASE_URL || '/',
+            class:
+              'rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+            textContent: '⬇ 去首页导出备份',
+          },
+        ),
         clearBtn,
       ]),
-      fileInput,
     ]),
   );
 }

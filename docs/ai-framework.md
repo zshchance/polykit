@@ -173,6 +173,10 @@ type ContentPart =
 3. **密钥可选剔除**：`exportAIConfigJSON(config, { includeKeys })`，默认含密钥（自用迁移），
    可导出脱敏版分享给他人。
 4. 导入走与 load 相同的 `sanitize` 清洗，非法数据整体拒绝并提示「文件无效或格式不符」。
+5. **UI 已统一到全站备份**：本节机制（{ORIGIN} 占位 + exportedFrom 替换）被
+   `src/core/backup.ts` 的全站备份复用——首页 ⚙「我的设置」的导出/恢复一个文件携带
+   工具偏好、AI 配置（含密钥）与可选会话库（含图片资产），跨域名地址替换同此逻辑；
+   AI 设置页不再单独提供配置导出 UI（`exportAIConfigJSON` 等函数保留为框架 API）。
 
 ## 7. 工具接入标准
 
