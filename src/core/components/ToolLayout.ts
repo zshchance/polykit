@@ -1,6 +1,7 @@
 import { h } from './element';
 import { createThemeToggle } from './ThemeToggle';
 import { createSiteFooter } from './SiteFooter';
+import { aiSettingsUrl } from '@/core/ai';
 
 /**
  * 工具页统一外壳：顶部栏（返回首页 + 工具名 + 主题切换）。
@@ -35,7 +36,16 @@ export function renderToolLayout(parent: HTMLElement, title: string): ToolLayout
         backLink,
         h('h1', { class: 'text-xl font-semibold', textContent: title }),
       ]),
-      createThemeToggle(),
+      h('div', { class: 'flex items-center gap-4' }, [
+        // 全站 BYOK 大模型配置入口（详见 docs/ai-framework.md）
+        h('a', {
+          href: aiSettingsUrl(),
+          class:
+            'text-sm text-[var(--fg-muted)] transition-colors hover:text-[var(--accent)]',
+          textContent: 'AI 设置',
+        }),
+        createThemeToggle(),
+      ]),
     ],
   );
 

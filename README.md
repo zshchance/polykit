@@ -26,6 +26,8 @@
 ├── src/
 │   ├── core/                      # 跨工具共享层
 │   │   ├── components/            # 通用组件：ToolLayout、CopyButton、ThemeToggle、element(h)
+│   │   ├── ai/                    # ★ AI 接入框架（BYOK 纯本地）：配置存储/能力路由/直连调用/跨域名迁移
+│   │   │                          #   设计文档见 docs/ai-framework.md，设置页 tools/ai-settings/
 │   │   ├── seo/seo-plugin.ts      # ★ 构建期 SEO 注入 + sitemap/robots
 │   │   ├── utils/                 # 通用函数：dom、clipboard、random(密码学安全)
 │   │   ├── styles/main.css        # Tailwind 入口 + 设计 token + 主题变量 + 节假日配色
