@@ -94,9 +94,9 @@ export interface AIChatRequest {
   onDelta?: (d: AIStreamDelta) => void;
 }
 
-/** AI 接入设置页地址（工具捕获 no-model 错误后引导用户跳转用） */
+/** AI 接入设置页地址（系统配置页，非工具页；引导用户跳转用） */
 export function aiSettingsUrl(): string {
-  return `${import.meta.env.BASE_URL}tools/ai-settings/`;
+  return `${import.meta.env.BASE_URL}ai-settings/`;
 }
 
 /** 统一调用入口。失败抛 AIError；未配置可用模型时 code='no-model'。 */

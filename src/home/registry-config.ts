@@ -79,16 +79,6 @@ export const registryConfig: RegistryConfig = {
       '琶音模式',
       'AI音乐提示词',
       '节拍设计',
-      'AI 设置',
-      '大模型配置',
-      'API 密钥管理',
-      'BYOK',
-      'OpenAI 兼容',
-      'Anthropic',
-      '多模态模型',
-      '视觉模型配置',
-      '模型优先级',
-      'Ollama',
     ],
   },
   modules: {
@@ -103,6 +93,5 @@ export const registryConfig: RegistryConfig = {
     'instrument-atlas': { order: 8 },
     'rhythm-arp-lab': { order: 9 },
     'sight-piano': { order: 10 },
-    'ai-settings': { order: 11 },
   },
 };

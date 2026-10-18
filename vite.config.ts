@@ -70,6 +70,8 @@ export default defineConfig({
       input: {
         // 根首页：仓库根目录的 index.html
         home: r('index.html'),
+        // 系统级 AI 配置页（非工具：不进首页网格与 sitemap，入口在顶栏 ⚙ 与工具内引导）
+        aiSettings: r('ai-settings/index.html'),
         // 所有工具页
         ...scanToolInputs(),
       },

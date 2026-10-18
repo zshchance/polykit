@@ -4,6 +4,7 @@ import { exportPrefsJSON, importPrefsJSON, prefsExportFilename, emptyPrefs } fro
 import { downloadBlob } from '@/core/utils/clipboard';
 import { confirmDialog } from '@/core/components/Dialog';
 import { showToast } from './toast';
+import { aiSettingsUrl, hasRoutableModel, loadAIConfig } from '@/core/ai';
 
 /**
  * 个人设置浮层：备份 / 恢复 / 重置 工具偏好（置顶 / 星标 / 排序）。
@@ -32,9 +33,38 @@ export function createSettingsPanel(
     class: 'text-xs text-[var(--fg-muted)]',
   });
 
+  // —— 系统级入口：AI 大模型设置（全站工具共用的框架能力，非工具，不进卡片网格） ——
+  const aiStatus = h('span', { class: 'text-[10px] text-[var(--fg-muted)]', textContent: '未配置' });
+  function refreshAiStatus(): void {
+    const cfg = loadAIConfig();
+    const ok = hasRoutableModel(cfg);
+    aiStatus.textContent = ok
+      ? `已启用 ${cfg.providers.filter((p) => p.enabled).length} 家供应商`
+      : '未配置';
+    aiStatus.className = ok
+      ? 'text-[10px] text-[var(--accent)]'
+      : 'text-[10px] text-[var(--fg-muted)]';
+  }
+  refreshAiStatus();
+
+  const aiEntry = h(
+    'a',
+    {
+      href: aiSettingsUrl(),
+      class:
+        'flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+      'aria-label': 'AI 大模型设置（系统配置页）',
+    },
+    [
+      h('span', { textContent: '🧩 AI 大模型设置' }),
+      h('span', { class: 'flex items-center gap-1.5' }, [aiStatus, '→']),
+    ],
+  );
+
   function refresh(p: HomePrefs): void {
     prefs = p;
     stats.textContent = `置顶 ${p.pinned.length} · 星标 ${p.starred.length}`;
+    refreshAiStatus();
   }
   refresh(initial);
 
@@ -131,6 +161,7 @@ export function createSettingsPanel(
         h('span', { class: 'text-sm font-medium text-[var(--fg)]', textContent: '我的设置' }),
         stats,
       ]),
+      aiEntry,
       h('div', { class: 'flex gap-2' }, [exportBtn, restoreBtn, resetBtn]),
       h('p', {
         class: 'text-xs leading-relaxed text-[var(--fg-muted)]',

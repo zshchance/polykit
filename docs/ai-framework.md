@@ -1,7 +1,7 @@
 # AI 接入框架设计（BYOK · 纯本地）
 
 > 目标：让全站工具共享一套「用户自带密钥（BYOK）」的大模型接入能力。
-> 用户在 **AI 接入设置**（`/tools/ai-settings/`）页全局配置供应商与模型，
+> 用户在 **AI 接入设置**（系统页 `/ai-settings/`，非工具）全局配置供应商与模型，
 > 各工具使用 AI 能力时自动引用该配置，前端直连大模型 API，
 > **密钥与配置只存浏览器本地，不经过任何后端**——与站点「数据不出本地」的承诺一致。
 >
@@ -17,23 +17,28 @@
 3. **全局一份配置**：MPA 架构下各工具页共享同一 localStorage key，配置改动跨页生效（storage 事件通知）。
 4. **能力路由**：工具按需声明「我需要能读图的模型」，框架按供应商优先级自动选型、失败顺延。
 5. **可迁移**：配置可导出/导入；站内地址用 `{ORIGIN}` 占位符存储，导入时按「导出来源」精确替换，多域名部署互迁零手工。
+6. **系统页与工具的边界**：AI 配置是系统级能力，**不是工具**——配置页在 `/ai-settings/`
+   （仓库根 `ai-settings/` 目录，手动注册 Vite 入口），不进首页工具网格、不进 sitemap、
+   noindex。入口：首页顶栏 ⚙ 面板的「AI 大模型设置」、各工具页头部的「AI 设置」链接、
+   以及工具内未配置时的统一引导模态框。工具只消费配置，不承载配置。
 
 ## 2. 模块结构
 
 ```
 src/core/ai/
-├── types.ts        # 共享类型（供应商 / 模型 / 能力 / 消息）
-├── schema.ts       # 纯函数：配置校验与清洗（load 的安全层）
-├── router.ts       # 纯函数：按能力 + 供应商优先级解析候选模型
-├── http.ts         # 请求构建（纯函数）+ SSE 流式解析 + 连通性测试
-├── store.ts        # localStorage CRUD + 跨页订阅（薄壳，逻辑在 schema）
-├── transfer.ts     # 导出/导入 + {ORIGIN} 占位 + 域名替换（纯函数为主）
-├── chat-core.ts    # 会话库纯逻辑：内容规划（data URL→资产）/ LRU 淘汰计划 / 记录清洗
-├── chat-store.ts   # IndexedDB 会话库（conversations/messages/assets/usage + 配额守卫）
-├── ai-assist.ts    # 共享 UI 运行器 createAiRunner：流式渲染/错误分支/会话记账/候选复制
-└── index.ts        # 门面：aiChat() —— 各工具唯一需要 import 的入口
+├── types.ts           # 共享类型（供应商 / 模型 / 能力 / 消息）
+├── schema.ts          # 纯函数：配置校验与清洗（load 的安全层）
+├── router.ts          # 纯函数：按能力 + 供应商优先级解析候选模型
+├── http.ts            # 请求构建（纯函数）+ SSE 流式解析 + 连通性测试
+├── store.ts           # localStorage CRUD + 跨页订阅（薄壳，逻辑在 schema）
+├── transfer.ts        # 导出/导入 + {ORIGIN} 占位 + 域名替换（纯函数为主）
+├── chat-core.ts       # 会话库纯逻辑：内容规划（data URL→资产）/ LRU 淘汰计划 / 记录清洗
+├── chat-store.ts      # IndexedDB 会话库（conversations/messages/assets/usage + 配额守卫）
+├── ai-config-guard.ts # ★ 全站统一「未配置引导」模态框（框架级，工具不各自实现）
+├── ai-assist.ts       # 共享 UI 运行器 createAiRunner：流式渲染/错误分支/会话记账/候选复制
+└── index.ts           # 门面：aiChat() —— 各工具唯一需要 import 的入口
 
-tools/ai-settings/  # 设置页（工具页形态，自动进首页与 sitemap）
+ai-settings/           # 系统配置页（非工具：不进首页网格/sitemap，noindex）
 ```
 
 依赖方向：`index.ts` → `router/http/store` → `schema/types`，纯函数核心均可单测（Vitest，node 环境），DOM 交互只在设置页。
@@ -172,12 +177,14 @@ const res = await aiChat({
 });
 // res.content / res.reasoning / res.model.providerName / res.model.modelName / res.latencyMs
 // 未配置模型时抛 AIError(code='no-model')，工具应捕获并引导用户去设置页：
-//   `${import.meta.env.BASE_URL}tools/ai-settings/`
+//   `${import.meta.env.BASE_URL}ai-settings/`
 ```
 
 **首选路径：共享运行器 `createAiRunner`（ai-assist.ts）**——流式渲染、停止/重生成/复制、
-错误分支（未配置模型显示设置页链接）、会话记账（同一工具内复用会话形成多轮上下文）
-全部内置，工具只负责组装提示词与解析产物：
+错误分支、会话记账（同一工具内复用会话形成多轮上下文）全部内置；
+**调用前自动经过配置守卫**（`ai-config-guard.ts`）：无可路由模型时弹出全站统一的
+引导模态框（「去配置」新标签打开 `/ai-settings/`，当前页表单内容保留），工具无需
+自行检查配置完整性——收口在 runner：
 
 ```ts
 import { createAiRunner } from '@/core/ai/ai-assist';
@@ -187,8 +194,11 @@ const runner = createAiRunner({
   onDone: (text) => render(extractCandidates(text)),  // 工具自定义解析
 });
 dialog.append(runner.el);
-runner.run(buildAIPrompt(input));
+runner.run(buildAIPrompt(input));   // 未配置 → 统一引导模态框，自动放弃本次
 ```
+
+不走 runner 的自定义调用，用 `ensureAIConfigured()` 获得同样的守卫：
+`if (!(await ensureAIConfigured())) return;`
 
 已接入：password-generator（⚡ 直接生成口令，候选点选复制；原「生成提示词」手动路径保留为兜底）。
 待接入：color-extractor（色值注入玩法）、ascii-art / quote-card / qr-code（代码回填类，直连后自动填入第三步）。

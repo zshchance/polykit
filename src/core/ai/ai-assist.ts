@@ -21,6 +21,7 @@
 import { h } from '@/core/components/element';
 import { createCopyButton } from '@/core/components/CopyButton';
 import { copyText } from '@/core/utils/clipboard';
+import { ensureAIConfigured } from './ai-config-guard';
 import {
   AIError,
   aiChat,
@@ -115,6 +116,9 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
 
   async function run(prompt: string): Promise<void> {
     if (busy || !prompt.trim()) return;
+    // 配置守卫（框架级统一引导）：未配置时弹全站一致的模态框，本次不发起调用。
+    // 用 runner 的工具无需各自检查——收口在此处。
+    if (!(await ensureAIConfigured())) return;
     busy = true;
     lastPrompt = prompt;
     lastFullText = '';

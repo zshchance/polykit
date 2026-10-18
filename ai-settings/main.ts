@@ -52,7 +52,10 @@ void subscribeAIConfig((c) => {
   render();
 });
 
-const { content } = renderToolLayout(document.getElementById('app')!, 'AI 接入设置');
+// 系统配置页（非工具页）：头部隐藏「AI 设置」自指链接
+const { content } = renderToolLayout(document.getElementById('app')!, 'AI 接入设置', {
+  hideAiLink: true,
+});
 
 // ─────────────────────────── 区块容器 ───────────────────────────
 
