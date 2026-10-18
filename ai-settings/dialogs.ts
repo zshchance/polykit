@@ -46,6 +46,8 @@ export interface ProviderDialogOptions {
 export function openProviderDialog(opts: ProviderDialogOptions): void {
   const dlg: DialogHandle = createDialog({ label: opts.initial ? '编辑供应商' : '添加供应商' });
   const editing = opts.initial;
+  // id 只在打开时生成一次：拉取/测试/保存引用同一实体，避免新增模式下每次 collect 产生新 id
+  const providerId = editing?.id ?? genId('p');
 
   const nameInput = h('input', { type: 'text', class: INPUT_CLASS, value: editing?.name ?? '', placeholder: '如 OpenAI 官方 / 公司中转' });
   const protocolSelect = h(
@@ -102,7 +104,7 @@ export function openProviderDialog(opts: ProviderDialogOptions): void {
       return null;
     }
     return {
-      id: editing?.id ?? genId('p'),
+      id: providerId,
       name,
       protocol: protocolSelect.value as ProviderProtocol,
       baseUrl,
@@ -161,55 +163,99 @@ export function openProviderDialog(opts: ProviderDialogOptions): void {
     },
   });
 
+  /**
+   * 渲染拉取到的模型列表。
+   * 勾选即时生效：勾/取消直接增删待添加列表（保存时随供应商一并写入），
+   * 不再有「添加所选」中间步骤——此前两步式是首次保存丢模型的根因
+   * （只勾选未点添加、直接保存时待添加列表为空）。
+   * 顶部提供三态「全选」开关，只作用于可添加（非已存在）的行。
+   */
   function renderPullList(ids: string[]): void {
     pullArea.classList.remove('hidden');
     pullArea.replaceChildren();
     const existing = new Set(opts.existingModelNames ?? []);
-    const checks = ids.map((id) => {
-      const inPending = pendingModels.some((m) => m.name === id);
-      const disabled = existing.has(id);
-      const box = h('input', {
-        type: 'checkbox',
-        checked: !disabled && !inPending,
-        disabled,
-        class: 'accent-[var(--accent)]',
+
+    const rows = ids.map((id) => {
+      const isExisting = existing.has(id);
+      const box = h('input', { type: 'checkbox', class: 'accent-[var(--accent)]' });
+      box.disabled = isExisting;
+      if (!isExisting && pendingModels.some((m) => m.name === id)) box.checked = true;
+      box.addEventListener('change', () => {
+        const i = pendingModels.findIndex((m) => m.name === id);
+        if (box.checked && i < 0) {
+          pendingModels.push({ name: id, capabilities: guessCapabilities(id) });
+        } else if (!box.checked && i >= 0) {
+          pendingModels.splice(i, 1);
+        }
+        syncSelectAll();
+        updateSummary();
       });
-      h(
+      const label = h(
         'label',
         { class: 'flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-[var(--fg)] hover:bg-[var(--bg)]' },
         [
           box,
-          h('span', { class: disabled ? 'text-[var(--fg-muted)] line-through' : '', textContent: id }),
+          h('span', { class: isExisting ? 'text-[var(--fg-muted)] line-through' : '', textContent: id }),
           ...guessCapabilities(id).map((c) =>
-            h('span', { class: 'rounded bg-[var(--bg)] px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)]', textContent: c === 'text' ? '文本' : c === 'image' ? '图片输入' : '音频输入' }),
+            h('span', {
+              class: 'rounded bg-[var(--bg)] px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)]',
+              textContent: c === 'text' ? '文本' : c === 'image' ? '图片输入' : '音频输入',
+            }),
           ),
         ],
       );
-      return { id, box };
+      return { id, box, label };
     });
-    const addSelected = h('button', {
-      type: 'button',
-      class: BTN_PRIMARY,
-      textContent: '添加所选',
-      onclick: () => {
-        let added = 0;
-        for (const c of checks) {
-          if (!c.box.checked || c.box.disabled) continue;
-          if (pendingModels.some((m) => m.name === c.id)) continue;
-          pendingModels.push({ name: c.id, capabilities: guessCapabilities(c.id) });
-          added++;
+
+    function selectableBoxes(): HTMLInputElement[] {
+      return rows.filter((r) => !r.box.disabled).map((r) => r.box);
+    }
+
+    const selectAllBox = h('input', { type: 'checkbox', class: 'accent-[var(--accent)]' });
+    function syncSelectAll(): void {
+      const boxes = selectableBoxes();
+      const checkedCount = boxes.filter((b) => b.checked).length;
+      selectAllBox.checked = boxes.length > 0 && checkedCount === boxes.length;
+      selectAllBox.indeterminate = checkedCount > 0 && checkedCount < boxes.length;
+      selectAllBox.disabled = boxes.length === 0;
+    }
+    selectAllBox.addEventListener('change', () => {
+      const target = selectAllBox.checked;
+      for (const r of rows) {
+        if (r.box.disabled) continue;
+        r.box.checked = target;
+        const i = pendingModels.findIndex((m) => m.name === r.id);
+        if (target && i < 0) {
+          pendingModels.push({ name: r.id, capabilities: guessCapabilities(r.id) });
+        } else if (!target && i >= 0) {
+          pendingModels.splice(i, 1);
         }
-        showToast(added > 0 ? `已标记 ${added} 个模型，保存后生效` : '未选择新模型');
-        pullArea.replaceChildren(
-          h('p', { class: 'text-xs text-[var(--fg-muted)]', textContent: `已标记 ${pendingModels.length} 个待添加模型（保存后生效）` }),
-        );
-      },
+      }
+      syncSelectAll();
+      updateSummary();
     });
+
+    const summary = h('p', { class: 'mt-2 text-xs leading-relaxed text-[var(--fg-muted)]' });
+    function updateSummary(): void {
+      summary.textContent =
+        pendingModels.length > 0
+          ? `已选 ${pendingModels.length} 个模型，保存供应商后一并添加`
+          : '勾选要添加的模型（能力标签为猜测，保存后可编辑）';
+    }
+
     pullArea.append(
-      h('p', { class: LABEL_CLASS, textContent: `接口返回 ${ids.length} 个模型，勾选要添加的（能力标签为猜测，可稍后编辑）：` }),
-      h('div', { class: 'max-h-48 overflow-y-auto rounded-lg border border-[var(--border)] p-1' }, checks.map((c) => c.box.closest('label')!)),
-      h('div', { class: 'mt-2 text-right' }, [addSelected]),
+      h('div', { class: 'flex items-center justify-between' }, [
+        h('span', { class: 'text-xs font-medium text-[var(--fg-muted)]', textContent: `接口返回 ${ids.length} 个模型：` }),
+        h('label', { class: 'flex cursor-pointer items-center gap-1.5 text-xs text-[var(--fg-muted)]' }, [
+          selectAllBox,
+          '全选',
+        ]),
+      ]),
+      h('div', { class: 'mt-1 max-h-48 overflow-y-auto rounded-lg border border-[var(--border)] p-1' }, rows.map((r) => r.label)),
+      summary,
     );
+    syncSelectAll();
+    updateSummary();
   }
 
   const saveBtn = h('button', {
