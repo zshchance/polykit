@@ -1,7 +1,6 @@
 import { h } from './element';
 import { createThemeToggle } from './ThemeToggle';
 import { createSiteFooter } from './SiteFooter';
-import { aiSettingsUrl } from '@/core/ai';
 
 /**
  * 工具页统一外壳：顶部栏（返回首页 + 工具名 + 主题切换）。
@@ -10,22 +9,16 @@ import { aiSettingsUrl } from '@/core/ai';
  * 用法（在工具的 main.ts 中）：
  *   renderToolLayout(document.body, '密码生成器');
  *   // 然后把功能 DOM 挂到 layout 的 main 区域
+ *
+ * 注：AI 配置入口不在工具页头部常驻——未配置时由框架统一引导模态框
+ * （ai-config-guard）在用户点击 AI 功能时出现，详见 docs/ai-framework.md。
  */
 export interface ToolLayout {
   /** 工具功能应挂载到这里的容器 */
   content: HTMLElement;
 }
 
-export interface ToolLayoutOptions {
-  /** 隐藏头部「AI 设置」入口（AI 配置页自身使用，避免自指） */
-  hideAiLink?: boolean;
-}
-
-export function renderToolLayout(
-  parent: HTMLElement,
-  title: string,
-  opts: ToolLayoutOptions = {},
-): ToolLayout {
+export function renderToolLayout(parent: HTMLElement, title: string): ToolLayout {
   // 清掉构建期 SEO 插件注入的静态兜底内容（h1+描述，供不执行 JS 的爬虫读取），
   // 否则运行时 DOM 会与兜底并存，标题和描述重复出现。
   parent.replaceChildren();
@@ -45,19 +38,7 @@ export function renderToolLayout(
         backLink,
         h('h1', { class: 'text-xl font-semibold', textContent: title }),
       ]),
-      h('div', { class: 'flex items-center gap-4' }, [
-        // 全站 BYOK 大模型配置入口（详见 docs/ai-framework.md）；AI 配置页自身隐藏避免自指
-        ...(opts.hideAiLink
-          ? []
-          : [
-              h('a', {
-                href: aiSettingsUrl(),
-                class: 'text-sm text-[var(--fg-muted)] transition-colors hover:text-[var(--accent)]',
-                textContent: 'AI 设置',
-              }),
-            ]),
-        createThemeToggle(),
-      ]),
+      createThemeToggle(),
     ],
   );
 

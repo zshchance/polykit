@@ -244,12 +244,12 @@ export function openProviderDialog(opts: ProviderDialogOptions): void {
     }
 
     pullArea.append(
-      h('div', { class: 'flex items-center justify-between' }, [
-        h('span', { class: 'text-xs font-medium text-[var(--fg-muted)]', textContent: `接口返回 ${ids.length} 个模型：` }),
-        h('label', { class: 'flex cursor-pointer items-center gap-1.5 text-xs text-[var(--fg-muted)]' }, [
+      h('div', { class: 'flex items-center gap-3' }, [
+        h('label', { class: 'flex cursor-pointer items-center gap-1.5 text-xs font-medium text-[var(--fg-muted)]' }, [
           selectAllBox,
           '全选',
         ]),
+        h('span', { class: 'text-xs text-[var(--fg-muted)]', textContent: `接口返回 ${ids.length} 个模型：` }),
       ]),
       h('div', { class: 'mt-1 max-h-48 overflow-y-auto rounded-lg border border-[var(--border)] p-1' }, rows.map((r) => r.label)),
       summary,
