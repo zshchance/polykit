@@ -94,11 +94,48 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
   let lastFullText = '';
   /** 本轮流式的原始 Markdown 全文（渲染用原始文本，复制也用它） */
   let streamRaw = '';
+  /** 本轮思考增量（思考模型 reasoning_content / thinking_delta） */
+  let streamReasoning = '';
+  /** 正文是否已出现（出现后思考区自动收起，只收一次） */
+  let reasoningCollapsed = false;
+
+  function handleStreamDelta(d: { content?: string; reasoning?: string }): void {
+    if (d.reasoning) {
+      streamReasoning += d.reasoning;
+      reasoningDetails.classList.remove('hidden');
+      reasoningBody.textContent = streamReasoning;
+      reasoningBody.scrollTop = reasoningBody.scrollHeight;
+    }
+    if (!d.content) return;
+    // 首个正文增量到达：思考区收起（用户仍可点开回看），此后只渲染正文
+    if (!reasoningCollapsed && streamReasoning) {
+      reasoningCollapsed = true;
+      reasoningDetails.open = false;
+      reasoningSummary.textContent = `💭 思考过程（${streamReasoning.length} 字，点击展开）`;
+    }
+    streamRaw += d.content;
+    outputArea.innerHTML = md.render(streamRaw);
+    outputArea.scrollTop = outputArea.scrollHeight;
+  }
 
   // —— DOM ——
   const need = opts.need ?? ['text'];
   const isImageMode = need.length === 1 && need[0] === 'image-gen';
   const metaLine = h('span', { class: 'text-[11px] text-[var(--fg-muted)]' });
+  /** 思考过程区（思考模型 reasoning 增量实时流入；正文出现后自动收起，可手动展开） */
+  const reasoningSummary = h('summary', {
+    class: 'cursor-pointer select-none px-3 py-1.5 text-[11px] font-medium text-[var(--fg-muted)]',
+    textContent: '💭 思考中…',
+  });
+  const reasoningBody = h('div', {
+    class:
+      'max-h-40 overflow-y-auto whitespace-pre-wrap break-words border-t border-[var(--border)] px-3 py-2 text-[11px] leading-relaxed text-[var(--fg-muted)]',
+  });
+  const reasoningDetails = h(
+    'details',
+    { class: 'hidden rounded-lg border border-[var(--border)] bg-[var(--bg)]', open: true },
+    [reasoningSummary, reasoningBody],
+  );
   /** 流式输出区：Markdown 渲染（样式见 main.css 的 .ai-md） */
   const outputArea = h('div', {
     class: 'ai-md max-h-64 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5',
@@ -176,6 +213,7 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
       h('span', { class: 'text-xs font-medium text-[var(--fg-muted)]', textContent: 'AI 输出' }),
       metaLine,
     ]),
+    reasoningDetails,
     outputArea,
     imagesWrap,
     h('div', { class: 'flex items-center justify-end gap-2' }, [
@@ -213,11 +251,17 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
     lastPrompt = prompt;
     lastFullText = '';
     streamRaw = '';
+    streamReasoning = '';
+    reasoningCollapsed = false;
     controller = new AbortController();
     el.classList.remove('hidden');
     errorBox.classList.add('hidden');
     outputArea.replaceChildren();
     outputArea.classList.toggle('hidden', isImageMode);
+    reasoningDetails.classList.add('hidden');
+    reasoningDetails.open = true;
+    reasoningSummary.textContent = '💭 思考中…';
+    reasoningBody.textContent = '';
     imagesWrap.classList.add('hidden');
     imagesWrap.replaceChildren();
     metaLine.textContent = isImageMode ? '🎨 生成图片中…' : '生成中…';
@@ -245,12 +289,7 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
         messages: [...history, { role: 'user', content: prompt }],
         need,
         signal: controller.signal,
-        onDelta: (d) => {
-          if (!d.content) return;
-          streamRaw += d.content;
-          outputArea.innerHTML = md.render(streamRaw);
-          outputArea.scrollTop = outputArea.scrollHeight;
-        },
+        onDelta: handleStreamDelta,
       });
       lastFullText = res.content;
       metaLine.textContent = `${res.model.providerName} / ${res.model.modelName} · ${res.latencyMs}ms`;

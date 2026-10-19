@@ -140,6 +140,9 @@ type ContentPart =
 
 - SSE 解析为纯函数（喂缓冲区 → 事件数组 + 剩余缓冲），openai 增量取 `choices[0].delta.content`
   （兼容 deepseek 的 `delta.reasoning_content`），anthropic 按 `content_block_delta` 的 `delta.text` / `thinking_delta`。
+- **思考模型**：`reasoning_content` / `thinking_delta` 增量在运行器（createAiRunner）中以可折叠的
+  「💭 思考过程」区实时展示，正文首个增量到达后自动收起（可点开回看）；结果与复制仍只取正文
+  （`res.content`），思考内容不入会话库与候选解析。
 - `onDelta({ content?, reasoning? })` 回调驱动 UI 增量渲染。
 - 错误统一为 `AIError`，含 `code`：`no-model` / `http`（带状态码与截断到 300 字的响应体）/
   `network`（fetch TypeError，提示检查网络、URL 与 CORS）/ `aborted`。

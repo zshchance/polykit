@@ -171,6 +171,16 @@ describe('extractDelta', () => {
     });
   });
 
+  it('openai 思考模型真实形态：content 为空串 + reasoning_content 并存', () => {
+    // DeepSeek v4 flash 等思考模型的流式块：思考阶段 content:"" 且带 role
+    expect(
+      extractDelta(
+        'openai',
+        '{"choices":[{"delta":{"content":"","reasoning_content":"We need","role":"assistant"},"index":0}],"object":"chat.completion.chunk"}',
+      ),
+    ).toEqual({ reasoning: 'We need', done: false });
+  });
+
   it('openai：[DONE] 结束、非法 JSON 容忍、无 delta 忽略', () => {
     expect(extractDelta('openai', '[DONE]').done).toBe(true);
     expect(extractDelta('openai', 'not-json')).toEqual({ done: false });
