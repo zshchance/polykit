@@ -8,6 +8,7 @@
  *     onDone: (text) => render(extractSomething(text)),
  *   });
  *   container.append(runner.el);
+ *   aiBtnRow.append(runner.modelPicker); // 模型选择下拉（多候选时自动显示，默认第一个）
  *   runner.run(buildXxxPrompt(...));
  *
  * 行为约定（docs/ai-framework.md 第 7 节）：
@@ -23,6 +24,7 @@ import { createCopyButton } from '@/core/components/CopyButton';
 import { copyText } from '@/core/utils/clipboard';
 import MarkdownIt from 'markdown-it';
 import { ensureAIConfigured } from './ai-config-guard';
+import type { RoutedModel } from './router';
 import {
   AIError,
   aiChat,
@@ -31,9 +33,19 @@ import {
   appendMessage,
   createConversation,
   hydrateForApi,
+  loadAIConfig,
+  resolveCandidates,
+  subscribeAIConfig,
   type ChatMessage,
   type ModelCapability,
 } from './index';
+
+/**
+ * 会话内记住用户在某工具 + 能力组合下手动选过的模型 id（不落 localStorage：
+ * 刷新页面即回到「系统默认第一个可用模型」）。弹层类工具反复开关会重建
+ * 运行器（如 color-extractor 切玩法、prompt-hub 切卡片），靠它延续选择。
+ */
+const pinnedModels = new Map<string, string>();
 
 /**
  * 输出区的 Markdown 渲染器：html:false（转义原始 HTML，防注入）、
@@ -79,6 +91,12 @@ export interface AiRunnerOptions {
 export interface AiRunner {
   /** 嵌入工具 UI 的容器（首次 run 前隐藏） */
   el: HTMLElement;
+  /**
+   * 模型选择下拉：按本运行器所需能力列出全部可路由模型（按供应商分组），
+   * 插在工具的 AI 按钮旁。默认选中第一个（= 系统默认路由）；用户手动选过后
+   * 精确调用该模型。仅一个（或零个）可用模型时自动隐藏。
+   */
+  modelPicker: HTMLElement;
   /** 发起一次调用（busy 时忽略）。prompt 为本次用户消息全文 */
   run(prompt: string): void;
   isBusy(): boolean;
@@ -138,11 +156,15 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
   );
   /** 流式输出区：Markdown 渲染（样式见 main.css 的 .ai-md） */
   const outputArea = h('div', {
-    class: 'ai-md max-h-64 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5',
+    class:
+      'ai-md max-h-64 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5',
   });
   /** 图片生成结果网格（image-gen 模式使用） */
   const imagesWrap = h('div', { class: 'hidden grid gap-3 sm:grid-cols-2' });
-  const errorBox = h('div', { class: 'hidden rounded-lg border border-[var(--holiday-legal)] px-3 py-2 text-xs leading-relaxed text-[var(--holiday-legal)]' });
+  const errorBox = h('div', {
+    class:
+      'hidden rounded-lg border border-[var(--holiday-legal)] px-3 py-2 text-xs leading-relaxed text-[var(--holiday-legal)]',
+  });
 
   function renderImages(images: string[]): void {
     outputArea.classList.add('hidden');
@@ -156,17 +178,14 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
             class: 'w-full rounded-lg border border-[var(--border)]',
           }),
           h('div', { class: 'flex gap-1.5' }, [
-            h(
-              'a',
-              {
-                href: src,
-                target: '_blank',
-                rel: 'noopener',
-                class:
-                  'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-[10px] text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
-                textContent: '打开原图',
-              },
-            ),
+            h('a', {
+              href: src,
+              target: '_blank',
+              rel: 'noopener',
+              class:
+                'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-[10px] text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+              textContent: '打开原图',
+            }),
             h('button', {
               type: 'button',
               class:
@@ -206,6 +225,77 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
       'rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-xs text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
     textContent: '↻ 重新生成',
     onclick: () => run(lastPrompt),
+  });
+
+  // —— 模型选择下拉 ——
+  // 选项 = 按本运行器所需能力解析出的全部候选（供应商分组，顺序即路由优先级）。
+  // 默认选中第一个（不动下拉 = 系统默认路由，候选失败自动顺延）；手动选过后
+  // pinnedModelId 生效，调用时精确指定该模型（失败不顺延，错误就地展示）。
+  const modelSelect = h('select', {
+    'aria-label': '选择 AI 模型',
+    class:
+      'hidden max-w-[11rem] min-w-0 truncate rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs text-[var(--fg-muted)] outline-none focus:border-[var(--accent)]',
+    title: '选择本次调用使用的模型（默认第一个可用模型）',
+  }) as HTMLSelectElement;
+  const pinKey = `${opts.toolSlug}|${[...need].sort().join('+')}`;
+  /** 用户手动选定的模型 id；null = 跟随系统默认 */
+  let pinnedModelId: string | null = null;
+  /** 最近一次构建下拉时的候选（change 时反查供应商/模型名用于 title 提示） */
+  let pickerCandidates: RoutedModel[] = [];
+
+  function rebuildModelOptions(): void {
+    const candidates = resolveCandidates(loadAIConfig(), need);
+    pickerCandidates = candidates;
+    // 只有一个（或没有）可用模型时下拉没有选择余地，隐藏走默认
+    modelSelect.classList.toggle('hidden', candidates.length <= 1);
+
+    // 候选按供应商分段连续排列，逐段生成 optgroup
+    const groups: HTMLOptGroupElement[] = [];
+    for (const c of candidates) {
+      let group = groups[groups.length - 1];
+      if (!group || group.label !== c.provider.name) {
+        group = document.createElement('optgroup');
+        group.label = c.provider.name;
+        groups.push(group);
+      }
+      const opt = document.createElement('option');
+      opt.value = c.model.id;
+      opt.textContent = c.model.name;
+      group.append(opt);
+    }
+    modelSelect.replaceChildren(...groups);
+
+    // 恢复选择：本实例的手动选择 > 会话记忆 > 默认第一个；选定模型已不可用时回默认
+    const desired = pinnedModelId ?? pinnedModels.get(pinKey) ?? null;
+    const hit = desired ? candidates.find((c) => c.model.id === desired) : undefined;
+    const chosen = hit ?? candidates[0];
+    pinnedModelId = hit ? hit.model.id : null;
+    if (!hit) pinnedModels.delete(pinKey);
+    modelSelect.value = chosen ? chosen.model.id : '';
+    modelSelect.title = chosen
+      ? `模型：${chosen.provider.name} / ${chosen.model.name}${hit ? '' : '（默认，失败自动顺延）'}`
+      : '选择 AI 模型';
+  }
+
+  modelSelect.addEventListener('change', () => {
+    const id = modelSelect.value;
+    pinnedModelId = id || null;
+    if (pinnedModelId) pinnedModels.set(pinKey, pinnedModelId);
+    const chosen = pickerCandidates.find((c) => c.model.id === id);
+    modelSelect.title = chosen
+      ? `模型：${chosen.provider.name} / ${chosen.model.name}`
+      : '选择 AI 模型';
+  });
+
+  rebuildModelOptions();
+  // 配置变更（含设置页跨标签页修改）时重建选项；弹层反复开关产生的游离 select
+  // 已脱离文档，顺手退订避免监听器累积
+  const unsubscribeModels = subscribeAIConfig(() => {
+    if (!modelSelect.isConnected) {
+      unsubscribeModels();
+      return;
+    }
+    rebuildModelOptions();
   });
 
   const el = h('div', { class: 'hidden space-y-2' }, [
@@ -288,6 +378,8 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
       const res = await aiChat({
         messages: [...history, { role: 'user', content: prompt }],
         need,
+        // 手动选定的模型：精确调用（不顺延其它候选），错误就地展示
+        modelId: pinnedModelId ?? undefined,
         signal: controller.signal,
         onDelta: handleStreamDelta,
       });
@@ -311,7 +403,11 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
   /** 图片生成路径（images/generations，无流式；结果渲染为图片网格） */
   async function runImage(prompt: string): Promise<void> {
     try {
-      const res = await aiGenerateImage({ prompt, signal: controller?.signal });
+      const res = await aiGenerateImage({
+        prompt,
+        signal: controller?.signal,
+        modelId: pinnedModelId ?? undefined,
+      });
       renderImages(res.images);
       metaLine.textContent = `${res.model.providerName} / ${res.model.modelName} · ${res.latencyMs}ms`;
       lastFullText = res.images.join('\n');
@@ -358,7 +454,13 @@ export function createAiRunner(opts: AiRunnerOptions): AiRunner {
     regenBtn.disabled = false;
   }
 
-  return { el, run: (p) => void run(p), isBusy: () => busy, abort: () => controller?.abort() };
+  return {
+    el,
+    modelPicker: modelSelect,
+    run: (p) => void run(p),
+    isBusy: () => busy,
+    abort: () => controller?.abort(),
+  };
 }
 
 /**

@@ -115,8 +115,9 @@ export function createAiStyleDialog(deps: AiStyleDialogDeps): AiStyleDialog {
           '② 把下面的提示词发给任意 AI（ChatGPT / Claude / GLM 等），或点「直接生成」走已配置的模型。',
       }),
       promptArea,
-      h('div', { class: 'flex justify-end gap-2' }, [
+      h('div', { class: 'flex flex-wrap items-center justify-end gap-2' }, [
         createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
+        runner.modelPicker,
         h('button', {
           type: 'button',
           class:

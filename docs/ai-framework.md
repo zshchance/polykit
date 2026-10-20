@@ -36,7 +36,7 @@ src/core/ai/
 ├── chat-core.ts       # 会话库纯逻辑：内容规划（data URL→资产）/ LRU 淘汰计划 / 记录清洗
 ├── chat-store.ts      # IndexedDB 会话库（conversations/messages/assets/usage + 配额守卫）
 ├── ai-config-guard.ts # ★ 全站统一「未配置引导」模态框（框架级，工具不各自实现）
-├── ai-assist.ts       # 共享 UI 运行器 createAiRunner：流式渲染/错误分支/会话记账/候选复制
+├── ai-assist.ts       # 共享 UI 运行器 createAiRunner：流式渲染/错误分支/会话记账/候选复制/模型选择下拉
 └── index.ts           # 门面：aiChat() —— 各工具唯一需要 import 的入口
 
 ai-settings/           # 系统配置页（非工具：不进首页网格/sitemap，noindex）
@@ -56,15 +56,19 @@ type ProviderProtocol = 'openai' | 'anthropic';
 
 // 能力标签分理解（输入侧）与生成（输出侧）两类，路由按超集匹配
 type ModelCapability =
-  | 'text' | 'image' | 'audio'          // 理解：文本对话 / 图片输入 / 音频输入
-  | 'image-gen' | 'audio-gen' | 'video-gen'; // 生成：图片 / 音频(音乐·语音) / 视频
+  | 'text'
+  | 'image'
+  | 'audio' // 理解：文本对话 / 图片输入 / 音频输入
+  | 'image-gen'
+  | 'audio-gen'
+  | 'video-gen'; // 生成：图片 / 音频(音乐·语音) / 视频
 
 interface AIProvider {
-  id: string;              // crypto.randomUUID（非安全上下文回退随机串）
-  name: string;            // 显示名，如 "OpenAI 官方"、"公司中转"
+  id: string; // crypto.randomUUID（非安全上下文回退随机串）
+  name: string; // 显示名，如 "OpenAI 官方"、"公司中转"
   protocol: ProviderProtocol;
-  baseUrl: string;         // 指向本站的地址用 {ORIGIN} 占位（见第 6 节）
-  apiKey: string;          // 明文存储——BYOK 固有属性，设置页明示风险
+  baseUrl: string; // 指向本站的地址用 {ORIGIN} 占位（见第 6 节）
+  apiKey: string; // 明文存储——BYOK 固有属性，设置页明示风险
   enabled: boolean;
   addedAt: number;
 }
@@ -72,7 +76,7 @@ interface AIProvider {
 interface AIModel {
   id: string;
   providerId: string;
-  name: string;            // API 模型名，如 gpt-4o-mini / claude-sonnet-4-5
+  name: string; // API 模型名，如 gpt-4o-mini / claude-sonnet-4-5
   capabilities: ModelCapability[];
   enabled: boolean;
 }
@@ -105,17 +109,17 @@ resolveCandidates(config, need: ModelCapability[]): { provider: AIProvider; mode
 
 ### 端点规范化（确定性规则，测试覆盖）
 
-| 协议 | 用户填写的 baseUrl | 实际请求 |
-|---|---|---|
-| openai | `https://api.x.com/v1`（约定含 `/v1`） | `POST {base}/chat/completions`、`GET {base}/models` |
-| openai | 路径为 `/`（忘填 /v1） | 自动补 `/v1` 再拼 |
-| anthropic | `https://api.anthropic.com` 或 `…/v1` | 一律规整为 `POST {base 去掉尾部 /v1}/v1/messages`、`GET …/v1/models` |
+| 协议      | 用户填写的 baseUrl                     | 实际请求                                                             |
+| --------- | -------------------------------------- | -------------------------------------------------------------------- |
+| openai    | `https://api.x.com/v1`（约定含 `/v1`） | `POST {base}/chat/completions`、`GET {base}/models`                  |
+| openai    | 路径为 `/`（忘填 /v1）                 | 自动补 `/v1` 再拼                                                    |
+| anthropic | `https://api.anthropic.com` 或 `…/v1`  | 一律规整为 `POST {base 去掉尾部 /v1}/v1/messages`、`GET …/v1/models` |
 
 ### 请求头
 
-| 协议 | 头 |
-|---|---|
-| openai | `Authorization: Bearer <key>` |
+| 协议      | 头                                                                                                                                     |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| openai    | `Authorization: Bearer <key>`                                                                                                          |
 | anthropic | `x-api-key: <key>` + `anthropic-version: 2023-06-01` + `anthropic-dangerous-direct-browser-access: true`（官方为浏览器直连提供的开关） |
 
 ### 消息体
@@ -127,9 +131,7 @@ interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string | ContentPart[];
 }
-type ContentPart =
-  | { type: 'text'; text: string }
-  | { type: 'image'; url: string };  // http(s) 或 data: URL；anthropic 侧自动拆 base64
+type ContentPart = { type: 'text'; text: string } | { type: 'image'; url: string }; // http(s) 或 data: URL；anthropic 侧自动拆 base64
 ```
 
 - openai：`{type:'image_url', image_url:{url}}`；anthropic：`{type:'image', source:{type:'base64', media_type, data}}`（从 data URL 拆出，http 图片 anthropic 不支持 source url，Phase 1 限 data URL 并在校验时报友好错误）。
@@ -191,7 +193,7 @@ import { aiChat } from '@/core/ai';
 const res = await aiChat({
   messages: [{ role: 'user', content: '帮我把这段话改成小红书风格' }],
   need: ['text'],
-  onDelta: (d) => render(d.content),   // 可选，流式渲染
+  onDelta: (d) => render(d.content), // 可选，流式渲染
 });
 // res.content / res.reasoning / res.model.providerName / res.model.modelName / res.latencyMs
 // 未配置模型时抛 AIError(code='no-model')，工具应捕获并引导用户去设置页：
@@ -210,16 +212,24 @@ import { createAiRunner } from '@/core/ai/ai-assist';
 
 const runner = createAiRunner({
   toolSlug: 'password-generator',
-  onDone: (text) => render(extractCandidates(text)),  // 工具自定义解析
+  onDone: (text) => render(extractCandidates(text)), // 工具自定义解析
 });
 dialog.append(runner.el);
-runner.run(buildAIPrompt(input));   // 未配置 → 统一引导模态框，自动放弃本次
+aiBtnRow.append(runner.modelPicker); // 模型选择下拉（多候选时自动显示）
+runner.run(buildAIPrompt(input)); // 未配置 → 统一引导模态框，自动放弃本次
 ```
+
+**模型选择下拉（`runner.modelPicker`）**：选项 = 按 `need` 能力解析出的全部可路由候选
+（按供应商分组，顺序即路由优先级）。默认选中第一个 = 系统默认路由（候选失败自动顺延）；
+用户手动选过后精确调用该模型（`modelId` 直达，失败不顺延、错误就地展示）。选择只在
+会话内记忆（同工具+能力组合跨弹层/卡片重建延续，不落 localStorage，刷新回默认）；
+可用候选 ≤1 时自动隐藏。设置页跨标签改动配置时下拉实时重建。
 
 不走 runner 的自定义调用，用 `ensureAIConfigured()` 获得同样的守卫：
 `if (!(await ensureAIConfigured())) return;`
 
 已接入（9 个工具，全站 AI 路径覆盖完成）：
+
 - **password-generator**：⚡ 直接生成口令，候选点选复制（提示词手动路径保留兜底）
 - **prompt-hub**：灵感卡片直接生成；生成类卡片按 `need` 能力声明路由（图片生成卡走
   images/generations 出图片网格、音乐卡走对话式音频生成），支持 `directPrompt` 字段
@@ -230,21 +240,22 @@ runner.run(buildAIPrompt(input));   // 未配置 → 统一引导模态框，自
   自动提取代码围栏填入第③步粘贴框，仍走既有 dryRun 校验 + 手动保存（共享
   `extractCodeBlock`）
 - **rhythm-arp-lab**：组合提示词按 `need: ['audio-gen']` 路由到音频生成模型
-未接入及理由：image-compress（提示词是给 Tabbit 类 AI 浏览器的操作指令，非对话模型场景）、
-style-atlas（AI 参考图为离线构建期资产，无运行时 AI 路径）。
+  未接入及理由：image-compress（提示词是给 Tabbit 类 AI 浏览器的操作指令，非对话模型场景）、
+  style-atlas（AI 参考图为离线构建期资产，无运行时 AI 路径）。
 
-UX 约定：工具内 AI 入口旁放「⚙ 设置」链接；调用失败按 `AIError.code` 分支提示；
+UX 约定：配置引导统一走 runner 内置守卫模态框（工具内不另放设置入口）；AI 按钮旁放
+`runner.modelPicker` 模型下拉；调用失败按 `AIError.code` 分支提示；
 会话自动进会话库（IndexedDB），临时上下文放内存即可。
 
 ## 8. 浏览器存储容量调研（会话库 Phase 2 的依据）
 
-| 存储 | 容量 | 淘汰风险 |
-|---|---|---|
-| localStorage | 每源 5 MiB，仅字符串 | 无自动淘汰，满即 QuotaExceededError |
+| 存储             | 容量                                                                               | 淘汰风险                                                                   |
+| ---------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| localStorage     | 每源 5 MiB，仅字符串                                                               | 无自动淘汰，满即 QuotaExceededError                                        |
 | IndexedDB / OPFS | Chrome 60% 磁盘；Safari 约 60%（起步 1 GiB，满时询问用户）；Firefox persist 后 50% | 默认 best-effort，磁盘紧张按 LRU **整源清除**；Safari 7 天无访问清脚本数据 |
 
-结论：纯文本对话在 IndexedDB 下几乎不可能触顶（1 条消息 1~4 KB，一年重度使用约百 MB 级），
-大头是多模态资产（图 0.5~2 MB / 分钟音频约 1 MB）。
+结论：纯文本对话在 IndexedDB 下几乎不可能触顶（1 条消息 1~~4 KB，一年重度使用约百 MB 级），
+大头是多模态资产（图 0.5~~2 MB / 分钟音频约 1 MB）。
 
 **Phase 2 已落地**（`chat-core.ts` 纯逻辑 + `chat-store.ts` IndexedDB 层）：
 
@@ -263,12 +274,12 @@ UX 约定：工具内 AI 入口旁放「⚙ 设置」链接；调用失败按 `A
 
 ## 9. CORS 现状备忘（2026-10）
 
-| 供应商 | 浏览器直连 |
-|---|---|
-| OpenAI 及绝大多数 OpenAI 兼容端点（DeepSeek / Kimi / GLM / Ollama 等） | ✅ 通常放行 |
-| Anthropic | ✅ 需 `anthropic-dangerous-direct-browser-access: true` 头 |
-| Gemini 原生端点 | ✅ 基本可用；其 OpenAI 兼容端点有 CORS 报告，建议 Gemini 用户走原生协议（Phase 1 未内置，文档注明） |
-| 自建网关 / 部分中转 | ⚠️ 因人而异，设置页「测试」按钮即为此设计；不放行的需用户自配代理 |
+| 供应商                                                                 | 浏览器直连                                                                                          |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| OpenAI 及绝大多数 OpenAI 兼容端点（DeepSeek / Kimi / GLM / Ollama 等） | ✅ 通常放行                                                                                         |
+| Anthropic                                                              | ✅ 需 `anthropic-dangerous-direct-browser-access: true` 头                                          |
+| Gemini 原生端点                                                        | ✅ 基本可用；其 OpenAI 兼容端点有 CORS 报告，建议 Gemini 用户走原生协议（Phase 1 未内置，文档注明） |
+| 自建网关 / 部分中转                                                    | ⚠️ 因人而异，设置页「测试」按钮即为此设计；不放行的需用户自配代理                                   |
 
 ## 10. 安全边界（如实告知用户）
 
@@ -280,8 +291,8 @@ UX 约定：工具内 AI 入口旁放「⚙ 设置」链接；调用失败按 `A
 
 ## 11. 路线图
 
-| 阶段 | 内容 | 状态 |
-|---|---|---|
-| P1 | 配置框架（schema/router/http/store/transfer）+ AI 接入设置页 + 工具页头部设置入口 | ✅ 已交付 |
-| P2 | IndexedDB 会话库（chat-core/chat-store）+ 配额守卫与 LRU 淘汰 + 设置页会话数据面板 | ✅ 已交付（见第 8 节） |
-| P3 | 各工具 AI 增强迁移（提示词组装 → 直连调用 + 会话记忆），Gemini 原生协议适配 | 🔄 进行中：共享运行器与 password-generator 已接入，见第 7 节 |
+| 阶段 | 内容                                                                               | 状态                                                         |
+| ---- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| P1   | 配置框架（schema/router/http/store/transfer）+ AI 接入设置页 + 工具页头部设置入口  | ✅ 已交付                                                    |
+| P2   | IndexedDB 会话库（chat-core/chat-store）+ 配额守卫与 LRU 淘汰 + 设置页会话数据面板 | ✅ 已交付（见第 8 节）                                       |
+| P3   | 各工具 AI 增强迁移（提示词组装 → 直连调用 + 会话记忆），Gemini 原生协议适配        | 🔄 进行中：共享运行器与 password-generator 已接入，见第 7 节 |

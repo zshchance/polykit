@@ -504,7 +504,7 @@ function renderPromptHub(): void {
               class: 'text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]',
               textContent: '生成结果（复制后粘贴给 AI，或直接生成）',
             }),
-            h('div', { class: 'flex items-center gap-2' }, [genBtn, copyBtn]),
+            h('div', { class: 'flex items-center gap-2' }, [genBtn, runner.modelPicker, copyBtn]),
           ]),
           preview,
           runner.el,

@@ -636,6 +636,7 @@ function renderPasswordGenerator() {
             title: '用「AI 接入设置」里配置的模型直接生成口令（未配置时会给出引导）',
             onclick: runDirect,
           }),
+          runner.modelPicker,
         ]),
         h('div', { class: 'mt-3 space-y-3' }, [runner.el, candidatesWrap]),
         h('div', { class: 'mt-1' }, [promptWrap]),

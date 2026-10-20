@@ -223,8 +223,9 @@ function renderColorPrompt(): void {
       promptCard('English Prompt', promptEn, () => promptEn),
     ]);
 
-    // 直接生成区：按钮 + 运行器输出（用中文提示词发起）
-    const directBlock = h('div', { class: 'flex justify-end' }, [
+    // 直接生成区：模型下拉 + 按钮 + 运行器输出（用中文提示词发起）
+    const directBlock = h('div', { class: 'flex flex-wrap items-center justify-end gap-2' }, [
+      aiRunner.modelPicker,
       h('button', {
         type: 'button',
         class:

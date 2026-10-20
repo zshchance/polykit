@@ -1319,16 +1319,22 @@ function renderLab(): void {
   const promptBlocks = h('div', { class: 'space-y-4' }, [
     // ⚡ 直连生成：组合提示词面向 AI 音乐模型——需配置「音频生成」能力的模型
     // （Suno 类网关多以对话接口返回音频/链接），未配置时守卫会针对性引导。
-    h('div', { class: 'flex items-center justify-between' }, [
-      h('span', { class: 'text-xs text-[var(--fg-muted)]', textContent: '组合提示词面向 AI 音乐模型' }),
-      h('button', {
-        type: 'button',
-        class:
-          'rounded-md border border-[var(--accent)] px-3 py-1.5 text-sm text-[var(--accent)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--accent-fg)]',
-        textContent: '🎵 直接生成',
-        title: '用「AI 接入设置」里配置的音频生成模型按当前组合直接生成（需配置对应能力）',
-        onclick: () => musicRunner.run(promptEnArea.value),
+    h('div', { class: 'flex flex-wrap items-center justify-between gap-2' }, [
+      h('span', {
+        class: 'text-xs text-[var(--fg-muted)]',
+        textContent: '组合提示词面向 AI 音乐模型',
       }),
+      h('div', { class: 'flex items-center gap-2' }, [
+        musicRunner.modelPicker,
+        h('button', {
+          type: 'button',
+          class:
+            'rounded-md border border-[var(--accent)] px-3 py-1.5 text-sm text-[var(--accent)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--accent-fg)]',
+          textContent: '🎵 直接生成',
+          title: '用「AI 接入设置」里配置的音频生成模型按当前组合直接生成（需配置对应能力）',
+          onclick: () => musicRunner.run(promptEnArea.value),
+        }),
+      ]),
     ]),
     musicRunner.el,
     h('div', { class: 'space-y-1.5' }, [

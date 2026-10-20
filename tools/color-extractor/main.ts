@@ -413,6 +413,7 @@ function renderColorExtractor(): void {
         h('p', { class: 'mt-3 mb-2 text-xs text-[var(--fg-muted)]', textContent: recipe.hint }),
         h('div', { class: 'flex items-center justify-end gap-2 mb-2' }, [
           createCopyButton(() => preview.value, '复制提示词', '已复制 ✓'),
+          runner.modelPicker,
           h('button', {
             type: 'button',
             class:

@@ -341,8 +341,9 @@ function renderObfuscator() {
           '⚠ 这段提示词携带你的联系方式原文，发给 AI 意味着原文经第三方。敏感账号建议用上方本地生成（数据不出浏览器）。',
       }),
       promptArea,
-      h('div', { class: 'flex items-center justify-end gap-2' }, [
+      h('div', { class: 'flex flex-wrap items-center justify-end gap-2' }, [
         createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
+        aiEncryptRunner.modelPicker,
         h('button', {
           type: 'button',
           class:

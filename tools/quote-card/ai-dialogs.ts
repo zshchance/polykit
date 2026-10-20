@@ -33,7 +33,7 @@ function buildDirectGen(opts: {
   getPrompt: () => string;
   fill: (code: string) => void;
   notify: () => void;
-}): { btn: HTMLElement; runnerEl: HTMLElement } {
+}): { btn: HTMLElement; picker: HTMLElement; runnerEl: HTMLElement } {
   const runner = createAiRunner({
     toolSlug: 'quote-card',
     conversationTitle: opts.conversationTitle,
@@ -50,7 +50,7 @@ function buildDirectGen(opts: {
     title: '用「AI 接入设置」里配置的模型直接生成，代码自动填入第③步',
     onclick: () => runner.run(opts.getPrompt()),
   });
-  return { btn, runnerEl: runner.el };
+  return { btn, picker: runner.modelPicker, runnerEl: runner.el };
 }
 
 /** createAiDialogs 的依赖（由 main.ts 注入，替代原闭包变量） */
@@ -173,8 +173,9 @@ export function createAiDialogs(deps: AiDialogsDeps): AiDialogs {
           '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，或点「直接生成」走已配置的模型；AI 会返回一段「名称 + 代码」。',
       }),
       promptArea,
-      h('div', { class: 'flex items-center justify-end gap-2' }, [
+      h('div', { class: 'flex flex-wrap items-center justify-end gap-2' }, [
         createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
+        animDirect.picker,
         animDirect.btn,
       ]),
       animDirect.runnerEl,
@@ -386,8 +387,9 @@ export function createAiDialogs(deps: AiDialogsDeps): AiDialogs {
           '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，或点「直接生成」走已配置的模型；AI 会返回一段「名称 + 背景 + 图标色 + 代码」。',
       }),
       promptArea,
-      h('div', { class: 'flex items-center justify-end gap-2' }, [
+      h('div', { class: 'flex flex-wrap items-center justify-end gap-2' }, [
         createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
+        tplDirect.picker,
         tplDirect.btn,
       ]),
       tplDirect.runnerEl,

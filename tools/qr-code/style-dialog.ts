@@ -110,8 +110,9 @@ export function createStyleDialog(deps: StyleDialogDeps): StyleDialog {
           '把这段提示词复制到 ChatGPT、豆包、DeepSeek 等 AI 对话，或点「直接生成」走已配置的模型；AI 会返回一段「名称 + 配色 + 代码」。',
       }),
       promptArea,
-      h('div', { class: 'flex items-center justify-end gap-2' }, [
+      h('div', { class: 'flex flex-wrap items-center justify-end gap-2' }, [
         createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
+        runner.modelPicker,
         h('button', {
           type: 'button',
           class:
