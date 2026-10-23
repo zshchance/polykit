@@ -15,9 +15,38 @@
  */
 
 import { findLyricIndex, type LyricLine } from './lyrics';
-import type { Aspect, SongVideoOptions, Theme, Timeline } from './options';
+import { isCustomVisualizerId, type Aspect, SongVideoOptions, Theme, Timeline, VisualizerId } from './options';
 
 // ─────────────────────────── 输入类型 ───────────────────────────
+
+/**
+ * 自定义频谱样式的单帧绘制参数（AI 生成代码经 custom-visualizers.ts 编译包装后的形态）。
+ * 静音帧（无频谱数据）时 bands/wave 由本模块兜底为零值/中线，包装层无需判空。
+ */
+export interface CustomVisualizerFrame {
+  ctx: CanvasRenderingContext2D;
+  /** 画布宽高（px）与短边 S=min(W,H)：尺寸一律以 S 的比例表达，适配横竖版 */
+  W: number;
+  H: number;
+  S: number;
+  /** 对数分桶频段能量（0-255，低频在前；静音全 0） */
+  bands: Uint8Array;
+  /** 时域波形（0-255，128=中线） */
+  wave: Uint8Array;
+  /** 当前音频时间（秒）与音频总时长 */
+  t: number;
+  dur: number;
+  /** 当前渲染主题（颜色只能取自这里） */
+  theme: Theme;
+  /** 专辑封面黑胶盘几何（圆心 + 半径，构图参考） */
+  layout: { coverCx: number; coverCy: number; coverR: number };
+}
+
+/**
+ * 自定义频谱绘制函数：返回 false 表示本会话已放弃（代码抛错/连续超帧耗），
+ * 调用方（drawVisualizer）应回退内置条形频谱。
+ */
+export type CustomVisualizerDraw = (frame: CustomVisualizerFrame) => boolean;
 
 /** 已加载的图片资源（img 为可直接 drawImage 的来源） */
 export interface ImageAsset {
@@ -39,6 +68,11 @@ export interface RenderInput {
   title: string;
   bgImage: ImageAsset | null;
   coverImage: ImageAsset | null;
+  /**
+   * 自定义频谱绘制函数（opts.visualizer 为 cviz: id 时由调用方解析注入；
+   * 缺失（已被删除/编译失败）时回退条形频谱）。
+   */
+  customVisualizer?: CustomVisualizerDraw | null;
 }
 
 // ─────────────────────────── 频谱分组 ───────────────────────────
@@ -247,8 +281,8 @@ export function drawFrame(
   const layout = layoutOf(W, H, S);
   drawCoverDisc(ctx, layout, input, tc, theme);
 
-  // —— 6. 音频可视化 ——
-  drawVisualizer(ctx, W, H, S, layout, input, bands, wave);
+  // —— 6. 音频可视化（t 传音频内时间：开场段音频未起时为 0，负值不影响确定性） ——
+  drawVisualizer(ctx, W, H, S, layout, input, bands, wave, Math.max(0, ta), timeline.audio);
 
   // —— 7. 歌词 ——
   drawLyrics(ctx, W, H, S, layout, input, ta, dt);
@@ -788,7 +822,11 @@ function visMetrics(input: RenderInput, H: number, S: number): VisMetrics {
   }
 }
 
-/** 音频可视化（bars / mirror / wave / circle 环形） */
+/** 静音帧（无 analyser 数据）时传给自定义频谱的兜底频段/波形（只读语义，绘制后无人再读） */
+const FALLBACK_BANDS = new Uint8Array(64);
+const FALLBACK_WAVE = new Uint8Array(2048).fill(128);
+
+/** 音频可视化（bars / mirror / wave / circle 环形 / cviz: 自定义样式） */
 function drawVisualizer(
   ctx: CanvasRenderingContext2D,
   W: number,
@@ -798,12 +836,34 @@ function drawVisualizer(
   input: RenderInput,
   bands: Uint8Array | null,
   wave: Uint8Array | null,
+  t: number,
+  dur: number,
 ): void {
   const { opts, theme } = input;
   const accent = theme.accent;
   const v = (i: number): number => (bands && i < bands.length ? (bands[i] ?? 0) / 255 : 0);
 
-  if (opts.visualizer === 'bars') {
+  // 自定义频谱（AI 生成代码）：绘制成功即返回；包装层返回 false（本会话放弃）或
+  // id 已失效（样式被删）时，落到下方内置分支按条形频谱兜底。
+  const sel = opts.visualizer;
+  if (isCustomVisualizerId(sel) && input.customVisualizer) {
+    const drew = input.customVisualizer({
+      ctx,
+      W,
+      H,
+      S,
+      bands: bands ?? FALLBACK_BANDS,
+      wave: wave ?? FALLBACK_WAVE,
+      t,
+      dur,
+      theme,
+      layout,
+    });
+    if (drew) return;
+  }
+  const style: VisualizerId = isCustomVisualizerId(sel) ? 'bars' : sel;
+
+  if (style === 'bars') {
     const m = visMetrics(input, H, S);
     const n = bands?.length ?? 48;
     const zoneW = W * 0.78;
@@ -822,7 +882,7 @@ function drawVisualizer(
     return;
   }
 
-  if (opts.visualizer === 'mirror') {
+  if (style === 'mirror') {
     const m = visMetrics(input, H, S);
     const n = bands?.length ?? 48;
     const zoneW = W * 0.8;
@@ -845,7 +905,7 @@ function drawVisualizer(
     return;
   }
 
-  if (opts.visualizer === 'circle') {
+  if (style === 'circle') {
     // 放射状频谱：环绕封面圆盘，内外两层（外长内短）营造节奏感。
     // 跳过正下方 ±40° 扇区：封面下沿中央让位给歌词带，避免放射线与歌词文字干涉。
     const n = bands?.length ?? 64;

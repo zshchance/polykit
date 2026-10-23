@@ -38,6 +38,7 @@ import {
   getAspect,
   getResolution,
   getTheme,
+  isCustomVisualizerId,
   type AspectId,
   type CoverStyleId,
   type EndRollModeId,
@@ -46,8 +47,22 @@ import {
   type ResolutionId,
   type Theme,
   type Timeline,
-  type VisualizerId,
+  type VisualizerSelection,
 } from './options';
+import {
+  getCustomVisualizerDraw,
+  invalidateVisualizerCache,
+  loadCustomVisualizers,
+  removeCustomVisualizer,
+} from './custom-visualizers';
+import {
+  loadCustomStyles,
+  removeCustomStyle,
+  styleOptionPatches,
+  type CustomStyle,
+  type ParsedStyle,
+} from './custom-styles';
+import { createAiDialogs } from './ai-dialogs';
 import {
   computeBands,
   drawFrame,
@@ -332,6 +347,11 @@ function render(): void {
       title: opts.titleText.trim() || audio?.name || '未命名歌曲',
       bgImage: bgAsset,
       coverImage: coverAsset,
+      // 自定义频谱：id → 编译产物走模块级缓存（本函数每帧执行，不能重复编译）
+      customVisualizer:
+        typeof opts.visualizer === 'string' && isCustomVisualizerId(opts.visualizer)
+          ? getCustomVisualizerDraw(opts.visualizer)
+          : null,
     };
   }
 
@@ -688,10 +708,15 @@ function render(): void {
     ),
   ) as HTMLSelectElement;
 
-  const visualizerSeg = makeSegment<VisualizerId>(
-    VISUALIZERS.map((v) => ({ id: v.id, label: v.label, hint: v.hint })),
+  // 泛型放宽到 VisualizerSelection：选中自定义频谱（cviz:）时四个内置按钮自然全不高亮，
+  // 选中态由下方自定义 chips 行表达
+  const visualizerSeg = makeSegment<VisualizerSelection>(
+    VISUALIZERS.map((v) => ({ id: v.id as VisualizerSelection, label: v.label, hint: v.hint })),
     opts.visualizer,
-    (id) => updateOptions(() => (opts.visualizer = id)),
+    (id) => {
+      updateOptions(() => (opts.visualizer = id));
+      paintVizChips();
+    },
   );
 
   const lyricSeg = makeSegment<LyricModeId>(
@@ -1265,6 +1290,210 @@ function render(): void {
     [`▶ ${advancedToggleLabel}`],
   );
 
+  // ──────────────── AI 生成：自定义频谱 chips + 风格方案 chips ────────────────
+  // 💡 向导产出的两类资产：频谱样式（代码执行，⭐ chips）与风格方案（纯 JSON，
+  // 渐变色 chips = 配色 + 版式整套应用；主题墙只管配色，二者语义在 UI 上刻意区分）。
+
+  const customVizWrap = h('div', { class: 'flex flex-wrap gap-2' }, []);
+
+  /** 自定义频谱 chips 高亮（选中 cviz: id 或选回内置样式时重画） */
+  function paintVizChips(): void {
+    for (const b of customVizWrap.querySelectorAll('button[data-viz-id]')) {
+      const el = b as HTMLButtonElement;
+      const active = el.dataset.vizId === opts.visualizer;
+      el.className =
+        'rounded-md border px-2.5 py-1.5 text-sm transition-colors ' +
+        (active
+          ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)]'
+          : 'border-[var(--border)] bg-[var(--bg)] text-[var(--fg-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]');
+    }
+  }
+
+  function rebuildVisualizerChips(): void {
+    customVizWrap.replaceChildren();
+    const items = loadCustomVisualizers();
+    customVizWrap.classList.toggle('hidden', items.length === 0);
+    for (const item of items) {
+      const btn = h(
+        'button',
+        {
+          type: 'button',
+          'data-viz-id': item.id,
+          title: `自定义频谱样式：${item.name}`,
+          class: 'rounded-md border px-2.5 py-1.5 text-sm transition-colors',
+          textContent: `⭐ ${item.name}`,
+          onclick: () => {
+            updateOptions(() => (opts.visualizer = item.id as VisualizerSelection));
+            visualizerSeg.set(item.id as VisualizerSelection); // 内置按钮全部取消高亮
+            paintVizChips();
+          },
+        },
+        [],
+      );
+      const del = h(
+        'button',
+        {
+          type: 'button',
+          'aria-label': `删除频谱样式 ${item.name}`,
+          title: '删除此样式',
+          class:
+            'absolute -right-1.5 -top-1.5 hidden h-4.5 w-4.5 items-center justify-center rounded-full bg-red-500 text-[9px] leading-none text-white shadow group-hover:flex',
+          textContent: '✕',
+          onclick: (e) => {
+            e.stopPropagation();
+            void confirmDialog(`确定删除频谱样式「${item.name}」吗？`, {
+              title: '删除频谱样式',
+              danger: true,
+              confirmText: '删除',
+            }).then((ok) => {
+              if (!ok) return;
+              removeCustomVisualizer(item.id);
+              invalidateVisualizerCache(item.id);
+              if (opts.visualizer === item.id) {
+                updateOptions(() => (opts.visualizer = 'bars'));
+                visualizerSeg.set('bars');
+              }
+              rebuildVisualizerChips();
+            });
+          },
+        },
+        [],
+      );
+      customVizWrap.append(h('div', { class: 'group relative' }, [btn, del]));
+    }
+    paintVizChips();
+  }
+
+  const styleWrap = h('div', { class: 'flex flex-wrap gap-2' }, []);
+
+  /** 应用一份风格方案：按方案配色创建/覆盖同名自定义主题 + 合并版式选项 + 全量刷新控件 */
+  function applyParsedStyle(s: ParsedStyle): void {
+    updateOptions(() => {
+      const items = addCustomTheme(s.name, s.colors.bg1, s.colors.bg2, s.colors.fg, s.colors.accent);
+      const saved = items.find((it) => it.name.trim() === s.name.trim());
+      if (saved) {
+        opts.theme = saved.id;
+        opts.accentColor = null; // 方案主色即主题主色，清掉旧覆盖色
+      }
+      Object.assign(opts, styleOptionPatches({ id: '', createdAt: 0, ...s, ...s.colors }));
+    });
+    // 同步各控件高亮与条件显隐（updateOptions 只重画布，不刷控件）
+    rebuildThemeButtons();
+    visualizerSeg.set(opts.visualizer);
+    lyricSeg.set(opts.lyricMode);
+    progressSeg.set(opts.progressBar);
+    introSeg.set(opts.introAnim);
+    outroSeg.set(opts.outroAnim);
+    coverStyleSeg.set(opts.coverStyle);
+    refreshLyricVisibility();
+    accentColorInput.value = resolveTheme(opts.theme).accent;
+    rebuildVisualizerChips();
+    rebuildStyleChips();
+  }
+
+  /** 存储态方案 → ParsedStyle 后走统一应用路径 */
+  function applyStoredStyle(stored: CustomStyle): void {
+    applyParsedStyle({
+      name: stored.name,
+      colors: { bg1: stored.bg1, bg2: stored.bg2, fg: stored.fg, accent: stored.accent },
+      ...(stored.visualizer !== undefined ? { visualizer: stored.visualizer } : {}),
+      ...(stored.lyricMode !== undefined ? { lyricMode: stored.lyricMode } : {}),
+      ...(stored.progressBar !== undefined ? { progressBar: stored.progressBar } : {}),
+      ...(stored.introAnim !== undefined ? { introAnim: stored.introAnim } : {}),
+      ...(stored.outroAnim !== undefined ? { outroAnim: stored.outroAnim } : {}),
+      ...(stored.coverStyle !== undefined ? { coverStyle: stored.coverStyle } : {}),
+    });
+  }
+
+  function rebuildStyleChips(): void {
+    styleWrap.replaceChildren();
+    const items = loadCustomStyles();
+    styleWrap.classList.toggle('hidden', items.length === 0);
+    for (const item of items) {
+      const btn = h(
+        'button',
+        {
+          type: 'button',
+          title: `应用风格方案：${item.name}（配色 + 版式整套；同名主题会被覆盖）`,
+          class:
+            'flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-sm text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+          onclick: () => applyStoredStyle(item),
+        },
+        [
+          h('span', {
+            class: 'h-4 w-6 rounded border border-[var(--border)]',
+            style: `background:linear-gradient(135deg,${item.bg1},${item.bg2})`,
+          }),
+          h('span', { textContent: item.name }),
+        ],
+      );
+      const del = h(
+        'button',
+        {
+          type: 'button',
+          'aria-label': `删除风格方案 ${item.name}`,
+          title: '删除此方案（同名自定义主题会保留在上方主题区）',
+          class:
+            'absolute -right-1.5 -top-1.5 hidden h-4.5 w-4.5 items-center justify-center rounded-full bg-red-500 text-[9px] leading-none text-white shadow group-hover:flex',
+          textContent: '✕',
+          onclick: (e) => {
+            e.stopPropagation();
+            void confirmDialog(`确定删除风格方案「${item.name}」吗？（同名自定义主题保留）`, {
+              title: '删除风格方案',
+              danger: true,
+              confirmText: '删除',
+            }).then((ok) => {
+              if (!ok) return;
+              removeCustomStyle(item.id);
+              rebuildStyleChips();
+            });
+          },
+        },
+        [],
+      );
+      styleWrap.append(h('div', { class: 'group relative' }, [btn, del]));
+    }
+  }
+
+  const aiDialogs = createAiDialogs({
+    getTheme: () => resolveTheme(opts.theme),
+    onVisualizerApplied: (id) => {
+      updateOptions(() => (opts.visualizer = id as VisualizerSelection));
+      visualizerSeg.set(id as VisualizerSelection);
+      rebuildVisualizerChips();
+    },
+    onStyleApplied: applyParsedStyle,
+  });
+
+  const aiVizBtn = h(
+    'button',
+    {
+      type: 'button',
+      class:
+        'rounded-md px-1 text-base leading-none text-[var(--fg-muted)] transition-colors hover:text-[var(--accent)]',
+      title: '用 AI 生成自定义频谱样式：描述效果 → 生成提示词 → 粘贴代码 → 合成频谱演播后保存',
+      'aria-label': '用 AI 生成自定义频谱样式',
+      textContent: '💡',
+      onclick: () => aiDialogs.openVisualizerDialog(),
+    },
+    [],
+  );
+  const aiStyleBtn = h(
+    'button',
+    {
+      type: 'button',
+      class:
+        'rounded-md px-1 text-base leading-none text-[var(--fg-muted)] transition-colors hover:text-[var(--accent)]',
+      title: '用 AI 生成整套风格方案：配色主题 + 版式选项一次配齐',
+      'aria-label': '用 AI 生成整套风格方案',
+      textContent: '💡',
+      onclick: () => aiDialogs.openStyleDialog(),
+    },
+    [],
+  );
+  rebuildVisualizerChips();
+  rebuildStyleChips();
+
   // ──────────────── 生成区 ────────────────
   const generateBtn = h(
     'button',
@@ -1429,14 +1658,33 @@ function render(): void {
         h('div', { class: 'border-t border-[var(--border)]' }, []),
         row('画面比例', aspectSeg.wrap),
         row('导出画质', resolutionSel),
-        row('音频可视化', visualizerSeg.wrap),
         h('div', { class: 'space-y-2' }, [
+          h('div', { class: 'flex items-center justify-between gap-2' }, [
+            fieldLabel('音频可视化'),
+            aiVizBtn,
+          ]),
+          visualizerSeg.wrap,
+          customVizWrap,
+        ]),
+        h('div', { class: 'space-y-3' }, [
           fieldLabel('歌词显示'),
           lyricSeg.wrap,
           lyricFadeRow,
           lyricListRow,
         ]),
         row('配色主题', themeWrap),
+        h('div', { class: 'space-y-2' }, [
+          h('div', { class: 'flex items-center justify-between gap-2' }, [
+            fieldLabel('AI 风格方案'),
+            aiStyleBtn,
+          ]),
+          styleWrap,
+          h('p', {
+            class: 'text-[11px] leading-relaxed text-[var(--fg-muted)]',
+            textContent:
+              '点击应用整套「配色 + 版式」；方案会以同名存入上方自定义主题（仅配色），删除方案不影响主题。',
+          }),
+        ]),
         row('进度条', progressSeg.wrap),
         h('div', { class: 'space-y-1.5' }, [
           h('label', { class: 'flex items-center gap-2 text-sm cursor-pointer' }, [

@@ -67,6 +67,12 @@ export function getResolution(id: string | undefined): Resolution {
 
 export type VisualizerId = 'bars' | 'mirror' | 'circle' | 'wave';
 
+/**
+ * 可视化选择：内置样式 id，或自定义频谱样式 id（cviz: 前缀，本体存
+ * custom-visualizers.ts；渲染时解析失败/被删除则回退条形频谱）。
+ */
+export type VisualizerSelection = VisualizerId | `cviz:${string}`;
+
 export interface Visualizer {
   id: VisualizerId;
   label: string;
@@ -82,9 +88,16 @@ export const VISUALIZERS: Visualizer[] = [
 
 const DEFAULT_VISUALIZER: VisualizerId = 'bars';
 
-/** 按 id 取可视化样式，非法 id 回退默认 */
-export function normalizeVisualizer(id: unknown): VisualizerId {
-  return VISUALIZERS.some((v) => v.id === id) ? (id as VisualizerId) : DEFAULT_VISUALIZER;
+/** 按 id 归一化：内置样式或 cviz: 自定义 id 放行，其余回退默认（自定义 id 的存在性由渲染层校验） */
+export function normalizeVisualizer(id: unknown): VisualizerSelection {
+  if (VISUALIZERS.some((v) => v.id === id)) return id as VisualizerId;
+  if (typeof id === 'string' && isCustomVisualizerId(id)) return id;
+  return DEFAULT_VISUALIZER;
+}
+
+/** 判断是否自定义频谱样式 id（cviz: 前缀）；兼作 VisualizerSelection 的类型收窄 */
+export function isCustomVisualizerId(id: string): id is `cviz:${string}` {
+  return id.startsWith('cviz:');
 }
 
 // ─────────────────────────── 歌词滚动模式 ───────────────────────────
@@ -115,7 +128,17 @@ export const LYRIC_BELOW_CHOICES = [1, 2, 3, 4] as const;
 
 // ─────────────────────────── 主题配色 ───────────────────────────
 
-export type ThemeId = 'midnight' | 'sunset' | 'mint' | 'mono';
+export type ThemeId =
+  | 'midnight'
+  | 'sunset'
+  | 'mint'
+  | 'mono'
+  | 'ocean'
+  | 'sakura'
+  | 'violet'
+  | 'forest'
+  | 'latte'
+  | 'aurora';
 
 export interface Theme {
   /** 内置主题为 ThemeId；自定义主题为 custom: 前缀 id */
@@ -326,8 +349,8 @@ export interface SongVideoOptions {
   aspect: AspectId;
   /** 导出分辨率（短边像素档位） */
   resolution: ResolutionId;
-  /** 音频可视化样式 */
-  visualizer: VisualizerId;
+  /** 音频可视化样式（内置 id 或 cviz: 自定义频谱样式 id） */
+  visualizer: VisualizerSelection;
   /** 歌词滚动模式（无歌词文件时自动等效 none） */
   lyricMode: LyricModeId;
   /** 滚动列表模式：当前句上方行数（0-2） */
