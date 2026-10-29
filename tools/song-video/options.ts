@@ -347,16 +347,7 @@ export const PROGRESS_TRAILS: { id: ProgressTrailId; label: string; hint: string
 
 /** 内置载体 id（对应 assets/sprites/<id>.svg；缺失时渲染层回退为发光圆点） */
 export type BuiltinActorId =
-  | 'football'
-  | 'meteor'
-  | 'earth'
-  | 'rocket'
-  | 'runner'
-  | 'star'
-  | 'heart'
-  | 'note'
-  | 'disc'
-  | 'moon';
+  'football' | 'meteor' | 'earth' | 'rocket' | 'star' | 'heart' | 'note' | 'disc' | 'moon';
 
 export interface BuiltinActor {
   id: BuiltinActorId;
@@ -372,7 +363,6 @@ export const BUILTIN_ACTORS: BuiltinActor[] = [
   { id: 'meteor', label: '流星', emoji: '☄️', defaultMotion: 'fly' },
   { id: 'earth', label: '地球', emoji: '🌍', defaultMotion: 'fly' },
   { id: 'rocket', label: '火箭', emoji: '🚀', defaultMotion: 'fly' },
-  { id: 'runner', label: '人偶', emoji: '🏃', defaultMotion: 'run' },
   { id: 'star', label: '星星', emoji: '⭐', defaultMotion: 'float' },
   { id: 'heart', label: '爱心', emoji: '❤️', defaultMotion: 'float' },
   { id: 'note', label: '音符', emoji: '🎵', defaultMotion: 'float' },
@@ -380,9 +370,11 @@ export const BUILTIN_ACTORS: BuiltinActor[] = [
   { id: 'moon', label: '月亮', emoji: '🌙', defaultMotion: 'glide' },
 ];
 
-/** 载体来源：内置精灵，或本地上传素材（id 形如 sva:xxxx） */
+/** 载体来源：内置精灵、本地上传素材（sva:），或 AI 绘制角色代码（cvact:） */
 export type ProgressActorRef =
-  { kind: 'builtin'; id: BuiltinActorId } | { kind: 'asset'; id: string };
+  | { kind: 'builtin'; id: BuiltinActorId }
+  | { kind: 'asset'; id: string }
+  | { kind: 'code'; id: string };
 
 export type ProgressTint = 'original' | 'accent';
 
@@ -399,6 +391,12 @@ export interface ProgressEffect {
   tint: ProgressTint;
   /** 随音乐能量轻微律动（录制时用实时频段驱动） */
   tempoSync: boolean;
+  /** 旋转/滚动速度倍数 0-3：roll 按行进距离，其它运动按进度自转 */
+  spin: number;
+  /** 载体外围光晕强度 0-1 */
+  halo: number;
+  /** 垂直偏移（相对短边 S，正数下移；按运动升降补偿后中心线可贴近轨道） */
+  offsetY: number;
 }
 
 export const DEFAULT_PROGRESS_EFFECT: ProgressEffect = {
@@ -409,6 +407,9 @@ export const DEFAULT_PROGRESS_EFFECT: ProgressEffect = {
   size: 0.1,
   tint: 'original',
   tempoSync: false,
+  spin: 1,
+  halo: 0,
+  offsetY: 0,
 };
 
 /** 预设卡片：常见玩法一键套用（用户仍可在下方微调） */
@@ -432,6 +433,9 @@ export const PROGRESS_PRESETS: {
       size: 0.11,
       tint: 'original',
       tempoSync: false,
+      spin: 1,
+      halo: 0,
+      offsetY: 0,
     },
   },
   {
@@ -447,6 +451,9 @@ export const PROGRESS_PRESETS: {
       size: 0.12,
       tint: 'original',
       tempoSync: true,
+      spin: 0,
+      halo: 0.25,
+      offsetY: 0,
     },
   },
   {
@@ -462,21 +469,9 @@ export const PROGRESS_PRESETS: {
       size: 0.12,
       tint: 'original',
       tempoSync: false,
-    },
-  },
-  {
-    id: 'runner',
-    label: '人偶奔跑',
-    hint: '起伏摆动，沿轨道向前',
-    emoji: '🏃',
-    effect: {
-      actor: { kind: 'builtin', id: 'runner' },
-      motion: 'run',
-      trail: 'none',
-      trailLen: 0.5,
-      size: 0.13,
-      tint: 'original',
-      tempoSync: true,
+      spin: 2,
+      halo: 0.55,
+      offsetY: 0,
     },
   },
   {
@@ -492,6 +487,9 @@ export const PROGRESS_PRESETS: {
       size: 0.13,
       tint: 'original',
       tempoSync: true,
+      spin: 0,
+      halo: 0.35,
+      offsetY: 0,
     },
   },
   {
@@ -507,6 +505,9 @@ export const PROGRESS_PRESETS: {
       size: 0.09,
       tint: 'original',
       tempoSync: false,
+      spin: 0,
+      halo: 0.45,
+      offsetY: 0,
     },
   },
 ];
@@ -526,6 +527,7 @@ export function normalizeProgressEffect(v: unknown): ProgressEffect | null {
   const d = DEFAULT_PROGRESS_EFFECT;
 
   let actor: ProgressActorRef = { ...d.actor };
+  let actorRecognized = false;
   const a = o.actor && typeof o.actor === 'object' ? (o.actor as Record<string, unknown>) : null;
   if (a) {
     if (
@@ -534,25 +536,43 @@ export function normalizeProgressEffect(v: unknown): ProgressEffect | null {
       BUILTIN_ACTORS.some((it) => it.id === a.id)
     ) {
       actor = { kind: 'builtin', id: a.id as BuiltinActorId };
+      actorRecognized = true;
     } else if (
       a.kind === 'asset' &&
       typeof a.id === 'string' &&
       /^sva:[a-z0-9]{4,32}$/.test(a.id)
     ) {
       actor = { kind: 'asset', id: a.id };
+      actorRecognized = true;
+    } else if (
+      a.kind === 'code' &&
+      typeof a.id === 'string' &&
+      /^cvact:[a-z0-9]{4,32}$/.test(a.id)
+    ) {
+      actor = { kind: 'code', id: a.id };
+      actorRecognized = true;
     }
   }
 
+  // 载体已不存在（例如内置人偶已下线）时，运动一并回到默认，避免足球做奔跑动作
+  const actorLost = !!a && !actorRecognized;
+  const motionId = actorLost
+    ? d.motion
+    : PROGRESS_MOTIONS.some((m) => m.id === o.motion)
+      ? (o.motion as ProgressMotionId)
+      : d.motion;
   return {
     actor,
-    motion: PROGRESS_MOTIONS.some((m) => m.id === o.motion)
-      ? (o.motion as ProgressMotionId)
-      : d.motion,
+    motion: motionId,
     trail: PROGRESS_TRAILS.some((t) => t.id === o.trail) ? (o.trail as ProgressTrailId) : d.trail,
     trailLen: clampNum(o.trailLen, 0.1, 1, d.trailLen),
     size: clampNum(o.size, 0.06, 0.18, d.size),
     tint: o.tint === 'accent' ? 'accent' : 'original',
     tempoSync: typeof o.tempoSync === 'boolean' ? o.tempoSync : d.tempoSync,
+    // 旧配置没有 spin：滚动默认 1 倍（保持足球滚动），飞行/漂浮默认不自转
+    spin: clampNum(o.spin, 0, 3, motionId === 'roll' ? 1 : 0),
+    halo: clampNum(o.halo, 0, 1, d.halo),
+    offsetY: clampNum(o.offsetY, -0.2, 0.2, d.offsetY),
   };
 }
 

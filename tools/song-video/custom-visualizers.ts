@@ -66,9 +66,7 @@ function persist(items: CustomVisualizer[]): void {
 }
 
 function newId(): string {
-  return (
-    ID_PREFIX + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
-  );
+  return ID_PREFIX + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
 /** 新增或同名覆盖一条；返回更新后的完整列表 */
@@ -108,23 +106,34 @@ const NON_DETERMINISTIC_PATTERNS: { re: RegExp; label: string }[] = [
   { re: /\bnew\s+Date\b/, label: 'new Date()' },
   { re: /\bperformance\s*\.\s*now\b/, label: 'performance.now()' },
   // 函数体每帧同步调用一次，异步 API 会泄漏到帧外、行为不可控
-  { re: /\bsetTimeout\b|\bsetInterval\b|\brequestAnimationFrame\b/, label: 'setTimeout 等异步 API' },
+  {
+    re: /\bsetTimeout\b|\bsetInterval\b|\brequestAnimationFrame\b/,
+    label: 'setTimeout 等异步 API',
+  },
 ];
 
-/** 静态扫描：共享危险名单 + 确定性名单。干净返回 null，否则返回拒收原因 */
-export function scanVisualizerCode(code: string): string | null {
+/**
+ * 通用静态扫描：共享危险名单 + 确定性名单。干净返回 null，否则返回拒收原因。
+ * subject 用于提示语（如「频谱代码」「角色绘制代码」）。
+ */
+export function scanDeterministicCode(code: string, subject = '这段代码'): string | null {
   const danger = findDangerousPattern(code);
   if (danger) return dangerousCodeReason(danger);
   for (const p of NON_DETERMINISTIC_PATTERNS) {
     if (p.re.test(code)) {
       return (
-        `代码使用了 ${p.label}。频谱代码每帧同步执行，且预览（实时播放）/ 导出（逐帧录制）` +
+        `代码使用了 ${p.label}。${subject}每帧同步执行，且预览（实时播放）/ 导出（逐帧录制）` +
         `/ 拖动进度条必须画面一致——请改用传入的 t 与确定性伪随机，例如 ` +
         `'const hash=(i,t)=>{const x=Math.sin(i*127.1+Math.floor(t*30)*311.7)*43758.5453;return x-Math.floor(x);}'`
       );
     }
   }
   return null;
+}
+
+/** 频谱代码静态扫描（保持原有调用点语义） */
+export function scanVisualizerCode(code: string): string | null {
+  return scanDeterministicCode(code, '频谱代码');
 }
 
 // ─────────────────────────── 编译与运行时包装 ───────────────────────────
@@ -356,7 +365,8 @@ export function parseVisualizerAIOutput(
 ): { ok: true; name: string; code: string } | { ok: false; reason: string } {
   const fence = /```(?:js|javascript)?\s*\n([\s\S]*?)\n?```/i.exec(raw);
   const body = fence ? fence[1]!.trim() : raw.replace(/```[a-z]*\s*$/gim, '').trim();
-  if (!body) return { ok: false, reason: '没识别到代码——请把 AI 的整段回复（含 ```js 代码块）粘进来。' };
+  if (!body)
+    return { ok: false, reason: '没识别到代码——请把 AI 的整段回复（含 ```js 代码块）粘进来。' };
   const nameMatch = NAME_LINE_RE.exec(body);
   const name = nameMatch?.[1]?.trim() ?? '';
   // 名称注释行从代码体剥离，不污染将执行的函数体

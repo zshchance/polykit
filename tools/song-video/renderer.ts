@@ -72,6 +72,36 @@ export interface ActorAnimation {
   height: number;
 }
 
+/**
+ * AI 角色绘制代码的单帧参数（经 custom-progress-actors.ts 编译包装后的形态）。
+ * 代码只负责把「角色」画在 (x, y)，轨道/时间/尾迹由渲染层处理。
+ */
+export interface CustomActorFrame {
+  ctx: CanvasRenderingContext2D;
+  W: number;
+  H: number;
+  S: number;
+  /** 播放进度 0-1 */
+  p: number;
+  /** 音频时间（秒）与音频总时长 */
+  t: number;
+  dur: number;
+  /** 角色中心坐标（px）与高度（px） */
+  x: number;
+  y: number;
+  size: number;
+  /** 运动姿态角（弧度，供代码参考） */
+  angle: number;
+  theme: Theme;
+  /** 静态素材原图（无素材为 null） */
+  img: CanvasImageSource | null;
+  /** 当前显示帧（GIF 时为当前帧；可 null） */
+  frame: CanvasImageSource | null;
+}
+
+/** 自定义角色绘制函数：返回 false 表示本会话已放弃（抛错/连续超帧） */
+export type CustomActorDraw = (frame: CustomActorFrame) => boolean;
+
 /** 已加载的图片资源（img 为可直接 drawImage 的来源） */
 export interface ImageAsset {
   img: CanvasImageSource;
@@ -96,6 +126,8 @@ export interface RenderInput {
   actorImage?: ImageAsset | null;
   /** 动图载体（GIF）；有值时优先于 actorImage 逐帧播放 */
   actorFrames?: ActorAnimation | null;
+  /** AI 角色绘制代码（opts.progressEffect.actor 为 code: id 时由调用方解析注入） */
+  customActor?: CustomActorDraw | null;
   /**
    * 自定义频谱绘制函数（opts.visualizer 为 cviz: id 时由调用方解析注入；
    * 缺失（已被删除/编译失败）时回退条形频谱）。
@@ -137,6 +169,47 @@ function withAlpha(hex: string, alpha: number): string {
   if (!m) return hex;
   const n = parseInt(m[1]!, 16);
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+/** 素材缺失/代码失效时的发光圆点（画在当前坐标原点） */
+function drawActorFallback(ctx: CanvasRenderingContext2D, theme: Theme, height: number): void {
+  ctx.fillStyle = withAlpha(theme.accent, 0.9);
+  ctx.beginPath();
+  ctx.arc(0, 0, height * 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = withAlpha('#ffffff', 0.8);
+  ctx.lineWidth = Math.max(1, height * 0.035);
+  ctx.stroke();
+}
+
+/** 载体外围光晕（径向渐变 + 细环，避免大面积 shadowBlur） */
+function drawActorHalo(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  intensity: number,
+  theme: Theme,
+  baseAlpha: number,
+): void {
+  if (intensity <= 0 || radius <= 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const grad = ctx.createRadialGradient(x, y, radius * 0.2, x, y, radius * 1.2);
+  grad.addColorStop(0, withAlpha(theme.accent, 0.32 * intensity));
+  grad.addColorStop(0.6, withAlpha(theme.accent, 0.12 * intensity));
+  grad.addColorStop(1, withAlpha(theme.accent, 0));
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(x, y, radius * 1.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = baseAlpha * intensity * 0.45;
+  ctx.strokeStyle = theme.accent;
+  ctx.lineWidth = Math.max(1, radius * 0.05);
+  ctx.beginPath();
+  ctx.arc(x, y, radius * 1.02, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function fmtTime(sec: number): string {
@@ -1181,7 +1254,7 @@ function actorBandTop(input: RenderInput, W: number, H: number, S: number): numb
   const h = eff.size * S;
   const lift =
     eff.motion === 'fly' || eff.motion === 'float' ? h * 0.6 : eff.motion === 'run' ? h * 0.12 : 0;
-  return g.y - h - lift - H * 0.015;
+  return g.y - h - lift + eff.offsetY * S - H * 0.015;
 }
 
 /** 尾迹绘制参数 */
@@ -1328,6 +1401,7 @@ function drawActorProgress(
   const { opts, theme, timeline } = input;
   const eff = opts.progressEffect;
   if (!eff) return;
+  const custom = input.customActor ?? null;
 
   const ta = Math.max(0, t - timeline.intro);
   const p = timeline.audio > 0 ? clamp01(ta / timeline.audio) : 0;
@@ -1367,29 +1441,32 @@ function drawActorProgress(
 
   // —— 运动轨迹（bottom = 载体底边）；进度 x 与姿态互不干扰 ——
   let bottom = g.y;
-  let angle = 0;
+  let angle: number;
   const phase = ta;
+  // 旋转速度：按已走过的距离×半径计算（倍数可调），地球等非滚动载体同样随进度自转
+  const spinAngle = ((x - g.marginX) / Math.max(1, height / 2)) * eff.spin;
   switch (eff.motion) {
     case 'roll':
-      angle = (x - g.marginX) / Math.max(1, height / 2);
+      angle = spinAngle;
       break;
     case 'fly':
       bottom = g.y - height * 0.55 + Math.sin(phase * 2.2) * height * 0.07;
-      angle = Math.sin(phase * 1.6) * 0.08;
+      angle = Math.sin(phase * 1.6) * 0.08 + spinAngle;
       break;
     case 'run':
       bottom = g.y - Math.abs(Math.sin(phase * Math.PI * 4.2)) * height * 0.1;
-      angle = Math.sin(phase * Math.PI * 4.2) * 0.06;
+      angle = Math.sin(phase * Math.PI * 4.2) * 0.06 + spinAngle;
       break;
     case 'float':
       bottom = g.y - height * 0.5 + Math.sin(phase * 1.5) * height * 0.1;
-      angle = Math.sin(phase * 1.1) * 0.1;
+      angle = Math.sin(phase * 1.1) * 0.1 + spinAngle;
       break;
     default:
       bottom = g.y;
+      angle = spinAngle;
   }
 
-  const cy = bottom - ah / 2;
+  const cy = bottom - ah / 2 + eff.offsetY * S;
   // 动图按音频时间循环取帧（ta 与进度同源，拖动/导出不会跳帧）
   const frame: CanvasImageSource | null = anim
     ? (anim.frames[frameIndexAt(anim.delays, anim.duration, ta)] ?? null)
@@ -1412,6 +1489,11 @@ function drawActorProgress(
     });
   }
 
+  // 外围光晕：画在尾迹之上、载体之下
+  if (eff.halo > 0) {
+    drawActorHalo(ctx, x, cy, Math.max(aw, ah) * 0.55, eff.halo, theme, ctx.globalAlpha);
+  }
+
   // 贴地投影：滚动/奔跑更像踩在轨道上
   if (eff.motion === 'roll' || eff.motion === 'run' || eff.motion === 'glide') {
     ctx.save();
@@ -1430,22 +1512,43 @@ function drawActorProgress(
     ctx.restore();
   }
 
-  ctx.save();
-  ctx.translate(x, cy);
-  ctx.rotate(angle);
-  if (frame) {
-    ctx.drawImage(frame, -aw / 2, -ah / 2, aw, ah);
+  if (custom) {
+    // AI 角色代码：全局坐标系直接画在 (x, cy)，不叠加渲染层旋转
+    ctx.save();
+    const alive = custom({
+      ctx,
+      W,
+      H,
+      S,
+      p,
+      t: ta,
+      dur: timeline.audio,
+      x,
+      y: cy,
+      size: height,
+      angle,
+      theme,
+      img: img?.img ?? null,
+      frame,
+    });
+    ctx.restore();
+    if (!alive) {
+      ctx.save();
+      ctx.translate(x, cy);
+      drawActorFallback(ctx, theme, height);
+      ctx.restore();
+    }
   } else {
-    // 素材加载中/失败：发光圆点兜底，保证画面不空
-    ctx.fillStyle = withAlpha(theme.accent, 0.9);
-    ctx.beginPath();
-    ctx.arc(0, 0, height * 0.3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = withAlpha('#ffffff', 0.8);
-    ctx.lineWidth = Math.max(1, height * 0.035);
-    ctx.stroke();
+    ctx.save();
+    ctx.translate(x, cy);
+    ctx.rotate(angle);
+    if (frame) {
+      ctx.drawImage(frame, -aw / 2, -ah / 2, aw, ah);
+    } else {
+      drawActorFallback(ctx, theme, height);
+    }
+    ctx.restore();
   }
-  ctx.restore();
 
   // —— 时间标签 ——
   ctx.save();

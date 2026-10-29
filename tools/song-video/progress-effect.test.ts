@@ -66,6 +66,27 @@ describe('normalizeProgressEffect', () => {
     expect(out!.tempoSync).toBe(false);
   });
 
+  it('旋转/光晕/偏移越界被钳制', () => {
+    const out = normalizeProgressEffect({
+      actor: { kind: 'builtin', id: 'earth' },
+      spin: 5,
+      halo: 2,
+      offsetY: 0.5,
+    });
+    expect(out!.spin).toBe(3);
+    expect(out!.halo).toBe(1);
+    expect(out!.offsetY).toBe(0.2);
+  });
+
+  it('已下线的内置人偶回退足球并重置运动', () => {
+    const out = normalizeProgressEffect({
+      actor: { kind: 'builtin', id: 'runner' },
+      motion: 'run',
+    });
+    expect(out!.actor).toEqual({ kind: 'builtin', id: 'football' });
+    expect(out!.motion).toBe('roll');
+  });
+
   it('全部预设都能完整归一化（不会被校验吃掉字段）', () => {
     for (const preset of PROGRESS_PRESETS) {
       const out = normalizeProgressEffect(preset.effect);
@@ -77,6 +98,9 @@ describe('normalizeProgressEffect', () => {
       expect(out!.size).toBe(preset.effect.size);
       expect(out!.tint).toBe(preset.effect.tint);
       expect(out!.tempoSync).toBe(preset.effect.tempoSync);
+      expect(out!.spin).toBe(preset.effect.spin);
+      expect(out!.halo).toBe(preset.effect.halo);
+      expect(out!.offsetY).toBe(preset.effect.offsetY);
     }
   });
 });
