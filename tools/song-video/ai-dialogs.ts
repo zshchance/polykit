@@ -19,31 +19,23 @@ import { createCopyButton } from '@/core/components/CopyButton';
 import { createAiRunner, extractCodeBlock } from '@/core/ai/ai-assist';
 
 import {
-  BUILTIN_ACTORS,
   COVER_STYLES,
   INTRO_ANIMS,
   LYRIC_MODES,
   OUTRO_ANIMS,
   PROGRESS_BARS,
-  PROGRESS_MOTIONS,
-  PROGRESS_TRAILS,
   VISUALIZERS,
   type Theme,
 } from './options';
 import type { ParsedStyle } from './custom-styles';
 import {
   addCustomActor,
-  buildActorPrompt,
-  dryRunActor,
+  buildProgressEffectPrompt,
+  dryRunProgressEffect,
   invalidateCustomActorCache,
   parseActorAIOutput,
   scanActorCode,
 } from './custom-progress-actors';
-import {
-  buildProgressEffectPrompt,
-  parseProgressEffectAIOutput,
-  type ProgressRecipe,
-} from './progress-recipes';
 import {
   addCustomVisualizer,
   buildVisualizerPrompt,
@@ -89,12 +81,8 @@ export interface SongVideoAiDialogsDeps {
   onVisualizerApplied: (id: string) => void;
   /** 风格方案保存后：应用配色（创建/覆盖同名自定义主题）+ 合并版式选项 + 刷新 UI */
   onStyleApplied: (style: ParsedStyle) => void;
-  /** 当前素材库名称（AI 效果配方提示词用） */
-  getAssetNames: () => Promise<string[]>;
-  /** AI 效果配方解析成功后：应用并刷新 UI */
-  onProgressRecipeApplied: (recipe: ProgressRecipe) => void;
-  /** AI 角色代码保存后：选中该 id 并刷新 chips/预览 */
-  onActorApplied: (id: string) => void;
+  /** AI 效果代码保存后：选中该 id 并刷新 chips/预览 */
+  onEffectApplied: (id: string) => void;
 }
 
 /** AI 模态 API（单实例 guard 内部持有） */
@@ -103,10 +91,8 @@ export interface SongVideoAiDialogs {
   openVisualizerDialog: () => void;
   /** 打开「用 AI 生成整套风格方案」模态 */
   openStyleDialog: () => void;
-  /** 打开「用 AI 生成角色进度条效果配方」模态 */
-  openProgressEffectDialog: () => void;
-  /** 打开「用 AI 生成角色绘制代码」模态 */
-  openActorDialog: () => void;
+  /** 打开「用 AI 生成进度条效果」模态 */
+  openEffectDialog: () => void;
 }
 
 // ─────────────────────────── 合成频谱演播画布 ───────────────────────────
@@ -728,260 +714,17 @@ export function createAiDialogs(deps: SongVideoAiDialogsDeps): SongVideoAiDialog
     requestAnimationFrame(() => descInput.focus());
   }
 
-  // ══════════ 💡 向导三：AI 进度条效果配方 ══════════
-  function openProgressEffectDialog(): void {
+  // ══════════ 💡 向导三：AI 进度条效果代码 ══════════
+  function openEffectDialog(): void {
     if (dialogEl) closeDialog();
     const { statusRow, flashError, flashOk } = makeFlash();
 
     const descInput = h('textarea', {
       class: textareaCls,
       rows: 3,
-      'aria-label': '想要的角色进度条效果描述',
+      'aria-label': '想要的进度条效果描述',
       placeholder:
-        '描述你想要的进度条效果，例如：一个流星拖着长长的发光火焰向前飞；或：一个地球沿轨道巡航，带一条星尘尾巴。',
-    }) as HTMLTextAreaElement;
-
-    const promptArea = h('textarea', {
-      class: monoCls,
-      rows: 10,
-      readonly: true,
-      'aria-label': '生成的 AI 提示词',
-    }) as HTMLTextAreaElement;
-    const direct = buildDirectGen({
-      conversationTitle: 'AI 进度条效果配方',
-      getPrompt: () => promptArea.value,
-      fill: (text) => {
-        pasteInput.value = text;
-        pasteInput.scrollTop = 0;
-        runSummary();
-      },
-      notify: () => flashOk('AI 已返回并自动填入 ③，请核对配方后点「应用效果」'),
-    });
-    const step2 = h('div', { class: 'hidden space-y-2' }, [
-      h('p', {
-        class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
-        textContent:
-          '把提示词复制到任意 AI 对话，或点「直接生成」；AI 会返回一个 ```json 效果配方，应用后仍可手动微调。',
-      }),
-      promptArea,
-      h('div', { class: 'flex flex-wrap items-center justify-end gap-2' }, [
-        createCopyButton(() => promptArea.value, '📋 复制提示词', '已复制 ✓'),
-        direct.picker,
-        direct.btn,
-      ]),
-      direct.runnerEl,
-    ]);
-
-    const pasteInput = h('textarea', {
-      class: monoCls,
-      rows: 8,
-      spellcheck: false,
-      'aria-label': '粘贴 AI 返回的效果配方 JSON',
-      placeholder:
-        '把 AI 的整段回复粘到这里（形如 ```json { "name": "流星火尾", "actor": "meteor", … } ```）。工具会自动解析并校验。',
-    }) as HTMLTextAreaElement;
-
-    const summaryWrap = h('div', { class: 'hidden space-y-2' }, []);
-    let lastRecipe: ProgressRecipe | null = null;
-
-    function actorLabel(r: ProgressRecipe): string {
-      const actor = r.actor;
-      if (actor.kind === 'builtin') {
-        return BUILTIN_ACTORS.find((a) => a.id === actor.id)?.label ?? actor.id;
-      }
-      if (actor.kind === 'asset') return `素材：${actor.name}`;
-      return '自定义素材（需上传贴纸）';
-    }
-
-    function motionLabel(id: string): string {
-      return PROGRESS_MOTIONS.find((m) => m.id === id)?.label ?? id;
-    }
-    function trailLabel(id: string): string {
-      return PROGRESS_TRAILS.find((t) => t.id === id)?.label ?? id;
-    }
-
-    function runSummary(): boolean {
-      lastRecipe = null;
-      const parsed = parseProgressEffectAIOutput(pasteInput.value);
-      if (!parsed.ok) {
-        summaryWrap.classList.add('hidden');
-        flashError(parsed.reason);
-        return false;
-      }
-      const r = parsed.recipe;
-      lastRecipe = r;
-      const chip = (text: string): HTMLElement =>
-        h(
-          'span',
-          {
-            class:
-              'rounded-full border border-[var(--border)] bg-[var(--bg)] px-2.5 py-0.5 text-xs text-[var(--fg-muted)]',
-          },
-          [text],
-        );
-      const chips = [
-        `载体：${actorLabel(r)}`,
-        `运动：${motionLabel(r.motion)}`,
-        `尾迹：${trailLabel(r.trail)}`,
-        `尾迹长度：${Math.round(r.trailLen * 100)}%`,
-        `尺寸：${Math.round(r.size * 100)}%`,
-        `旋转：${r.spin.toFixed(1)}×`,
-        `光晕：${Math.round(r.halo * 100)}%`,
-        `偏移：${Math.round(r.offsetY * 100)}%`,
-        r.tint === 'accent' ? '主题色染色' : '保留原色',
-        r.tempoSync ? '随音乐律动' : '匀速',
-      ];
-      const assetBlock = r.assetPrompt
-        ? h(
-            'div',
-            {
-              class:
-                'space-y-1.5 rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg)] p-2.5',
-            },
-            [
-              h('p', {
-                class: 'text-[11px] leading-relaxed text-[var(--fg-muted)]',
-                textContent:
-                  '这个配方需要一张专属贴纸。复制下面的提示词去 AI 生图，生成透明背景图片后拖到「我的素材」即可：',
-              }),
-              h('p', {
-                class: 'whitespace-pre-wrap text-xs leading-relaxed text-[var(--fg)]',
-                textContent: r.assetPrompt,
-              }),
-              h('div', { class: 'flex justify-end' }, [
-                createCopyButton(() => r.assetPrompt ?? '', '复制素材提示词', '已复制 ✓'),
-              ]),
-            ],
-          )
-        : r.actor.kind === 'custom'
-          ? h('p', {
-              class: 'text-[11px] leading-relaxed text-[var(--fg-muted)]',
-              textContent:
-                '这个配方使用自定义主体：应用后会保留当前载体；建议先生成/上传一张贴纸，再重新应用。',
-            })
-          : null;
-
-      summaryWrap.replaceChildren(
-        h('p', { class: 'text-sm font-medium text-[var(--fg)]', textContent: `配方：${r.name}` }),
-        h('div', { class: 'flex flex-wrap items-center gap-1.5' }, chips.map(chip)),
-        ...(assetBlock ? [assetBlock] : []),
-        h('p', {
-          class: 'text-[11px] leading-relaxed text-[var(--fg-muted)]',
-          textContent:
-            '应用后仍可在设置区调整载体、运动、尾迹与尺寸；配方引用的素材不在素材库时会保留当前载体。',
-        }),
-      );
-      summaryWrap.classList.remove('hidden');
-      flashError('');
-      return true;
-    }
-
-    const step3 = h('div', { class: 'hidden space-y-2' }, [
-      h('label', {
-        class: 'block text-xs font-medium text-[var(--fg-muted)]',
-        textContent: '③ 粘贴 AI 返回的 JSON',
-      }),
-      pasteInput,
-      h('div', { class: 'flex flex-wrap items-center gap-2' }, [
-        h('button', {
-          type: 'button',
-          class:
-            'rounded-md border border-[var(--accent)] px-3 py-1.5 text-sm text-[var(--accent)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--accent-fg)]',
-          textContent: '🔍 解析预览',
-          title: '解析 JSON 并展示将应用的载体/运动/尾迹',
-          onclick: () => void runSummary(),
-        }),
-      ]),
-      summaryWrap,
-      h('div', { class: 'flex items-center justify-end gap-2' }, [
-        cancelBtn(),
-        saveBtn('应用效果', save),
-      ]),
-    ]);
-
-    async function generate(): Promise<void> {
-      const desc = descInput.value.trim();
-      if (!desc) {
-        flashError('请先描述你想要的效果。');
-        descInput.focus();
-        return;
-      }
-      flashError('');
-      let names: string[];
-      try {
-        names = await deps.getAssetNames();
-      } catch {
-        names = [];
-      }
-      promptArea.value = buildProgressEffectPrompt(desc, names);
-      step2.classList.remove('hidden');
-      step3.classList.remove('hidden');
-      promptArea.scrollTop = 0;
-    }
-
-    function save(): void {
-      if (!lastRecipe && !runSummary()) return;
-      const recipe = lastRecipe!;
-      deps.onProgressRecipeApplied(recipe);
-      flashOk(`已应用「${recipe.name}」——可在设置区继续微调。`);
-      setTimeout(closeDialog, 700);
-    }
-
-    const card = h(
-      'div',
-      {
-        role: 'dialog',
-        'aria-modal': 'true',
-        'aria-label': '用 AI 生成角色进度条效果配方',
-        class:
-          'w-[min(92vw,42rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
-      },
-      [
-        dialogHead('💡 用 AI 生成进度条效果配方'),
-        h('div', { class: 'mt-2 space-y-2' }, [
-          h('label', {
-            class: 'block text-xs font-medium text-[var(--fg-muted)]',
-            textContent: '① 描述你想要的效果',
-          }),
-          descInput,
-          h('div', { class: 'flex items-center justify-end' }, [
-            h('button', {
-              type: 'button',
-              class:
-                'rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm text-[var(--accent-fg)] hover:opacity-90 transition-opacity',
-              textContent: '生成 AI 提示词',
-              onclick: () => void generate(),
-            }),
-          ]),
-        ]),
-        h('div', { class: 'mt-3' }, [
-          h('label', {
-            class: 'mb-1 block text-xs font-medium text-[var(--fg-muted)]',
-            textContent: '② 复制提示词给 AI',
-          }),
-          step2,
-        ]),
-        step3,
-        statusRow,
-        privacyNote,
-      ],
-    );
-
-    dialogEl = mountDialog(card);
-    requestAnimationFrame(() => descInput.focus());
-  }
-
-  // ══════════ 💡 向导四：AI 角色绘制代码 ══════════
-  function openActorDialog(): void {
-    if (dialogEl) closeDialog();
-    const { statusRow, flashError, flashOk } = makeFlash();
-
-    const descInput = h('textarea', {
-      class: textareaCls,
-      rows: 3,
-      'aria-label': '想要的角色代码效果描述',
-      placeholder:
-        '描述你想要的角色绘制效果，例如：一个霓虹发光的小行星，围绕轨道滚动并留下粒子；或：一个旋转的几何星环，随节拍呼吸。',
+        '描述你想要的整条进度条效果，例如：地球带三颗卫星前进，后面有流星追赶，到终点撞击爆炸；或：霓虹能量轨道 + 随节拍呼吸的发光载体。',
     }) as HTMLTextAreaElement;
 
     const promptArea = h('textarea', {
@@ -1005,18 +748,18 @@ export function createAiDialogs(deps: SongVideoAiDialogsDeps): SongVideoAiDialog
         return false;
       }
       // 保存前完整校验：双端点像素 + 质心位移 + 全屏填充拦截
-      const check = dryRunActor(parsed.code);
+      const check = dryRunProgressEffect(parsed.code);
       if (!check.ok) {
         flashError(check.reason ?? '代码未通过校验。');
         return false;
       }
       lastParsed = parsed;
-      flashOk('校验通过：p=0.2 与 p=0.8 都能画出角色且位置随进度移动');
+      flashOk('校验通过：p=0.2 与 p=0.8 都能画出进度条且位置随进度移动');
       return true;
     }
 
     const direct = buildDirectGen({
-      conversationTitle: 'AI 角色绘制代码',
+      conversationTitle: 'AI 进度条效果',
       getPrompt: () => promptArea.value,
       fill: (code) => {
         pasteInput.value = code;
@@ -1029,7 +772,7 @@ export function createAiDialogs(deps: SongVideoAiDialogsDeps): SongVideoAiDialog
       h('p', {
         class: 'text-xs leading-relaxed text-[var(--fg-muted)]',
         textContent:
-          '把提示词复制到任意 AI 对话，或点「直接生成」；AI 会返回「名称 + 角色绘制代码」。代码只画角色，不画轨道/时间。',
+          '把提示词复制到任意 AI 对话，或点「直接生成」；AI 会返回「名称 + 整条进度条绘制代码」。轨道、时间、载体、尾迹都由代码决定。',
       }),
       promptArea,
       h('div', { class: 'flex flex-wrap items-center justify-end gap-2' }, [
@@ -1044,9 +787,9 @@ export function createAiDialogs(deps: SongVideoAiDialogsDeps): SongVideoAiDialog
       class: monoCls,
       rows: 10,
       spellcheck: false,
-      'aria-label': '粘贴 AI 返回的角色绘制代码',
+      'aria-label': '粘贴 AI 返回的进度条效果代码',
       placeholder:
-        '把 AI 的整段回复粘到这里（首行形如「// 名称：霓虹小行星」，后面是 ```js 代码）。工具会静态扫描 + 双端点 dryRun 校验。',
+        '把 AI 的整段回复粘到这里（首行形如「// 名称：地球追逐战」，后面是 ```js 代码）。工具会静态扫描 + 双端点 dryRun 校验。',
     }) as HTMLTextAreaElement;
 
     const step3 = h('div', { class: 'hidden space-y-2' }, [
@@ -1061,30 +804,30 @@ export function createAiDialogs(deps: SongVideoAiDialogsDeps): SongVideoAiDialog
           class:
             'rounded-md border border-[var(--accent)] px-3 py-1.5 text-sm text-[var(--accent)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--accent-fg)]',
           textContent: '🔍 校验代码',
-          title: '静态扫描 + 双端点像素校验（角色必须随进度移动）',
+          title: '静态扫描 + 双端点像素校验（进度条必须随进度移动）',
           onclick: () => void runCheck(),
         }),
       ]),
       h('p', {
         class: 'text-[11px] leading-relaxed text-[var(--fg-muted)]',
         textContent:
-          '保存后可在右侧预览用真实音乐查看；代码只画角色，轨道、时间与尾迹仍由工具负责。',
+          '保存后可在右侧预览用真实音乐查看；可选择下方内置载体或上传图片/GIF，AI 代码会收到 img/frame 并控制它们的显示、隐藏与变换。',
       }),
       h('div', { class: 'flex items-center justify-end gap-2' }, [
         cancelBtn(),
-        saveBtn('保存并应用', save),
+        saveBtn('保存为方案并应用', save),
       ]),
     ]);
 
     function generate(): void {
       const desc = descInput.value.trim();
       if (!desc) {
-        flashError('请先描述你想要的角色效果。');
+        flashError('请先描述你想要的进度条效果。');
         descInput.focus();
         return;
       }
       flashError('');
-      promptArea.value = buildActorPrompt(desc);
+      promptArea.value = buildProgressEffectPrompt(desc);
       step2.classList.remove('hidden');
       step3.classList.remove('hidden');
       promptArea.scrollTop = 0;
@@ -1093,15 +836,15 @@ export function createAiDialogs(deps: SongVideoAiDialogsDeps): SongVideoAiDialog
     function save(): void {
       if (!lastParsed && !runCheck()) return;
       const parsed = lastParsed!;
-      const items = addCustomActor(parsed.name, parsed.code);
+      const items = addCustomActor(parsed.name, parsed.code, 'full');
       const saved = items.find((it) => it.name.trim() === parsed.name.trim());
       if (!saved) {
         flashError('保存失败，请重试。');
         return;
       }
       invalidateCustomActorCache(saved.id);
-      deps.onActorApplied(saved.id);
-      flashOk(`已保存「${saved.name}」并应用，关闭后即可在预览看到效果。`);
+      deps.onEffectApplied(saved.id);
+      flashOk(`已保存 AI 效果「${saved.name}」并应用，关闭后即可在预览看到效果。`);
       setTimeout(closeDialog, 700);
     }
 
@@ -1110,16 +853,16 @@ export function createAiDialogs(deps: SongVideoAiDialogsDeps): SongVideoAiDialog
       {
         role: 'dialog',
         'aria-modal': 'true',
-        'aria-label': '用 AI 生成角色绘制代码',
+        'aria-label': '用 AI 生成进度条效果',
         class:
           'w-[min(92vw,42rem)] rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-2xl',
       },
       [
-        dialogHead('💡 用 AI 生成角色绘制代码'),
+        dialogHead('💡 用 AI 生成进度条效果'),
         h('div', { class: 'mt-2 space-y-2' }, [
           h('label', {
             class: 'block text-xs font-medium text-[var(--fg-muted)]',
-            textContent: '① 描述你想要的角色效果',
+            textContent: '① 描述你想要的进度条效果',
           }),
           descInput,
           h('div', { class: 'flex items-center justify-end' }, [
@@ -1152,7 +895,6 @@ export function createAiDialogs(deps: SongVideoAiDialogsDeps): SongVideoAiDialog
   return {
     openVisualizerDialog,
     openStyleDialog,
-    openProgressEffectDialog,
-    openActorDialog,
+    openEffectDialog,
   };
 }

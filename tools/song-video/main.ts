@@ -50,7 +50,6 @@ import {
   type EndRollModeId,
   type LyricModeId,
   type ProgressBarId,
-  type ProgressActorRef,
   type ProgressEffect,
   type ProgressMotionId,
   type ProgressTrailId,
@@ -75,12 +74,12 @@ import {
 import { createAiDialogs } from './ai-dialogs';
 import {
   getCustomActorDraw,
+  getCustomEffectMode,
   invalidateCustomActorCache,
   loadCustomActors,
   removeCustomActor,
   type CustomProgressActor,
 } from './custom-progress-actors';
-import type { ProgressRecipe } from './progress-recipes';
 import {
   builtinActorSpriteUrl,
   cleanAssetName,
@@ -382,6 +381,7 @@ function render(): void {
 
   function buildRenderInput(): RenderInput {
     const theme = resolveTheme(opts.theme);
+    const codeId = opts.progressEffect?.actor.kind === 'code' ? opts.progressEffect.actor.id : null;
     return {
       opts,
       theme: opts.accentColor ? { ...theme, accent: opts.accentColor } : theme,
@@ -393,10 +393,8 @@ function render(): void {
       coverImage: coverAsset,
       actorImage: actorAsset,
       actorFrames: actorAnimation,
-      customActor:
-        opts.progressEffect?.actor.kind === 'code'
-          ? getCustomActorDraw(opts.progressEffect.actor.id)
-          : null,
+      customActor: codeId ? getCustomActorDraw(codeId) : null,
+      customActorFull: codeId ? getCustomEffectMode(codeId) === 'full' : false,
       // 自定义频谱：id → 编译产物走模块级缓存（本函数每帧执行，不能重复编译）
       customVisualizer:
         typeof opts.visualizer === 'string' && isCustomVisualizerId(opts.visualizer)
@@ -648,7 +646,7 @@ function render(): void {
 
   /**
    * 解析当前角色效果对应的载体：
-   *   内置精灵 / 上传静态图 / 上传 GIF / AI 角色代码 → actorAsset / actorAnimation。
+   *   内置精灵 / 上传静态图 / 上传 GIF / AI 效果代码 → actorAsset / actorAnimation。
    * 素材被删除、换了浏览器、GIF 解码失败或代码失效时回退内置足球，避免画面空白。
    */
   async function refreshActorAsset(): Promise<void> {
@@ -666,15 +664,35 @@ function render(): void {
     let cacheKey: string;
 
     if (eff.actor.kind === 'code') {
-      if (getCustomActorDraw(eff.actor.id)) {
-        actorAsset = null;
-        actorAnimation = null;
+      if (!getCustomActorDraw(eff.actor.id)) {
+        fallbackProgressActor('AI 效果代码已失效，已回退为内置足球。');
+        image = await loadBuiltinActor('football');
+        cacheKey = 'builtin:football';
+      } else {
+        // AI 效果载体：只加载素材，不自动绘制；img/frame 交给 AI 代码决定显隐与变换
+        const base = eff.codeBase ?? null;
+        if (base?.kind === 'builtin') {
+          image = await loadBuiltinActor(base.id);
+        } else if (base?.kind === 'asset') {
+          const loaded = await loadUploadedActor(base.id);
+          if (loaded?.kind === 'image') {
+            image = loaded.image;
+          } else if (loaded?.kind === 'gif') {
+            animation = loaded.animation;
+          } else {
+            opts.progressEffect = { ...eff, codeBase: null };
+            saveOptions(opts);
+            syncEffectUI();
+            setEffectStatus('AI 效果载体素材已不存在，已改为无载体。', 'warn');
+          }
+        }
+        if (token !== actorAssetToken) return;
+        // AI 效果不启用主题染色，载体保持原色
+        actorAsset = image;
+        actorAnimation = animation;
         drawStaticFrame();
         return;
       }
-      fallbackProgressActor('AI 角色代码已失效，已回退为内置足球。');
-      image = await loadBuiltinActor('football');
-      cacheKey = 'builtin:football';
     } else if (eff.actor.kind === 'builtin') {
       image = await loadBuiltinActor(eff.actor.id);
       cacheKey = `builtin:${eff.actor.id}`;
@@ -1150,8 +1168,7 @@ function render(): void {
 
   const effectStatus = h('p', { class: 'hidden text-xs leading-relaxed' });
   /** AI 向导入口（aiDialogs 创建较晚，用 ref 规避声明顺序） */
-  let openProgressDialogRef: (() => void) | null = null;
-  let openActorDialogRef: (() => void) | null = null;
+  let openEffectDialogRef: (() => void) | null = null;
   function setEffectStatus(msg: string, tone: 'ok' | 'warn' | 'err' = 'err'): void {
     effectStatus.classList.toggle('hidden', !msg);
     effectStatus.textContent = msg;
@@ -1189,8 +1206,16 @@ function render(): void {
         class:
           'flex items-start gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-left transition-colors hover:border-[var(--accent)]',
         onclick: () => {
+          const prevBase = opts.progressEffect?.codeBase ?? null;
           updateOptions(() => {
-            opts.progressEffect = cloneProgressEffect(preset.effect);
+            opts.progressEffect = {
+              ...cloneProgressEffect(preset.effect),
+              // 普通预设也记住当前载体，之后切回 AI 效果时可直接复用
+              codeBase:
+                preset.effect.actor.kind === 'builtin'
+                  ? { kind: 'builtin', id: preset.effect.actor.id }
+                  : prevBase,
+            };
           });
           syncEffectUI();
           void refreshActorAsset();
@@ -1230,18 +1255,23 @@ function render(): void {
       {
         type: 'button',
         'data-actor-id': actor.id,
-        title: `切换为${actor.label}（推荐运动：${motionLabel}）`,
+        title: `选择${actor.label}（AI 效果模式下作为载体；推荐运动：${motionLabel}）`,
         class:
           'flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg)] px-1.5 py-1 text-[11px] text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
         onclick: () => {
           const cur = opts.progressEffect;
           if (!cur) return;
+          const full = isFullEffect(cur);
           updateOptions(() => {
-            opts.progressEffect = {
-              ...cur,
-              actor: { kind: 'builtin', id: actor.id },
-              motion: actor.defaultMotion,
-            };
+            opts.progressEffect = full
+              ? { ...cur, codeBase: { kind: 'builtin', id: actor.id } }
+              : {
+                  ...cur,
+                  actor: { kind: 'builtin', id: actor.id },
+                  // 记住当前载体，切到 AI 效果时可直接复用
+                  codeBase: { kind: 'builtin', id: actor.id },
+                  motion: actor.defaultMotion,
+                };
           });
           syncEffectUI();
           void refreshActorAsset();
@@ -1556,60 +1586,12 @@ function render(): void {
     },
   }) as HTMLInputElement;
 
-  /** AI 角色代码 chips（高亮用） */
+  /** AI 效果方案 chips（高亮用） */
   const customActorWrap = h('div', { class: 'hidden flex flex-wrap gap-1.5' }, []);
   let actorChipButtons = new Map<string, HTMLButtonElement>();
 
-  const effectPanel = h('div', { class: 'hidden space-y-3' }, [
-    h('div', { class: 'space-y-1.5' }, [
-      h('div', { class: 'flex items-baseline justify-between gap-2' }, [
-        h('p', { class: 'text-[11px] text-[var(--fg-muted)]', textContent: '预设玩法' }),
-        h('button', {
-          type: 'button',
-          class:
-            'rounded-md border border-[var(--border)] bg-[var(--bg)] px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
-          textContent: '💡 AI 配方',
-          title: '描述一句话，让 AI 生成「载体 + 运动 + 尾迹」配方',
-          onclick: () => openProgressDialogRef?.(),
-        }),
-      ]),
-      presetWrap,
-    ]),
-    h('div', { class: 'space-y-1.5' }, [fieldLabel('内置载体'), builtinWrap]),
-    h('div', { class: 'space-y-1.5' }, [
-      h('div', { class: 'flex items-baseline justify-between gap-2' }, [
-        fieldLabel('AI 角色'),
-        h('button', {
-          type: 'button',
-          class:
-            'rounded-md border border-[var(--border)] bg-[var(--bg)] px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
-          textContent: '💡 生成代码',
-          title: '用 AI 生成角色绘制代码（保存前做双端点校验）',
-          onclick: () => openActorDialogRef?.(),
-        }),
-      ]),
-      customActorWrap,
-      h('p', {
-        class: 'text-[10px] text-[var(--fg-muted)]',
-        textContent: 'AI 绘制的角色以代码方案保存，删除后回退内置载体。',
-      }),
-    ]),
-    h('div', { class: 'space-y-1.5' }, [
-      h('div', { class: 'flex items-baseline justify-between gap-2' }, [
-        fieldLabel('我的素材'),
-        h('span', {
-          class: 'text-[10px] text-[var(--fg-muted)]',
-          textContent: 'PNG / SVG / GIF · 透明底更佳',
-        }),
-      ]),
-      uploadZone,
-      assetWrap,
-      h('p', {
-        class: 'text-[10px] leading-relaxed text-[var(--fg-muted)]',
-        textContent:
-          'GIF 动图会按歌曲时间循环播放，适合人物跑动。iconfont：下载 SVG 后上传，或复制图标页的 SVG 源码再点「粘贴 SVG」。素材只保存在本机，不会上传服务器。',
-      }),
-    ]),
+  /** 通用参数（full 模式 AI 效果下隐藏，由代码自行控制） */
+  const legacyControls = h('div', { class: 'space-y-3' }, [
     h('div', { class: 'space-y-1.5' }, [fieldLabel('运动'), motionSeg.wrap]),
     h('div', { class: 'space-y-1.5' }, [fieldLabel('尾迹'), trailSeg.wrap, trailLenRow]),
     sizeRow,
@@ -1628,6 +1610,50 @@ function render(): void {
         [tempoInput, '随音乐律动'],
       ),
     ]),
+  ]);
+
+  const effectPanel = h('div', { class: 'hidden space-y-3' }, [
+    h('div', { class: 'space-y-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-2' }, [
+      h('div', { class: 'flex items-baseline justify-between gap-2' }, [
+        fieldLabel('AI 效果'),
+        h('button', {
+          type: 'button',
+          class:
+            'rounded-md border border-[var(--accent)] bg-[var(--bg)] px-1.5 py-0.5 text-[10px] text-[var(--accent)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--accent-fg)]',
+          textContent: '💡 生成效果',
+          title: '描述一句话，让 AI 生成整条进度条的绘制代码',
+          onclick: () => openEffectDialogRef?.(),
+        }),
+      ]),
+      customActorWrap,
+      h('p', {
+        class: 'text-[10px] leading-relaxed text-[var(--fg-muted)]',
+        textContent:
+          '生成并保存后即为 AI 效果方案，点击可切换、悬停可删除。选择下方载体后，AI 代码直接控制轨道、时间、载体与尾迹。',
+      }),
+    ]),
+    h('div', { class: 'space-y-1.5' }, [
+      h('p', { class: 'text-[11px] text-[var(--fg-muted)]', textContent: '预设玩法' }),
+      presetWrap,
+    ]),
+    h('div', { class: 'space-y-1.5' }, [fieldLabel('载体（内置）'), builtinWrap]),
+    h('div', { class: 'space-y-1.5' }, [
+      h('div', { class: 'flex items-baseline justify-between gap-2' }, [
+        fieldLabel('载体（我的素材 / 上传）'),
+        h('span', {
+          class: 'text-[10px] text-[var(--fg-muted)]',
+          textContent: 'PNG / SVG / GIF · 透明底更佳',
+        }),
+      ]),
+      uploadZone,
+      assetWrap,
+      h('p', {
+        class: 'text-[10px] leading-relaxed text-[var(--fg-muted)]',
+        textContent:
+          'GIF 动图会按歌曲时间循环播放。iconfont：下载 SVG 后上传，或复制图标页的 SVG 源码再点「粘贴 SVG」。素材只保存在本机，不会上传服务器。',
+      }),
+    ]),
+    legacyControls,
     effectStatus,
   ]);
 
@@ -1636,7 +1662,8 @@ function render(): void {
   let effectCollapsed = readJSON(COLLAPSE_KEY)?.collapsed === true;
   const effectDesc = h('p', {
     class: 'text-[11px] leading-relaxed text-[var(--fg-muted)]',
-    textContent: '让足球、流星、地球或你上传的图标沿进度条前进；载体、运动、尾迹可自由组合。',
+    textContent:
+      '让足球、流星、地球、你上传的图标或 AI 生成的效果沿进度条前进；AI 效果可直接接管轨道、时间与尾迹。',
   });
   const collapseBtn = h('button', {
     type: 'button',
@@ -1705,6 +1732,21 @@ function render(): void {
   function paintEffectActive(): void {
     const eff = opts.progressEffect;
     const sig = eff ? effectCoreSignature(eff) : '';
+    const full = isFullEffect(eff);
+    const activeBuiltin = full
+      ? eff?.codeBase?.kind === 'builtin'
+        ? eff.codeBase.id
+        : null
+      : eff?.actor.kind === 'builtin'
+        ? eff.actor.id
+        : null;
+    const activeAsset = full
+      ? eff?.codeBase?.kind === 'asset'
+        ? eff.codeBase.id
+        : null
+      : eff?.actor.kind === 'asset'
+        ? eff.actor.id
+        : null;
     for (const btn of presetButtons) {
       const preset = PROGRESS_PRESETS.find((p) => p.id === btn.dataset.presetId);
       const active = !!(preset && sig === effectCoreSignature(preset.effect));
@@ -1712,12 +1754,12 @@ function render(): void {
       btn.style.outlineOffset = '2px';
     }
     for (const [id, btn] of builtinButtons) {
-      const active = !!eff && eff.actor.kind === 'builtin' && eff.actor.id === id;
+      const active = id === activeBuiltin;
       btn.style.outline = active ? '2px solid var(--accent)' : 'none';
       btn.style.outlineOffset = '2px';
     }
     for (const [id, btn] of assetButtons) {
-      const active = !!eff && eff.actor.kind === 'asset' && eff.actor.id === id;
+      const active = id === activeAsset;
       btn.style.outline = active ? '2px solid var(--accent)' : 'none';
       btn.style.outlineOffset = '2px';
     }
@@ -1726,6 +1768,11 @@ function render(): void {
       btn.style.outline = active ? '2px solid var(--accent)' : 'none';
       btn.style.outlineOffset = '2px';
     }
+  }
+
+  /** 当前是否为 full 模式 AI 效果（代码绘制整条进度条） */
+  function isFullEffect(eff: ProgressEffect | null): boolean {
+    return !!eff && eff.actor.kind === 'code' && getCustomEffectMode(eff.actor.id) === 'full';
   }
 
   /** 选项 → 控件回填（开关、显隐、高亮、滑杆数值） */
@@ -1737,6 +1784,7 @@ function render(): void {
     progressStyleRow.classList.toggle('hidden', !!eff);
     if (!eff) {
       tintInput.disabled = false;
+      legacyControls.classList.remove('hidden');
       paintEffectActive();
       return;
     }
@@ -1756,22 +1804,34 @@ function render(): void {
     tintInput.checked = eff.tint === 'accent';
     tintInput.disabled = eff.actor.kind === 'code';
     tempoInput.checked = eff.tempoSync;
+    legacyControls.classList.toggle('hidden', isFullEffect(eff));
     paintEffectActive();
   }
 
-  /** 选中新导入素材并刷新 chips / 载体（SVG 自动跟随主题色，其余保留原色） */
-  async function applyImportedActor(record: ProgressAssetRecord, isSvg: boolean): Promise<void> {
+  /** 选中新导入素材；若当前是 AI 效果则作为「效果载体」，否则替换载体。返回是否用作效果载体 */
+  async function applyImportedActor(record: ProgressAssetRecord, isSvg: boolean): Promise<boolean> {
     const cur = opts.progressEffect;
+    const asCodeBase = cur?.actor.kind === 'code';
     updateOptions(() => {
-      opts.progressEffect = {
-        ...(cur ?? cloneProgressEffect(DEFAULT_PROGRESS_EFFECT)),
-        actor: { kind: 'asset', id: record.id },
-        tint: isSvg ? 'accent' : 'original',
-      };
+      if (asCodeBase && cur) {
+        opts.progressEffect = {
+          ...cur,
+          codeBase: { kind: 'asset', id: record.id },
+        };
+      } else {
+        opts.progressEffect = {
+          ...(cur ?? cloneProgressEffect(DEFAULT_PROGRESS_EFFECT)),
+          actor: { kind: 'asset', id: record.id },
+          tint: isSvg ? 'accent' : 'original',
+          // 记住当前载体，切到 AI 效果时可直接复用
+          codeBase: { kind: 'asset', id: record.id },
+        };
+      }
     });
     syncEffectUI();
     await rebuildAssetChips();
     await refreshActorAsset();
+    return asCodeBase;
   }
 
   /** 读取并保存一条静态素材，随后选中它 */
@@ -1789,8 +1849,11 @@ function render(): void {
     if (!record) {
       throw new Error('本地素材库不可用（可能处于隐私模式或浏览器不支持 IndexedDB）');
     }
-    await applyImportedActor(record, isSvg);
-    setEffectStatus(`已导入「${record.name}」${isSvg ? '（已自动跟随主题色）' : ''}`, 'ok');
+    const asBase = await applyImportedActor(record, isSvg);
+    setEffectStatus(
+      `已导入「${record.name}」${asBase ? '（已作为 AI 效果载体）' : isSvg ? '（已自动跟随主题色）' : ''}`,
+      'ok',
+    );
   }
 
   /** 保存 GIF（原始文件入库、解码结果预填缓存），随后选中它 */
@@ -1808,9 +1871,11 @@ function render(): void {
       throw new Error('本地素材库不可用（可能处于隐私模式或浏览器不支持 IndexedDB）');
     }
     primeGifActor(record.id, processed.animation);
-    await applyImportedActor(record, false);
+    const asBase = await applyImportedActor(record, false);
     setEffectStatus(
-      `已导入 GIF「${record.name}」（${processed.frameCount} 帧，${(processed.durationMs / 1000).toFixed(1)} 秒循环）`,
+      asBase
+        ? `GIF 已作为 AI 效果载体（${processed.frameCount} 帧，${(processed.durationMs / 1000).toFixed(1)} 秒循环）`
+        : `已导入 GIF「${record.name}」（${processed.frameCount} 帧，${(processed.durationMs / 1000).toFixed(1)} 秒循环）`,
       'ok',
     );
   }
@@ -1902,12 +1967,17 @@ function render(): void {
           onclick: () => {
             const cur = opts.progressEffect;
             if (!cur) return;
+            const full = isFullEffect(cur);
             updateOptions(() => {
-              opts.progressEffect = {
-                ...cur,
-                actor: { kind: 'asset', id: record.id },
-                ...(record.kind === 'gif' ? { tint: 'original' as const } : {}),
-              };
+              opts.progressEffect = full
+                ? { ...cur, codeBase: { kind: 'asset', id: record.id } }
+                : {
+                    ...cur,
+                    actor: { kind: 'asset', id: record.id },
+                    // 记住当前载体，切到 AI 效果时可直接复用
+                    codeBase: { kind: 'asset', id: record.id },
+                    ...(record.kind === 'gif' ? { tint: 'original' as const } : {}),
+                  };
             });
             syncEffectUI();
             void refreshActorAsset();
@@ -1957,6 +2027,15 @@ function render(): void {
                     motion: 'roll',
                   };
                 });
+              } else if (
+                cur &&
+                isFullEffect(cur) &&
+                cur.codeBase?.kind === 'asset' &&
+                cur.codeBase.id === record.id
+              ) {
+                updateOptions(() => {
+                  opts.progressEffect = { ...cur, codeBase: null };
+                });
               }
               syncEffectUI();
               await rebuildAssetChips();
@@ -1972,7 +2051,7 @@ function render(): void {
     paintEffectActive();
   }
 
-  /** 选择一个 AI 角色代码方案 */
+  /** 选择一个 AI 效果代码方案 */
   function selectCustomActor(id: string): void {
     const cur = opts.progressEffect;
     updateOptions(() => {
@@ -1988,7 +2067,7 @@ function render(): void {
     setEffectStatus('');
   }
 
-  /** 刷新「AI 角色」chips（删除当前方案时回退内置足球） */
+  /** 刷新「AI 效果」chips（删除当前方案时回退内置足球） */
   function rebuildActorChips(): void {
     const items: CustomProgressActor[] = loadCustomActors();
     customActorWrap.replaceChildren();
@@ -2000,7 +2079,7 @@ function render(): void {
         {
           type: 'button',
           'data-actor-code-id': item.id,
-          title: `使用 AI 角色「${item.name}」`,
+          title: `使用 AI 效果「${item.name}」`,
           class:
             'flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg)] px-1.5 py-1 text-[11px] text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)]',
           onclick: () => selectCustomActor(item.id),
@@ -2018,15 +2097,15 @@ function render(): void {
         'button',
         {
           type: 'button',
-          'aria-label': `删除 AI 角色 ${item.name}`,
-          title: '删除此角色代码',
+          'aria-label': `删除 AI 效果 ${item.name}`,
+          title: '删除此 AI 效果方案',
           class:
             'absolute -right-1.5 -top-1.5 hidden h-4.5 w-4.5 items-center justify-center rounded-full bg-red-500 text-[9px] leading-none text-white shadow group-hover:flex',
           textContent: '✕',
           onclick: (e) => {
             e.stopPropagation();
-            void confirmDialog(`确定删除 AI 角色「${item.name}」吗？`, {
-              title: '删除 AI 角色',
+            void confirmDialog(`确定删除 AI 效果「${item.name}」吗？`, {
+              title: '删除 AI 效果',
               danger: true,
               confirmText: '删除',
             }).then(async (ok) => {
@@ -2035,7 +2114,7 @@ function render(): void {
               invalidateCustomActorCache(item.id);
               const cur = opts.progressEffect;
               if (cur?.actor.kind === 'code' && cur.actor.id === item.id) {
-                fallbackProgressActor('AI 角色已删除，已回退为内置足球。');
+                fallbackProgressActor('AI 效果已删除，已回退为内置足球。');
               }
               rebuildActorChips();
               await refreshActorAsset();
@@ -2049,46 +2128,7 @@ function render(): void {
     paintEffectActive();
   }
 
-  /** 应用 AI 配方：内置载体直用；素材名匹配素材库；缺失时保留当前载体 */
-  async function applyProgressRecipe(recipe: ProgressRecipe): Promise<void> {
-    let actor: ProgressActorRef;
-    if (recipe.actor.kind === 'builtin') {
-      actor = { kind: 'builtin', id: recipe.actor.id };
-    } else if (recipe.actor.kind === 'asset') {
-      const wanted = recipe.actor.name.trim().toLowerCase();
-      const records = await listProgressAssets();
-      const hit = records.find((r) => r.name.trim().toLowerCase() === wanted);
-      if (hit) {
-        actor = { kind: 'asset', id: hit.id };
-      } else {
-        actor = opts.progressEffect?.actor ?? { kind: 'builtin', id: 'football' };
-        setEffectStatus(`素材库中没有「${recipe.actor.name}」，已保留当前载体。`, 'warn');
-      }
-    } else {
-      actor = opts.progressEffect?.actor ?? { kind: 'builtin', id: 'football' };
-    }
-
-    const cur = opts.progressEffect;
-    updateOptions(() => {
-      opts.progressEffect = {
-        ...(cur ?? cloneProgressEffect(DEFAULT_PROGRESS_EFFECT)),
-        actor,
-        motion: recipe.motion,
-        trail: recipe.trail,
-        trailLen: recipe.trailLen,
-        size: recipe.size,
-        tint: recipe.tint,
-        tempoSync: recipe.tempoSync,
-        spin: recipe.spin,
-        halo: recipe.halo,
-        offsetY: recipe.offsetY,
-      };
-    });
-    syncEffectUI();
-    await refreshActorAsset();
-  }
-
-  /** AI 角色代码保存后：选中并刷新 chips */
+  /** AI 效果代码保存后：选中并刷新 chips */
   function applyActorCode(id: string): void {
     selectCustomActor(id);
     rebuildActorChips();
@@ -2550,12 +2590,9 @@ function render(): void {
       rebuildVisualizerChips();
     },
     onStyleApplied: applyParsedStyle,
-    getAssetNames: async () => (await listProgressAssets()).map((r) => r.name),
-    onProgressRecipeApplied: (recipe) => void applyProgressRecipe(recipe),
-    onActorApplied: (id) => applyActorCode(id),
+    onEffectApplied: (id) => applyActorCode(id),
   });
-  openProgressDialogRef = () => aiDialogs.openProgressEffectDialog();
-  openActorDialogRef = () => aiDialogs.openActorDialog();
+  openEffectDialogRef = () => aiDialogs.openEffectDialog();
 
   const aiVizBtn = h(
     'button',

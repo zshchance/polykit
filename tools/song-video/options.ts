@@ -376,6 +376,9 @@ export type ProgressActorRef =
   | { kind: 'asset'; id: string }
   | { kind: 'code'; id: string };
 
+/** AI 角色代码可选的底图素材（不会自动绘制，由代码用 img/frame 控制显隐与变换） */
+export type CodeBaseRef = { kind: 'builtin'; id: BuiltinActorId } | { kind: 'asset'; id: string };
+
 export type ProgressTint = 'original' | 'accent';
 
 export interface ProgressEffect {
@@ -397,6 +400,8 @@ export interface ProgressEffect {
   halo: number;
   /** 垂直偏移（相对短边 S，正数下移；按运动升降补偿后中心线可贴近轨道） */
   offsetY: number;
+  /** 代码角色的底图素材（仅 actor.kind==='code' 生效；null=无底图，由代码程序化绘制） */
+  codeBase?: CodeBaseRef | null;
 }
 
 export const DEFAULT_PROGRESS_EFFECT: ProgressEffect = {
@@ -517,6 +522,23 @@ const clampNum = (v: unknown, min: number, max: number, fallback: number): numbe
   return Math.min(max, Math.max(min, v));
 };
 
+/** 校验代码角色底图：只接受内置载体或 sva: 上传素材 */
+function normalizeCodeBase(v: unknown): CodeBaseRef | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  if (
+    o.kind === 'builtin' &&
+    typeof o.id === 'string' &&
+    BUILTIN_ACTORS.some((it) => it.id === o.id)
+  ) {
+    return { kind: 'builtin', id: o.id as BuiltinActorId };
+  }
+  if (o.kind === 'asset' && typeof o.id === 'string' && /^sva:[a-z0-9]{4,32}$/.test(o.id)) {
+    return { kind: 'asset', id: o.id };
+  }
+  return null;
+}
+
 /**
  * 逐字段归一化角色效果：整体不是对象返回 null（关闭）；
  * 局部字段非法时回退默认值（不因一个坏字段丢掉整套效果）。
@@ -573,6 +595,8 @@ export function normalizeProgressEffect(v: unknown): ProgressEffect | null {
     spin: clampNum(o.spin, 0, 3, motionId === 'roll' ? 1 : 0),
     halo: clampNum(o.halo, 0, 1, d.halo),
     offsetY: clampNum(o.offsetY, -0.2, 0.2, d.offsetY),
+    // 载体选择独立于当前效果模式：切回 AI 效果/普通效果后仍可复用上次载体
+    codeBase: normalizeCodeBase(o.codeBase),
   };
 }
 

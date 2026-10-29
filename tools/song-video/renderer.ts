@@ -72,9 +72,22 @@ export interface ActorAnimation {
   height: number;
 }
 
+/** 整条进度条的布局参数（full 模式 AI 代码用） */
+export interface CustomProgressLayout {
+  marginX: number;
+  barW: number;
+  trackY: number;
+  trackH: number;
+  /** 当前进度对应的载体中心 */
+  x: number;
+  y: number;
+  size: number;
+  angle: number;
+}
+
 /**
- * AI 角色绘制代码的单帧参数（经 custom-progress-actors.ts 编译包装后的形态）。
- * 代码只负责把「角色」画在 (x, y)，轨道/时间/尾迹由渲染层处理。
+ * AI 进度条效果代码的单帧参数（经 custom-progress-actors.ts 编译包装后的形态）。
+ * full 模式：代码绘制整条进度条；actor 模式：代码只画角色。
  */
 export interface CustomActorFrame {
   ctx: CanvasRenderingContext2D;
@@ -97,6 +110,8 @@ export interface CustomActorFrame {
   img: CanvasImageSource | null;
   /** 当前显示帧（GIF 时为当前帧；可 null） */
   frame: CanvasImageSource | null;
+  /** 进度条布局（full 模式用于绘制轨道/时间；actor 模式可忽略） */
+  layout: CustomProgressLayout;
 }
 
 /** 自定义角色绘制函数：返回 false 表示本会话已放弃（抛错/连续超帧） */
@@ -128,6 +143,8 @@ export interface RenderInput {
   actorFrames?: ActorAnimation | null;
   /** AI 角色绘制代码（opts.progressEffect.actor 为 code: id 时由调用方解析注入） */
   customActor?: CustomActorDraw | null;
+  /** true=full 模式（代码绘制整条进度条，渲染层不再画轨道/时间/尾迹） */
+  customActorFull?: boolean;
   /**
    * 自定义频谱绘制函数（opts.visualizer 为 cviz: id 时由调用方解析注入；
    * 缺失（已被删除/编译失败）时回退条形频谱）。
@@ -1410,6 +1427,62 @@ function drawActorProgress(
   const energy = eff.tempoSync && bands ? (bands[2] ?? 0) / 255 : 0;
   const height = Math.max(S * 0.05, eff.size * S * (1 + energy * 0.08));
 
+  // —— full 模式：AI 代码绘制整条进度条，渲染层不再画轨道/时间/尾迹 ——
+  if (custom && input.customActorFull) {
+    const anim = input.actorFrames ?? null;
+    const img = input.actorImage ?? null;
+    const frame: CanvasImageSource | null = anim
+      ? (anim.frames[frameIndexAt(anim.delays, anim.duration, ta)] ?? null)
+      : (img?.img ?? null);
+    const size = height;
+    const y = g.y - size / 2;
+    const layout: CustomProgressLayout = {
+      marginX: g.marginX,
+      barW: g.barW,
+      trackY: g.y,
+      trackH: g.h,
+      x,
+      y,
+      size,
+      angle: 0,
+    };
+    ctx.save();
+    const alive = custom({
+      ctx,
+      W,
+      H,
+      S,
+      p,
+      t: ta,
+      dur: timeline.audio,
+      x,
+      y,
+      size,
+      angle: 0,
+      theme,
+      img: img?.img ?? null,
+      frame,
+      layout,
+    });
+    ctx.restore();
+    if (!alive) {
+      // 代码失效：画一条基础轨道 + 光点 + 时间，避免整条进度条消失
+      ctx.save();
+      ctx.fillStyle = 'rgba(128,128,128,0.35)';
+      roundRectPath(ctx, g.marginX, g.y, g.barW, g.h, g.h / 2);
+      ctx.fill();
+      if (p > 0.001) {
+        ctx.fillStyle = withAlpha(theme.accent, 0.72);
+        roundRectPath(ctx, g.marginX, g.y, Math.max(g.h, g.barW * p), g.h, g.h / 2);
+        ctx.fill();
+      }
+      ctx.translate(x, y);
+      drawActorFallback(ctx, theme, size);
+      ctx.restore();
+    }
+    return;
+  }
+
   // —— 轨道 ——
   ctx.save();
   ctx.fillStyle = 'rgba(128,128,128,0.35)';
@@ -1513,7 +1586,17 @@ function drawActorProgress(
   }
 
   if (custom) {
-    // AI 角色代码：全局坐标系直接画在 (x, cy)，不叠加渲染层旋转
+    // 旧版 actor 代码：全局坐标系直接画在 (x, cy)，不叠加渲染层旋转
+    const layout: CustomProgressLayout = {
+      marginX: g.marginX,
+      barW: g.barW,
+      trackY: g.y,
+      trackH: g.h,
+      x,
+      y: cy,
+      size: height,
+      angle,
+    };
     ctx.save();
     const alive = custom({
       ctx,
@@ -1530,6 +1613,7 @@ function drawActorProgress(
       theme,
       img: img?.img ?? null,
       frame,
+      layout,
     });
     ctx.restore();
     if (!alive) {

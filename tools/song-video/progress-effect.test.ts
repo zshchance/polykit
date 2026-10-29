@@ -66,6 +66,26 @@ describe('normalizeProgressEffect', () => {
     expect(out!.tempoSync).toBe(false);
   });
 
+  it('代码角色底图只对 code 生效并做白名单校验', () => {
+    const code = normalizeProgressEffect({
+      actor: { kind: 'code', id: 'cvact:ab12cd34' },
+      codeBase: { kind: 'builtin', id: 'earth' },
+    });
+    expect(code!.codeBase).toEqual({ kind: 'builtin', id: 'earth' });
+
+    const bad = normalizeProgressEffect({
+      actor: { kind: 'code', id: 'cvact:ab12cd34' },
+      codeBase: { kind: 'asset', id: 'javascript:alert(1)' },
+    });
+    expect(bad!.codeBase).toBeNull();
+
+    const nonCode = normalizeProgressEffect({
+      actor: { kind: 'builtin', id: 'football' },
+      codeBase: { kind: 'builtin', id: 'earth' },
+    });
+    expect(nonCode!.codeBase).toEqual({ kind: 'builtin', id: 'earth' });
+  });
+
   it('旋转/光晕/偏移越界被钳制', () => {
     const out = normalizeProgressEffect({
       actor: { kind: 'builtin', id: 'earth' },
