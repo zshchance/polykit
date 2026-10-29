@@ -79,17 +79,22 @@ import {
   listProgressAssets,
   loadBuiltinActor,
   loadUploadedActor,
+  prepareGifAsset,
   prepareImageAsset,
   prepareSvgAsset,
+  primeGifActor,
   saveProgressAsset,
+  tintActorAnimation,
   tintActorAsset,
   type ProcessedActorAsset,
+  type ProcessedGifAsset,
   type ProgressAssetRecord,
 } from './progress-assets';
 import {
   computeBands,
   drawFrame,
   resetListScroll,
+  type ActorAnimation,
   type ImageAsset,
   type RenderInput,
 } from './renderer';
@@ -315,8 +320,10 @@ function render(): void {
   let coverAsset: ImageAsset | null = null;
   let bgUrl: string | null = null;
   let coverUrl: string | null = null;
-  /** 角色进度条已解析的载体（内置/上传 + 主题染色）；每帧读取，不能异步解析 */
+  /** 角色进度条已解析的载体（内置/上传素材）；每帧读取，不能异步解析 */
   let actorAsset: ImageAsset | null = null;
+  /** GIF 动图帧序列（有值时优先于 actorAsset 播放） */
+  let actorAnimation: ActorAnimation | null = null;
   /** 防止快速切换载体时旧素材后到覆盖新素材 */
   let actorAssetToken = 0;
   /** 用户是否手动编辑过标题（未编辑时选新歌自动跟随文件名） */
@@ -375,6 +382,7 @@ function render(): void {
       bgImage: bgAsset,
       coverImage: coverAsset,
       actorImage: actorAsset,
+      actorFrames: actorAnimation,
       // 自定义频谱：id → 编译产物走模块级缓存（本函数每帧执行，不能重复编译）
       customVisualizer:
         typeof opts.visualizer === 'string' && isCustomVisualizerId(opts.visualizer)
@@ -611,28 +619,35 @@ function render(): void {
   }
 
   /**
-   * 解析当前角色效果对应的载体图片：
-   *   内置精灵 / IndexedDB 上传素材 → 可选主题染色 → actorAsset（供每帧渲染读取）。
-   * 素材被删除或换了浏览器时回退内置足球，避免画面空白。
+   * 解析当前角色效果对应的载体：
+   *   内置精灵 / 上传静态图 / 上传 GIF → 可选主题染色 → actorAsset / actorAnimation。
+   * 素材被删除、换了浏览器或 GIF 解码失败时回退内置足球，避免画面空白。
    */
   async function refreshActorAsset(): Promise<void> {
     const token = ++actorAssetToken;
     const eff = opts.progressEffect;
     if (!eff) {
       actorAsset = null;
+      actorAnimation = null;
       drawStaticFrame();
       return;
     }
 
-    let asset: ImageAsset | null;
+    let image: ImageAsset | null = null;
+    let animation: ActorAnimation | null = null;
     let cacheKey: string;
+
     if (eff.actor.kind === 'builtin') {
-      asset = await loadBuiltinActor(eff.actor.id);
+      image = await loadBuiltinActor(eff.actor.id);
       cacheKey = `builtin:${eff.actor.id}`;
     } else {
-      asset = await loadUploadedActor(eff.actor.id);
       cacheKey = `asset:${eff.actor.id}`;
-      if (!asset) {
+      const loaded = await loadUploadedActor(eff.actor.id);
+      if (loaded?.kind === 'image') {
+        image = loaded.image;
+      } else if (loaded?.kind === 'gif') {
+        animation = loaded.animation;
+      } else {
         opts.progressEffect = {
           ...eff,
           actor: { kind: 'builtin', id: 'football' },
@@ -640,18 +655,20 @@ function render(): void {
         };
         saveOptions(opts);
         syncEffectUI();
-        setEffectStatus('素材已不存在，已回退为内置足球。', 'warn');
-        asset = await loadBuiltinActor('football');
+        setEffectStatus('素材已不存在或无法解码，已回退为内置足球。', 'warn');
+        image = await loadBuiltinActor('football');
         cacheKey = 'builtin:football';
       }
     }
 
     if (token !== actorAssetToken) return; // 已有更新的切换请求，丢弃本次结果
-    if (asset && opts.progressEffect?.tint === 'accent') {
+    if (opts.progressEffect?.tint === 'accent') {
       const accent = opts.accentColor ?? resolveTheme(opts.theme).accent;
-      asset = tintActorAsset(cacheKey, asset, accent);
+      if (image) image = tintActorAsset(cacheKey, image, accent);
+      if (animation) animation = tintActorAnimation(cacheKey, animation, accent);
     }
-    actorAsset = asset;
+    actorAsset = image;
+    actorAnimation = animation;
     drawStaticFrame();
   }
 
@@ -1222,7 +1239,7 @@ function render(): void {
     type: 'button',
     class: effectMiniBtnCls,
     textContent: '⬆ 上传素材',
-    title: '支持 PNG / JPG / WebP / SVG；GIF 动图将在下一版支持',
+    title: '支持 PNG / JPG / WebP / SVG / GIF 动图',
     onclick: () => assetInput.click(),
   });
   const pasteImgBtn = h('button', {
@@ -1393,7 +1410,7 @@ function render(): void {
         fieldLabel('我的素材'),
         h('span', {
           class: 'text-[10px] text-[var(--fg-muted)]',
-          textContent: 'PNG / SVG · 透明底更佳',
+          textContent: 'PNG / SVG / GIF · 透明底更佳',
         }),
       ]),
       uploadZone,
@@ -1401,7 +1418,7 @@ function render(): void {
       h('p', {
         class: 'text-[10px] leading-relaxed text-[var(--fg-muted)]',
         textContent:
-          'iconfont：下载 SVG 后上传，或复制图标页的 SVG 源码再点「粘贴 SVG」。素材只保存在本机，不会上传服务器。',
+          'GIF 动图会按歌曲时间循环播放，适合人物跑动。iconfont：下载 SVG 后上传，或复制图标页的 SVG 源码再点「粘贴 SVG」。素材只保存在本机，不会上传服务器。',
       }),
     ]),
     h('div', { class: 'space-y-1.5' }, [fieldLabel('运动'), motionSeg.wrap]),
@@ -1499,7 +1516,22 @@ function render(): void {
     paintEffectActive();
   }
 
-  /** 读取并保存一条上传素材，随后选中它 */
+  /** 选中新导入素材并刷新 chips / 载体（SVG 自动跟随主题色，其余保留原色） */
+  async function applyImportedActor(record: ProgressAssetRecord, isSvg: boolean): Promise<void> {
+    const cur = opts.progressEffect;
+    updateOptions(() => {
+      opts.progressEffect = {
+        ...(cur ?? cloneProgressEffect(DEFAULT_PROGRESS_EFFECT)),
+        actor: { kind: 'asset', id: record.id },
+        tint: isSvg ? 'accent' : 'original',
+      };
+    });
+    syncEffectUI();
+    await rebuildAssetChips();
+    await refreshActorAsset();
+  }
+
+  /** 读取并保存一条静态素材，随后选中它 */
   async function persistImportedAsset(
     processed: ProcessedActorAsset,
     name: string,
@@ -1514,24 +1546,40 @@ function render(): void {
     if (!record) {
       throw new Error('本地素材库不可用（可能处于隐私模式或浏览器不支持 IndexedDB）');
     }
-    const cur = opts.progressEffect;
-    updateOptions(() => {
-      opts.progressEffect = {
-        ...(cur ?? cloneProgressEffect(DEFAULT_PROGRESS_EFFECT)),
-        actor: { kind: 'asset', id: record.id },
-        ...(isSvg ? { tint: 'accent' as const } : {}),
-      };
-    });
-    syncEffectUI();
-    await rebuildAssetChips();
-    await refreshActorAsset();
+    await applyImportedActor(record, isSvg);
     setEffectStatus(`已导入「${record.name}」${isSvg ? '（已自动跟随主题色）' : ''}`, 'ok');
+  }
+
+  /** 保存 GIF（原始文件入库、解码结果预填缓存），随后选中它 */
+  async function persistGifAsset(processed: ProcessedGifAsset, name: string): Promise<void> {
+    const record = await saveProgressAsset({
+      name,
+      blob: processed.blob,
+      width: processed.width,
+      height: processed.height,
+      kind: 'gif',
+      frameCount: processed.frameCount,
+      durationMs: processed.durationMs,
+    });
+    if (!record) {
+      throw new Error('本地素材库不可用（可能处于隐私模式或浏览器不支持 IndexedDB）');
+    }
+    primeGifActor(record.id, processed.animation);
+    await applyImportedActor(record, false);
+    setEffectStatus(
+      `已导入 GIF「${record.name}」（${processed.frameCount} 帧，${(processed.durationMs / 1000).toFixed(1)} 秒循环）`,
+      'ok',
+    );
   }
 
   async function importActorFile(file: File): Promise<void> {
     try {
-      if (file.type === 'image/gif' || /\.gif$/i.test(file.name)) {
-        throw new Error('GIF 动图将在下一版支持；当前请先上传 PNG / SVG 静态素材。');
+      const isGif = file.type === 'image/gif' || /\.gif$/i.test(file.name);
+      if (isGif) {
+        setEffectStatus('正在解码 GIF…', 'warn');
+        const processed = await prepareGifAsset(file);
+        await persistGifAsset(processed, cleanAssetName(file.name));
+        return;
       }
       setEffectStatus('正在处理素材…', 'warn');
       const isSvg = file.type === 'image/svg+xml' || /\.svg$/i.test(file.name);
@@ -1554,10 +1602,11 @@ function render(): void {
       for (const item of items) {
         const type = item.types.find((t) => t.startsWith('image/'));
         if (!type) continue;
-        if (type === 'image/gif') {
-          throw new Error('GIF 动图将在下一版支持，请先粘贴 PNG 截图。');
-        }
         const blob = await item.getType(type);
+        if (type === 'image/gif') {
+          await importActorFile(new File([blob], 'clipboard.gif', { type: 'image/gif' }));
+          return;
+        }
         const processed = await prepareImageAsset(new File([blob], 'clipboard.png', { type }));
         await persistImportedAsset(processed, '剪贴板图片', false);
         return;
@@ -1601,14 +1650,21 @@ function render(): void {
         {
           type: 'button',
           'data-asset-id': record.id,
-          title: `使用素材「${record.name}」`,
+          title:
+            record.kind === 'gif' && record.frameCount
+              ? `使用 GIF「${record.name}」（${record.frameCount} 帧）`
+              : `使用素材「${record.name}」`,
           class:
             'flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg)] px-1.5 py-1 text-[11px] text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)]',
           onclick: () => {
             const cur = opts.progressEffect;
             if (!cur) return;
             updateOptions(() => {
-              opts.progressEffect = { ...cur, actor: { kind: 'asset', id: record.id } };
+              opts.progressEffect = {
+                ...cur,
+                actor: { kind: 'asset', id: record.id },
+                ...(record.kind === 'gif' ? { tint: 'original' as const } : {}),
+              };
             });
             syncEffectUI();
             void refreshActorAsset();
@@ -1618,6 +1674,15 @@ function render(): void {
         [
           h('img', { src: url, alt: '', class: 'h-6 w-6 rounded object-contain' }),
           h('span', { class: 'max-w-[4.5rem] truncate', textContent: record.name }),
+          ...(record.kind === 'gif'
+            ? [
+                h('span', {
+                  class:
+                    'rounded bg-[var(--accent)] px-1 text-[9px] leading-4 text-[var(--accent-fg)]',
+                  textContent: 'GIF',
+                }),
+              ]
+            : []),
         ],
       ) as HTMLButtonElement;
       assetButtons.set(record.id, btn);

@@ -43,6 +43,7 @@
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.13",
     "dompurify": "^3.4.16",
+    "gifuct-js": "^2.1.2",
     "html-to-image": "^1.11.13",
     "jsqr": "^1.4.0",
     "katex": "^0.18.10",

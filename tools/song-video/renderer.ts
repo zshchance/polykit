@@ -24,6 +24,7 @@ import {
   Timeline,
   VisualizerId,
 } from './options';
+import { frameIndexAt } from './progress-gif';
 
 // ─────────────────────────── 输入类型 ───────────────────────────
 
@@ -56,6 +57,21 @@ export interface CustomVisualizerFrame {
  */
 export type CustomVisualizerDraw = (frame: CustomVisualizerFrame) => boolean;
 
+/**
+ * 动图载体：GIF 解码后的帧序列。
+ * 帧由渲染层按音频时间 ta 选取（循环播放），预览/拖动/导出完全一致。
+ */
+export interface ActorAnimation {
+  frames: CanvasImageSource[];
+  /** 每帧显示时长（秒） */
+  delays: number[];
+  /** 一轮总时长（秒） */
+  duration: number;
+  /** 统一裁边后的帧宽高 */
+  width: number;
+  height: number;
+}
+
 /** 已加载的图片资源（img 为可直接 drawImage 的来源） */
 export interface ImageAsset {
   img: CanvasImageSource;
@@ -78,6 +94,8 @@ export interface RenderInput {
   coverImage: ImageAsset | null;
   /** 角色进度条载体图片（内置/上传素材；null 时渲染层回退发光圆点） */
   actorImage?: ImageAsset | null;
+  /** 动图载体（GIF）；有值时优先于 actorImage 逐帧播放 */
+  actorFrames?: ActorAnimation | null;
   /**
    * 自定义频谱绘制函数（opts.visualizer 为 cviz: id 时由调用方解析注入；
    * 缺失（已被删除/编译失败）时回退条形频谱）。
@@ -1179,7 +1197,8 @@ interface ProgressTrailCtx {
   theme: Theme;
   /** 音频内时间（火星闪烁的确定性种子） */
   ta: number;
-  img: ImageAsset | null;
+  /** 当前显示的帧/静态图（残影复用同一帧） */
+  frame: CanvasImageSource | null;
   /** 频段能量 0-1（tempoSync 时放大尾迹亮度） */
   energy: number;
   /** 内容层整体 alpha（尾迹必须乘上，不能打穿开场/结尾淡入淡出） */
@@ -1267,7 +1286,7 @@ function drawProgressTrail(
   // echo：沿轨迹重复淡出的分身；没有图片时退化为光晕
   if (kind === 'echo') {
     ctx.save();
-    if (!c.img) {
+    if (!c.frame) {
       const grad = ctx.createLinearGradient(c.x - c.len, 0, c.x, 0);
       grad.addColorStop(0, withAlpha(c.theme.accent, 0));
       grad.addColorStop(1, withAlpha(c.theme.accent, 0.7));
@@ -1289,13 +1308,7 @@ function drawProgressTrail(
       ctx.globalAlpha = c.baseAlpha * (1 - q) * 0.35;
       ctx.translate(px, c.y);
       ctx.rotate(c.angle);
-      ctx.drawImage(
-        c.img.img,
-        (-c.aw * scale) / 2,
-        (-c.ah * scale) / 2,
-        c.aw * scale,
-        c.ah * scale,
-      );
+      ctx.drawImage(c.frame, (-c.aw * scale) / 2, (-c.ah * scale) / 2, c.aw * scale, c.ah * scale);
       ctx.restore();
     }
     ctx.restore();
@@ -1336,19 +1349,20 @@ function drawActorProgress(
   ctx.restore();
 
   // —— 载体尺寸：contain 进 size 高度、宽度上限 1.9 倍的框 ——
+  const anim = input.actorFrames ?? null;
   const img = input.actorImage ?? null;
+  const srcW = anim?.width ?? img?.w ?? height;
+  const srcH = anim?.height ?? img?.h ?? height;
   const maxW = height * 1.9;
-  let aw = height;
-  let ah = height;
-  if (img) {
-    const ratio = img.w / Math.max(1, img.h);
-    if (ratio > maxW / height) {
-      aw = maxW;
-      ah = maxW / ratio;
-    } else {
-      ah = height;
-      aw = height * ratio;
-    }
+  let aw: number;
+  let ah: number;
+  const ratio = srcW / Math.max(1, srcH);
+  if (ratio > maxW / height) {
+    aw = maxW;
+    ah = maxW / ratio;
+  } else {
+    ah = height;
+    aw = height * ratio;
   }
 
   // —— 运动轨迹（bottom = 载体底边）；进度 x 与姿态互不干扰 ——
@@ -1376,6 +1390,10 @@ function drawActorProgress(
   }
 
   const cy = bottom - ah / 2;
+  // 动图按音频时间循环取帧（ta 与进度同源，拖动/导出不会跳帧）
+  const frame: CanvasImageSource | null = anim
+    ? (anim.frames[frameIndexAt(anim.delays, anim.duration, ta)] ?? null)
+    : (img?.img ?? null);
   const trailLen = clamp01(eff.trailLen);
   const trail = Math.min(x - g.marginX, g.barW * 0.45 * trailLen);
   if (eff.trail !== 'none' && trail > S * 0.008) {
@@ -1388,7 +1406,7 @@ function drawActorProgress(
       angle,
       theme,
       ta,
-      img,
+      frame,
       energy,
       baseAlpha: ctx.globalAlpha,
     });
@@ -1415,8 +1433,8 @@ function drawActorProgress(
   ctx.save();
   ctx.translate(x, cy);
   ctx.rotate(angle);
-  if (img) {
-    ctx.drawImage(img.img, -aw / 2, -ah / 2, aw, ah);
+  if (frame) {
+    ctx.drawImage(frame, -aw / 2, -ah / 2, aw, ah);
   } else {
     // 素材加载中/失败：发光圆点兜底，保证画面不空
     ctx.fillStyle = withAlpha(theme.accent, 0.9);
