@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <defs>
+    <radialGradient id="globe" cx="35%" cy="30%" r="72%">
+      <stop offset="0" stop-color="#60a5fa"/>
+      <stop offset="0.62" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#1e3a8a"/>
+    </radialGradient>
+  </defs>
+  <circle cx="32" cy="32" r="25" fill="url(#globe)"/>
+  <path d="M17 23c6-2 10 0 12 4s2 7-2 9-9 0-11-3-3-8 1-10z" fill="#22c55e"/>
+  <path d="M35 18c5 0 9 3 11 7-4 2-8 1-10-2s-3-4-1-5z" fill="#4ade80"/>
+  <path d="M33 44c5-2 9-1 12 2-3 5-8 7-13 6-2-3-1-6 1-8z" fill="#16a34a"/>
+  <circle cx="23" cy="20" r="5" fill="#ffffff" opacity=".32"/>
+</svg>

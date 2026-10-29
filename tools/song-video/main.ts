@@ -20,8 +20,10 @@ import {
 import { parseLyrics, type LyricLine } from './lyrics';
 import {
   ASPECTS,
+  BUILTIN_ACTORS,
   COVER_DUR_CHOICES,
   COVER_STYLES,
+  DEFAULT_PROGRESS_EFFECT,
   END_ROLL_MODES,
   INTRO_ANIMS,
   INTRO_DUR_CHOICES,
@@ -31,6 +33,9 @@ import {
   OUTRO_ANIMS,
   OUTRO_DUR_CHOICES,
   PROGRESS_BARS,
+  PROGRESS_MOTIONS,
+  PROGRESS_PRESETS,
+  PROGRESS_TRAILS,
   RESOLUTIONS,
   THEMES,
   VISUALIZERS,
@@ -44,6 +49,9 @@ import {
   type EndRollModeId,
   type LyricModeId,
   type ProgressBarId,
+  type ProgressEffect,
+  type ProgressMotionId,
+  type ProgressTrailId,
   type ResolutionId,
   type Theme,
   type Timeline,
@@ -63,6 +71,21 @@ import {
   type ParsedStyle,
 } from './custom-styles';
 import { createAiDialogs } from './ai-dialogs';
+import {
+  builtinActorSpriteUrl,
+  cleanAssetName,
+  deleteProgressAsset,
+  invalidateActorAssetCache,
+  listProgressAssets,
+  loadBuiltinActor,
+  loadUploadedActor,
+  prepareImageAsset,
+  prepareSvgAsset,
+  saveProgressAsset,
+  tintActorAsset,
+  type ProcessedActorAsset,
+  type ProgressAssetRecord,
+} from './progress-assets';
 import {
   computeBands,
   drawFrame,
@@ -292,6 +315,10 @@ function render(): void {
   let coverAsset: ImageAsset | null = null;
   let bgUrl: string | null = null;
   let coverUrl: string | null = null;
+  /** 角色进度条已解析的载体（内置/上传 + 主题染色）；每帧读取，不能异步解析 */
+  let actorAsset: ImageAsset | null = null;
+  /** 防止快速切换载体时旧素材后到覆盖新素材 */
+  let actorAssetToken = 0;
   /** 用户是否手动编辑过标题（未编辑时选新歌自动跟随文件名） */
   let titleEdited = false;
 
@@ -347,6 +374,7 @@ function render(): void {
       title: opts.titleText.trim() || audio?.name || '未命名歌曲',
       bgImage: bgAsset,
       coverImage: coverAsset,
+      actorImage: actorAsset,
       // 自定义频谱：id → 编译产物走模块级缓存（本函数每帧执行，不能重复编译）
       customVisualizer:
         typeof opts.visualizer === 'string' && isCustomVisualizerId(opts.visualizer)
@@ -575,6 +603,56 @@ function render(): void {
   function drawStaticFrame(): void {
     const t = pausedAt <= 0.01 ? Math.max(opts.introDur, 0.01) : pausedAt;
     drawPreview(audio ? t : Math.max(opts.introDur, 0.01));
+  }
+
+  /** 复制一份角色效果（避免直接改 DEFAULT_PROGRESS_EFFECT / 预设常量） */
+  function cloneProgressEffect(e: ProgressEffect): ProgressEffect {
+    return { ...e, actor: { ...e.actor } };
+  }
+
+  /**
+   * 解析当前角色效果对应的载体图片：
+   *   内置精灵 / IndexedDB 上传素材 → 可选主题染色 → actorAsset（供每帧渲染读取）。
+   * 素材被删除或换了浏览器时回退内置足球，避免画面空白。
+   */
+  async function refreshActorAsset(): Promise<void> {
+    const token = ++actorAssetToken;
+    const eff = opts.progressEffect;
+    if (!eff) {
+      actorAsset = null;
+      drawStaticFrame();
+      return;
+    }
+
+    let asset: ImageAsset | null;
+    let cacheKey: string;
+    if (eff.actor.kind === 'builtin') {
+      asset = await loadBuiltinActor(eff.actor.id);
+      cacheKey = `builtin:${eff.actor.id}`;
+    } else {
+      asset = await loadUploadedActor(eff.actor.id);
+      cacheKey = `asset:${eff.actor.id}`;
+      if (!asset) {
+        opts.progressEffect = {
+          ...eff,
+          actor: { kind: 'builtin', id: 'football' },
+          motion: 'roll',
+        };
+        saveOptions(opts);
+        syncEffectUI();
+        setEffectStatus('素材已不存在，已回退为内置足球。', 'warn');
+        asset = await loadBuiltinActor('football');
+        cacheKey = 'builtin:football';
+      }
+    }
+
+    if (token !== actorAssetToken) return; // 已有更新的切换请求，丢弃本次结果
+    if (asset && opts.progressEffect?.tint === 'accent') {
+      const accent = opts.accentColor ?? resolveTheme(opts.theme).accent;
+      asset = tintActorAsset(cacheKey, asset, accent);
+    }
+    actorAsset = asset;
+    drawStaticFrame();
   }
 
   // ──────────────── 文件选择 ────────────────
@@ -814,6 +892,7 @@ function render(): void {
   function selectTheme(id: string): void {
     updateOptions(() => (opts.theme = id));
     paintTheme(id);
+    void refreshActorAsset(); // 主色变化时刷新染色素材
   }
 
   /** 主题编辑对话框：基于当前主题预填，四个色板 + 实时渐变预览 */
@@ -1018,6 +1097,573 @@ function render(): void {
     (id) => updateOptions(() => (opts.progressBar = id)),
   );
 
+  // ──────────────── 角色进度条（内置素材 + 上传素材 + 运动/尾迹） ────────────────
+  const progressStyleRow = row('进度条', progressSeg.wrap);
+
+  const effectStatus = h('p', { class: 'hidden text-xs leading-relaxed' });
+  function setEffectStatus(msg: string, tone: 'ok' | 'warn' | 'err' = 'err'): void {
+    effectStatus.classList.toggle('hidden', !msg);
+    effectStatus.textContent = msg;
+    effectStatus.style.color =
+      tone === 'ok' ? '#22c55e' : tone === 'warn' ? '#d97706' : 'var(--holiday-legal)';
+  }
+
+  const effectToggle = h('input', {
+    type: 'checkbox',
+    class: 'h-4 w-4 accent-[var(--accent)]',
+    checked: !!opts.progressEffect,
+    onchange: (e) => {
+      const on = (e.target as HTMLInputElement).checked;
+      updateOptions(() => {
+        opts.progressEffect = on
+          ? cloneProgressEffect(opts.progressEffect ?? DEFAULT_PROGRESS_EFFECT)
+          : null;
+      });
+      syncEffectUI();
+      void refreshActorAsset();
+      setEffectStatus(on ? '' : '已关闭角色效果，恢复上方进度条样式。', 'ok');
+    },
+  }) as HTMLInputElement;
+
+  /** 预设卡片按钮（高亮用） */
+  const presetButtons: HTMLButtonElement[] = [];
+  const presetWrap = h('div', { class: 'grid grid-cols-2 gap-2' }, []);
+  for (const preset of PROGRESS_PRESETS) {
+    const btn = h(
+      'button',
+      {
+        type: 'button',
+        'data-preset-id': preset.id,
+        class:
+          'flex items-start gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-left transition-colors hover:border-[var(--accent)]',
+        onclick: () => {
+          updateOptions(() => {
+            opts.progressEffect = cloneProgressEffect(preset.effect);
+          });
+          syncEffectUI();
+          void refreshActorAsset();
+          setEffectStatus('');
+        },
+      },
+      [
+        h('span', { class: 'text-base leading-none', textContent: preset.emoji }),
+        h('span', { class: 'min-w-0' }, [
+          h('span', {
+            class: 'block text-xs font-medium text-[var(--fg)]',
+            textContent: preset.label,
+          }),
+          h('span', {
+            class: 'block truncate text-[10px] text-[var(--fg-muted)]',
+            textContent: preset.hint,
+          }),
+        ]),
+      ],
+    ) as HTMLButtonElement;
+    presetButtons.push(btn);
+    presetWrap.append(btn);
+  }
+
+  /** 内置载体按钮（高亮用） */
+  const builtinButtons = new Map<string, HTMLButtonElement>();
+  const builtinWrap = h('div', { class: 'flex flex-wrap gap-1.5' }, []);
+  for (const actor of BUILTIN_ACTORS) {
+    const spriteUrl = builtinActorSpriteUrl(actor.id);
+    const thumb = spriteUrl
+      ? h('img', { src: spriteUrl, alt: '', class: 'h-6 w-6 object-contain' })
+      : h('span', { class: 'text-base leading-none', textContent: actor.emoji });
+    const motionLabel =
+      PROGRESS_MOTIONS.find((m) => m.id === actor.defaultMotion)?.label ?? actor.defaultMotion;
+    const btn = h(
+      'button',
+      {
+        type: 'button',
+        'data-actor-id': actor.id,
+        title: `切换为${actor.label}（推荐运动：${motionLabel}）`,
+        class:
+          'flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg)] px-1.5 py-1 text-[11px] text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+        onclick: () => {
+          const cur = opts.progressEffect;
+          if (!cur) return;
+          updateOptions(() => {
+            opts.progressEffect = {
+              ...cur,
+              actor: { kind: 'builtin', id: actor.id },
+              motion: actor.defaultMotion,
+            };
+          });
+          syncEffectUI();
+          void refreshActorAsset();
+          setEffectStatus('');
+        },
+      },
+      [thumb, h('span', { textContent: actor.label })],
+    ) as HTMLButtonElement;
+    builtinButtons.set(actor.id, btn);
+    builtinWrap.append(btn);
+  }
+
+  // —— 上传 / 粘贴 ——
+  const effectMiniBtnCls =
+    'rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[11px] text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]';
+
+  const assetInput = h('input', {
+    type: 'file',
+    accept:
+      '.png,.jpg,.jpeg,.webp,.svg,.gif,image/png,image/jpeg,image/webp,image/svg+xml,image/gif',
+    class: 'hidden',
+  }) as HTMLInputElement;
+  assetInput.addEventListener('change', () => {
+    const file = assetInput.files?.[0];
+    assetInput.value = '';
+    if (file) void importActorFile(file);
+  });
+
+  const uploadBtn = h('button', {
+    type: 'button',
+    class: effectMiniBtnCls,
+    textContent: '⬆ 上传素材',
+    title: '支持 PNG / JPG / WebP / SVG；GIF 动图将在下一版支持',
+    onclick: () => assetInput.click(),
+  });
+  const pasteImgBtn = h('button', {
+    type: 'button',
+    class: effectMiniBtnCls,
+    textContent: '📋 粘贴图片',
+    title: '从剪贴板读取截图/图片（需浏览器授权）',
+    onclick: () => void importClipboardImage(),
+  });
+  const pasteSvgBtn = h('button', {
+    type: 'button',
+    class: effectMiniBtnCls,
+    textContent: '📋 粘贴 SVG',
+    title: '在 iconfont 图标页复制 SVG 源码后点此粘贴（自动跟随主题色）',
+    onclick: () => void importClipboardSvg(),
+  });
+  const uploadZone = h(
+    'div',
+    {
+      class:
+        'flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg)] p-2 transition-colors',
+    },
+    [uploadBtn, pasteImgBtn, pasteSvgBtn, assetInput],
+  );
+  uploadZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadZone.style.borderColor = 'var(--accent)';
+  });
+  uploadZone.addEventListener('dragleave', () => {
+    uploadZone.style.borderColor = '';
+  });
+  uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadZone.style.borderColor = '';
+    const file = (e as DragEvent).dataTransfer?.files?.[0];
+    if (file) void importActorFile(file);
+  });
+
+  /** 已上传素材 chips（高亮用） */
+  let assetButtons = new Map<string, HTMLButtonElement>();
+  const assetWrap = h('div', { class: 'hidden flex flex-wrap gap-1.5' }, []);
+  let assetThumbUrls: string[] = [];
+
+  // —— 运动 / 尾迹 / 尺寸 / 着色 ——
+  const motionSeg = makeSegment<ProgressMotionId>(
+    PROGRESS_MOTIONS.map((m) => ({ id: m.id, label: m.label, hint: m.hint })),
+    opts.progressEffect?.motion ?? DEFAULT_PROGRESS_EFFECT.motion,
+    (id) => {
+      const cur = opts.progressEffect;
+      if (!cur) return;
+      updateOptions(() => {
+        opts.progressEffect = { ...cur, motion: id };
+      });
+      syncEffectUI();
+    },
+  );
+
+  const trailSeg = makeSegment<ProgressTrailId>(
+    PROGRESS_TRAILS.map((t) => ({ id: t.id, label: t.label, hint: t.hint })),
+    opts.progressEffect?.trail ?? DEFAULT_PROGRESS_EFFECT.trail,
+    (id) => {
+      const cur = opts.progressEffect;
+      if (!cur) return;
+      updateOptions(() => {
+        opts.progressEffect = { ...cur, trail: id };
+      });
+      syncEffectUI();
+    },
+  );
+
+  const trailLenValue = h('span', {
+    class: 'font-mono text-[11px] text-[var(--fg-muted)]',
+    textContent: '60%',
+  });
+  const trailLenInput = h('input', {
+    type: 'range',
+    min: '10',
+    max: '100',
+    step: '5',
+    value: String(Math.round((opts.progressEffect?.trailLen ?? 0.6) * 100)),
+    class: 'w-full accent-[var(--accent)]',
+    'aria-label': '尾迹长度',
+    oninput: (e) => {
+      const cur = opts.progressEffect;
+      if (!cur) return;
+      const v = Number((e.target as HTMLInputElement).value);
+      updateOptions(() => {
+        opts.progressEffect = { ...cur, trailLen: v / 100 };
+      });
+      trailLenValue.textContent = `${v}%`;
+    },
+  }) as HTMLInputElement;
+  const trailLenRow = h('div', { class: 'space-y-1' }, [
+    h('div', { class: 'flex items-center justify-between' }, [
+      h('span', { class: 'text-xs text-[var(--fg-muted)]', textContent: '尾迹长度' }),
+      trailLenValue,
+    ]),
+    trailLenInput,
+  ]);
+
+  const sizeValue = h('span', {
+    class: 'font-mono text-[11px] text-[var(--fg-muted)]',
+    textContent: '10%',
+  });
+  const sizeInput = h('input', {
+    type: 'range',
+    min: '6',
+    max: '18',
+    step: '1',
+    value: String(Math.round((opts.progressEffect?.size ?? 0.1) * 100)),
+    class: 'w-full accent-[var(--accent)]',
+    'aria-label': '载体尺寸',
+    oninput: (e) => {
+      const cur = opts.progressEffect;
+      if (!cur) return;
+      const v = Number((e.target as HTMLInputElement).value);
+      updateOptions(() => {
+        opts.progressEffect = { ...cur, size: v / 100 };
+      });
+      sizeValue.textContent = `${v}%`;
+    },
+  }) as HTMLInputElement;
+  const sizeRow = h('div', { class: 'space-y-1' }, [
+    h('div', { class: 'flex items-center justify-between' }, [
+      h('span', { class: 'text-xs text-[var(--fg-muted)]', textContent: '载体尺寸（短边占比）' }),
+      sizeValue,
+    ]),
+    sizeInput,
+  ]);
+
+  const tintInput = h('input', {
+    type: 'checkbox',
+    class: 'h-3.5 w-3.5 accent-[var(--accent)]',
+    checked: opts.progressEffect?.tint === 'accent',
+    onchange: (e) => {
+      const cur = opts.progressEffect;
+      if (!cur) return;
+      const checked = (e.target as HTMLInputElement).checked;
+      updateOptions(() => {
+        opts.progressEffect = { ...cur, tint: checked ? 'accent' : 'original' };
+      });
+      syncEffectUI();
+      void refreshActorAsset();
+    },
+  }) as HTMLInputElement;
+  const tempoInput = h('input', {
+    type: 'checkbox',
+    class: 'h-3.5 w-3.5 accent-[var(--accent)]',
+    checked: opts.progressEffect?.tempoSync ?? false,
+    onchange: (e) => {
+      const cur = opts.progressEffect;
+      if (!cur) return;
+      const checked = (e.target as HTMLInputElement).checked;
+      updateOptions(() => {
+        opts.progressEffect = { ...cur, tempoSync: checked };
+      });
+    },
+  }) as HTMLInputElement;
+
+  const effectPanel = h('div', { class: 'hidden space-y-3' }, [
+    h('div', { class: 'space-y-1.5' }, [
+      h('p', { class: 'text-[11px] text-[var(--fg-muted)]', textContent: '预设玩法' }),
+      presetWrap,
+    ]),
+    h('div', { class: 'space-y-1.5' }, [fieldLabel('内置载体'), builtinWrap]),
+    h('div', { class: 'space-y-1.5' }, [
+      h('div', { class: 'flex items-baseline justify-between gap-2' }, [
+        fieldLabel('我的素材'),
+        h('span', {
+          class: 'text-[10px] text-[var(--fg-muted)]',
+          textContent: 'PNG / SVG · 透明底更佳',
+        }),
+      ]),
+      uploadZone,
+      assetWrap,
+      h('p', {
+        class: 'text-[10px] leading-relaxed text-[var(--fg-muted)]',
+        textContent:
+          'iconfont：下载 SVG 后上传，或复制图标页的 SVG 源码再点「粘贴 SVG」。素材只保存在本机，不会上传服务器。',
+      }),
+    ]),
+    h('div', { class: 'space-y-1.5' }, [fieldLabel('运动'), motionSeg.wrap]),
+    h('div', { class: 'space-y-1.5' }, [fieldLabel('尾迹'), trailSeg.wrap, trailLenRow]),
+    sizeRow,
+    h('div', { class: 'flex flex-wrap gap-x-4 gap-y-1.5 pt-0.5' }, [
+      h(
+        'label',
+        { class: 'flex items-center gap-1.5 text-xs text-[var(--fg-muted)] cursor-pointer' },
+        [tintInput, '跟随主题主色'],
+      ),
+      h(
+        'label',
+        { class: 'flex items-center gap-1.5 text-xs text-[var(--fg-muted)] cursor-pointer' },
+        [tempoInput, '随音乐律动'],
+      ),
+    ]),
+    effectStatus,
+  ]);
+
+  const effectSection = h(
+    'div',
+    {
+      class: 'space-y-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3',
+    },
+    [
+      h('div', { class: 'flex items-center justify-between gap-2' }, [
+        h(
+          'label',
+          {
+            class:
+              'flex items-center gap-2 text-sm font-medium text-[var(--fg-muted)] cursor-pointer',
+          },
+          [effectToggle, '角色进度条'],
+        ),
+        h('span', {
+          class:
+            'rounded-full border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--fg-muted)]',
+          textContent: '新',
+        }),
+      ]),
+      h('p', {
+        class: 'text-[11px] leading-relaxed text-[var(--fg-muted)]',
+        textContent: '让足球、流星、地球或你上传的图标沿进度条前进；载体、运动、尾迹可自由组合。',
+      }),
+      effectPanel,
+    ],
+  );
+
+  /** 预设高亮只看「载体 + 运动 + 尾迹」，微调尺寸/长度不取消预设选中态 */
+  function effectCoreSignature(e: ProgressEffect): string {
+    return [e.actor.kind, e.actor.id, e.motion, e.trail].join('|');
+  }
+
+  function paintEffectActive(): void {
+    const eff = opts.progressEffect;
+    const sig = eff ? effectCoreSignature(eff) : '';
+    for (const btn of presetButtons) {
+      const preset = PROGRESS_PRESETS.find((p) => p.id === btn.dataset.presetId);
+      const active = !!(preset && sig === effectCoreSignature(preset.effect));
+      btn.style.outline = active ? '2px solid var(--accent)' : 'none';
+      btn.style.outlineOffset = '2px';
+    }
+    for (const [id, btn] of builtinButtons) {
+      const active = !!eff && eff.actor.kind === 'builtin' && eff.actor.id === id;
+      btn.style.outline = active ? '2px solid var(--accent)' : 'none';
+      btn.style.outlineOffset = '2px';
+    }
+    for (const [id, btn] of assetButtons) {
+      const active = !!eff && eff.actor.kind === 'asset' && eff.actor.id === id;
+      btn.style.outline = active ? '2px solid var(--accent)' : 'none';
+      btn.style.outlineOffset = '2px';
+    }
+  }
+
+  /** 选项 → 控件回填（开关、显隐、高亮、滑杆数值） */
+  function syncEffectUI(): void {
+    const eff = opts.progressEffect;
+    effectToggle.checked = !!eff;
+    effectPanel.classList.toggle('hidden', !eff);
+    progressStyleRow.classList.toggle('hidden', !!eff);
+    if (!eff) {
+      paintEffectActive();
+      return;
+    }
+    motionSeg.set(eff.motion);
+    trailSeg.set(eff.trail);
+    trailLenRow.classList.toggle('hidden', eff.trail === 'none');
+    trailLenInput.value = String(Math.round(eff.trailLen * 100));
+    trailLenValue.textContent = `${Math.round(eff.trailLen * 100)}%`;
+    sizeInput.value = String(Math.round(eff.size * 100));
+    sizeValue.textContent = `${Math.round(eff.size * 100)}%`;
+    tintInput.checked = eff.tint === 'accent';
+    tempoInput.checked = eff.tempoSync;
+    paintEffectActive();
+  }
+
+  /** 读取并保存一条上传素材，随后选中它 */
+  async function persistImportedAsset(
+    processed: ProcessedActorAsset,
+    name: string,
+    isSvg: boolean,
+  ): Promise<void> {
+    const record = await saveProgressAsset({
+      name,
+      blob: processed.blob,
+      width: processed.width,
+      height: processed.height,
+    });
+    if (!record) {
+      throw new Error('本地素材库不可用（可能处于隐私模式或浏览器不支持 IndexedDB）');
+    }
+    const cur = opts.progressEffect;
+    updateOptions(() => {
+      opts.progressEffect = {
+        ...(cur ?? cloneProgressEffect(DEFAULT_PROGRESS_EFFECT)),
+        actor: { kind: 'asset', id: record.id },
+        ...(isSvg ? { tint: 'accent' as const } : {}),
+      };
+    });
+    syncEffectUI();
+    await rebuildAssetChips();
+    await refreshActorAsset();
+    setEffectStatus(`已导入「${record.name}」${isSvg ? '（已自动跟随主题色）' : ''}`, 'ok');
+  }
+
+  async function importActorFile(file: File): Promise<void> {
+    try {
+      if (file.type === 'image/gif' || /\.gif$/i.test(file.name)) {
+        throw new Error('GIF 动图将在下一版支持；当前请先上传 PNG / SVG 静态素材。');
+      }
+      setEffectStatus('正在处理素材…', 'warn');
+      const isSvg = file.type === 'image/svg+xml' || /\.svg$/i.test(file.name);
+      const processed = isSvg
+        ? await prepareSvgAsset(await file.text())
+        : await prepareImageAsset(file);
+      await persistImportedAsset(processed, cleanAssetName(file.name), isSvg);
+    } catch (e) {
+      setEffectStatus(e instanceof Error ? e.message : '素材导入失败', 'err');
+    }
+  }
+
+  async function importClipboardImage(): Promise<void> {
+    try {
+      if (!navigator.clipboard || typeof navigator.clipboard.read !== 'function') {
+        throw new Error('当前浏览器不支持读取剪贴板图片，请改用「上传素材」。');
+      }
+      setEffectStatus('正在读取剪贴板…', 'warn');
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const type = item.types.find((t) => t.startsWith('image/'));
+        if (!type) continue;
+        if (type === 'image/gif') {
+          throw new Error('GIF 动图将在下一版支持，请先粘贴 PNG 截图。');
+        }
+        const blob = await item.getType(type);
+        const processed = await prepareImageAsset(new File([blob], 'clipboard.png', { type }));
+        await persistImportedAsset(processed, '剪贴板图片', false);
+        return;
+      }
+      throw new Error('剪贴板里没有图片。');
+    } catch (e) {
+      setEffectStatus(e instanceof Error ? e.message : '读取剪贴板失败', 'err');
+    }
+  }
+
+  async function importClipboardSvg(): Promise<void> {
+    try {
+      if (!navigator.clipboard || typeof navigator.clipboard.readText !== 'function') {
+        throw new Error('当前浏览器不支持读取剪贴板文本，请改用「上传素材」。');
+      }
+      setEffectStatus('正在读取 SVG…', 'warn');
+      const text = await navigator.clipboard.readText();
+      if (!/<svg[\s>]/i.test(text)) {
+        throw new Error('剪贴板里没有 SVG 代码——请在 iconfont 图标页复制 SVG 源码。');
+      }
+      const processed = await prepareSvgAsset(text);
+      await persistImportedAsset(processed, 'iconfont 图标', true);
+    } catch (e) {
+      setEffectStatus(e instanceof Error ? e.message : 'SVG 导入失败', 'err');
+    }
+  }
+
+  /** 刷新「我的素材」chips（缩略图 blob URL 在重建时统一回收） */
+  async function rebuildAssetChips(): Promise<void> {
+    for (const url of assetThumbUrls) URL.revokeObjectURL(url);
+    assetThumbUrls = [];
+    const records: ProgressAssetRecord[] = await listProgressAssets();
+    assetWrap.replaceChildren();
+    assetWrap.classList.toggle('hidden', records.length === 0);
+    assetButtons = new Map();
+    for (const record of records) {
+      const url = URL.createObjectURL(record.blob);
+      assetThumbUrls.push(url);
+      const btn = h(
+        'button',
+        {
+          type: 'button',
+          'data-asset-id': record.id,
+          title: `使用素材「${record.name}」`,
+          class:
+            'flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg)] px-1.5 py-1 text-[11px] text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)]',
+          onclick: () => {
+            const cur = opts.progressEffect;
+            if (!cur) return;
+            updateOptions(() => {
+              opts.progressEffect = { ...cur, actor: { kind: 'asset', id: record.id } };
+            });
+            syncEffectUI();
+            void refreshActorAsset();
+            setEffectStatus('');
+          },
+        },
+        [
+          h('img', { src: url, alt: '', class: 'h-6 w-6 rounded object-contain' }),
+          h('span', { class: 'max-w-[4.5rem] truncate', textContent: record.name }),
+        ],
+      ) as HTMLButtonElement;
+      assetButtons.set(record.id, btn);
+      const del = h(
+        'button',
+        {
+          type: 'button',
+          'aria-label': `删除素材 ${record.name}`,
+          title: '删除此素材（仅本机）',
+          class:
+            'absolute -right-1.5 -top-1.5 hidden h-4.5 w-4.5 items-center justify-center rounded-full bg-red-500 text-[9px] leading-none text-white shadow group-hover:flex',
+          textContent: '✕',
+          onclick: (e) => {
+            e.stopPropagation();
+            void confirmDialog(`确定删除素材「${record.name}」吗？`, {
+              title: '删除素材',
+              danger: true,
+              confirmText: '删除',
+            }).then(async (ok) => {
+              if (!ok) return;
+              await deleteProgressAsset(record.id);
+              invalidateActorAssetCache(record.id);
+              const cur = opts.progressEffect;
+              if (cur?.actor.kind === 'asset' && cur.actor.id === record.id) {
+                updateOptions(() => {
+                  opts.progressEffect = {
+                    ...cur,
+                    actor: { kind: 'builtin', id: 'football' },
+                    motion: 'roll',
+                  };
+                });
+              }
+              syncEffectUI();
+              await rebuildAssetChips();
+              await refreshActorAsset();
+              setEffectStatus(`已删除素材「${record.name}」。`, 'ok');
+            });
+          },
+        },
+        [],
+      );
+      assetWrap.append(h('div', { class: 'group relative' }, [btn, del]));
+    }
+    paintEffectActive();
+  }
+
   // 标题
   const titleCheckbox = h('input', {
     type: 'checkbox',
@@ -1137,7 +1783,10 @@ function render(): void {
     value: opts.accentColor ?? resolveTheme(opts.theme).accent,
     class: 'h-8 w-10 cursor-pointer rounded border border-[var(--border)] bg-[var(--bg)] p-0.5',
     'aria-label': '自定义主色',
-    oninput: (e) => updateOptions(() => (opts.accentColor = (e.target as HTMLInputElement).value)),
+    oninput: (e) => {
+      updateOptions(() => (opts.accentColor = (e.target as HTMLInputElement).value));
+      void refreshActorAsset(); // 染色素材跟随主色
+    },
   }) as HTMLInputElement;
   const accentResetBtn = h(
     'button',
@@ -1149,6 +1798,7 @@ function render(): void {
       onclick: () => {
         updateOptions(() => (opts.accentColor = null));
         accentColorInput.value = resolveTheme(opts.theme).accent;
+        void refreshActorAsset();
       },
     },
     [],
@@ -1369,7 +2019,13 @@ function render(): void {
   /** 应用一份风格方案：按方案配色创建/覆盖同名自定义主题 + 合并版式选项 + 全量刷新控件 */
   function applyParsedStyle(s: ParsedStyle): void {
     updateOptions(() => {
-      const items = addCustomTheme(s.name, s.colors.bg1, s.colors.bg2, s.colors.fg, s.colors.accent);
+      const items = addCustomTheme(
+        s.name,
+        s.colors.bg1,
+        s.colors.bg2,
+        s.colors.fg,
+        s.colors.accent,
+      );
       const saved = items.find((it) => it.name.trim() === s.name.trim());
       if (saved) {
         opts.theme = saved.id;
@@ -1389,6 +2045,7 @@ function render(): void {
     accentColorInput.value = resolveTheme(opts.theme).accent;
     rebuildVisualizerChips();
     rebuildStyleChips();
+    void refreshActorAsset();
   }
 
   /** 存储态方案 → ParsedStyle 后走统一应用路径 */
@@ -1685,7 +2342,8 @@ function render(): void {
               '点击应用整套「配色 + 版式」；方案会以同名存入上方自定义主题（仅配色），删除方案不影响主题。',
           }),
         ]),
-        row('进度条', progressSeg.wrap),
+        progressStyleRow,
+        effectSection,
         h('div', { class: 'space-y-1.5' }, [
           h('label', { class: 'flex items-center gap-2 text-sm cursor-pointer' }, [
             titleCheckbox,
@@ -1746,6 +2404,9 @@ function render(): void {
   refreshLyricVisibility();
   refreshEndRollVisibility();
   refreshCoverVisibility();
+  syncEffectUI();
+  void rebuildAssetChips();
+  void refreshActorAsset(); // 内置精灵/上传素材异步载入后补画一帧
 }
 
 /** 时长档位下拉 */

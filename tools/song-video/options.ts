@@ -318,6 +318,244 @@ export function normalizeProgressBar(id: unknown): ProgressBarId {
   return PROGRESS_BARS.some((p) => p.id === id) ? (id as ProgressBarId) : 'line';
 }
 
+// ─────────────────────────── 角色进度条 ───────────────────────────
+
+/**
+ * 角色进度条：把「进度条」从封闭样式升级为可组合效果——
+ * 载体（内置 SVG / 本地上传素材）+ 运动（滑行/滚动/飞行/奔跑/漂浮）+ 尾迹。
+ * 进度 x 由歌曲时间决定；运动与尾迹由渲染层确定性生成（预览/导出逐帧一致）。
+ */
+export type ProgressMotionId = 'glide' | 'roll' | 'fly' | 'run' | 'float';
+
+export const PROGRESS_MOTIONS: { id: ProgressMotionId; label: string; hint: string }[] = [
+  { id: 'glide', label: '滑行', hint: '贴着轨道匀速前进，适合任何素材' },
+  { id: 'roll', label: '滚动', hint: '按行进距离自转，适合足球/唱片等圆形素材' },
+  { id: 'fly', label: '飞行', hint: '抬离轨道并轻微浮动，适合流星/地球/火箭' },
+  { id: 'run', label: '奔跑', hint: '上下起伏 + 轻微摆动，适合人物/动物' },
+  { id: 'float', label: '漂浮', hint: '悬浮在半空缓慢起伏' },
+];
+
+export type ProgressTrailId = 'none' | 'glow' | 'fire' | 'particles' | 'echo';
+
+export const PROGRESS_TRAILS: { id: ProgressTrailId; label: string; hint: string }[] = [
+  { id: 'none', label: '无尾迹', hint: '干净利落，不拖尾' },
+  { id: 'glow', label: '光晕', hint: '一条渐隐的发光光带' },
+  { id: 'fire', label: '火焰', hint: '长条火焰 + 闪烁火星，适合流星/火箭' },
+  { id: 'particles', label: '粒子', hint: '散落的星尘粒子' },
+  { id: 'echo', label: '残影', hint: '沿轨迹重复淡出的分身' },
+];
+
+/** 内置载体 id（对应 assets/sprites/<id>.svg；缺失时渲染层回退为发光圆点） */
+export type BuiltinActorId =
+  | 'football'
+  | 'meteor'
+  | 'earth'
+  | 'rocket'
+  | 'runner'
+  | 'star'
+  | 'heart'
+  | 'note'
+  | 'disc'
+  | 'moon';
+
+export interface BuiltinActor {
+  id: BuiltinActorId;
+  label: string;
+  /** UI 兜底图标（SVG 未加载时显示） */
+  emoji: string;
+  /** 该载体的推荐运动（选中内置载体时自动套用） */
+  defaultMotion: ProgressMotionId;
+}
+
+export const BUILTIN_ACTORS: BuiltinActor[] = [
+  { id: 'football', label: '足球', emoji: '⚽', defaultMotion: 'roll' },
+  { id: 'meteor', label: '流星', emoji: '☄️', defaultMotion: 'fly' },
+  { id: 'earth', label: '地球', emoji: '🌍', defaultMotion: 'fly' },
+  { id: 'rocket', label: '火箭', emoji: '🚀', defaultMotion: 'fly' },
+  { id: 'runner', label: '人偶', emoji: '🏃', defaultMotion: 'run' },
+  { id: 'star', label: '星星', emoji: '⭐', defaultMotion: 'float' },
+  { id: 'heart', label: '爱心', emoji: '❤️', defaultMotion: 'float' },
+  { id: 'note', label: '音符', emoji: '🎵', defaultMotion: 'float' },
+  { id: 'disc', label: '唱片', emoji: '💿', defaultMotion: 'roll' },
+  { id: 'moon', label: '月亮', emoji: '🌙', defaultMotion: 'glide' },
+];
+
+/** 载体来源：内置精灵，或本地上传素材（id 形如 sva:xxxx） */
+export type ProgressActorRef =
+  { kind: 'builtin'; id: BuiltinActorId } | { kind: 'asset'; id: string };
+
+export type ProgressTint = 'original' | 'accent';
+
+export interface ProgressEffect {
+  /** 载体来源与 id */
+  actor: ProgressActorRef;
+  motion: ProgressMotionId;
+  trail: ProgressTrailId;
+  /** 尾迹长度 0.1-1（拖尾最多占轨道宽度的 45%） */
+  trailLen: number;
+  /** 载体高度（相对短边 S 的比例，0.06-0.18） */
+  size: number;
+  /** original=保留素材原色；accent=用主题主色染色 */
+  tint: ProgressTint;
+  /** 随音乐能量轻微律动（录制时用实时频段驱动） */
+  tempoSync: boolean;
+}
+
+export const DEFAULT_PROGRESS_EFFECT: ProgressEffect = {
+  actor: { kind: 'builtin', id: 'football' },
+  motion: 'roll',
+  trail: 'none',
+  trailLen: 0.6,
+  size: 0.1,
+  tint: 'original',
+  tempoSync: false,
+};
+
+/** 预设卡片：常见玩法一键套用（用户仍可在下方微调） */
+export const PROGRESS_PRESETS: {
+  id: string;
+  label: string;
+  hint: string;
+  emoji: string;
+  effect: ProgressEffect;
+}[] = [
+  {
+    id: 'football',
+    label: '足球滚动',
+    hint: '贴地自转，最经典的跑条',
+    emoji: '⚽',
+    effect: {
+      actor: { kind: 'builtin', id: 'football' },
+      motion: 'roll',
+      trail: 'none',
+      trailLen: 0.5,
+      size: 0.11,
+      tint: 'original',
+      tempoSync: false,
+    },
+  },
+  {
+    id: 'meteor',
+    label: '流星火尾',
+    hint: '飞行 + 长火焰尾迹',
+    emoji: '☄️',
+    effect: {
+      actor: { kind: 'builtin', id: 'meteor' },
+      motion: 'fly',
+      trail: 'fire',
+      trailLen: 0.85,
+      size: 0.12,
+      tint: 'original',
+      tempoSync: true,
+    },
+  },
+  {
+    id: 'earth',
+    label: '地球巡航',
+    hint: '飞行 + 柔和光晕',
+    emoji: '🌍',
+    effect: {
+      actor: { kind: 'builtin', id: 'earth' },
+      motion: 'fly',
+      trail: 'glow',
+      trailLen: 0.75,
+      size: 0.12,
+      tint: 'original',
+      tempoSync: false,
+    },
+  },
+  {
+    id: 'runner',
+    label: '人偶奔跑',
+    hint: '起伏摆动，沿轨道向前',
+    emoji: '🏃',
+    effect: {
+      actor: { kind: 'builtin', id: 'runner' },
+      motion: 'run',
+      trail: 'none',
+      trailLen: 0.5,
+      size: 0.13,
+      tint: 'original',
+      tempoSync: true,
+    },
+  },
+  {
+    id: 'rocket',
+    label: '火箭升空',
+    hint: '飞行 + 火焰推进',
+    emoji: '🚀',
+    effect: {
+      actor: { kind: 'builtin', id: 'rocket' },
+      motion: 'fly',
+      trail: 'fire',
+      trailLen: 0.7,
+      size: 0.13,
+      tint: 'original',
+      tempoSync: true,
+    },
+  },
+  {
+    id: 'star',
+    label: '星星漂浮',
+    hint: '轻盈浮动 + 星尘粒子',
+    emoji: '⭐',
+    effect: {
+      actor: { kind: 'builtin', id: 'star' },
+      motion: 'float',
+      trail: 'particles',
+      trailLen: 0.6,
+      size: 0.09,
+      tint: 'original',
+      tempoSync: false,
+    },
+  },
+];
+
+const clampNum = (v: unknown, min: number, max: number, fallback: number): number => {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return fallback;
+  return Math.min(max, Math.max(min, v));
+};
+
+/**
+ * 逐字段归一化角色效果：整体不是对象返回 null（关闭）；
+ * 局部字段非法时回退默认值（不因一个坏字段丢掉整套效果）。
+ */
+export function normalizeProgressEffect(v: unknown): ProgressEffect | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  const d = DEFAULT_PROGRESS_EFFECT;
+
+  let actor: ProgressActorRef = { ...d.actor };
+  const a = o.actor && typeof o.actor === 'object' ? (o.actor as Record<string, unknown>) : null;
+  if (a) {
+    if (
+      a.kind === 'builtin' &&
+      typeof a.id === 'string' &&
+      BUILTIN_ACTORS.some((it) => it.id === a.id)
+    ) {
+      actor = { kind: 'builtin', id: a.id as BuiltinActorId };
+    } else if (
+      a.kind === 'asset' &&
+      typeof a.id === 'string' &&
+      /^sva:[a-z0-9]{4,32}$/.test(a.id)
+    ) {
+      actor = { kind: 'asset', id: a.id };
+    }
+  }
+
+  return {
+    actor,
+    motion: PROGRESS_MOTIONS.some((m) => m.id === o.motion)
+      ? (o.motion as ProgressMotionId)
+      : d.motion,
+    trail: PROGRESS_TRAILS.some((t) => t.id === o.trail) ? (o.trail as ProgressTrailId) : d.trail,
+    trailLen: clampNum(o.trailLen, 0.1, 1, d.trailLen),
+    size: clampNum(o.size, 0.06, 0.18, d.size),
+    tint: o.tint === 'accent' ? 'accent' : 'original',
+    tempoSync: typeof o.tempoSync === 'boolean' ? o.tempoSync : d.tempoSync,
+  };
+}
+
 // ─────────────────────────── 片头封面页 ───────────────────────────
 
 export type CoverStyleId = 'bold' | 'sticker' | 'center' | 'left' | 'band' | 'minimal';
@@ -369,8 +607,10 @@ export interface SongVideoOptions {
   showTitle: boolean;
   /** 标题内容（默认取歌曲文件名去扩展名） */
   titleText: string;
-  /** 进度条样式 */
+  /** 进度条样式（progressEffect 非空时不生效） */
   progressBar: ProgressBarId;
+  /** 角色进度条（自定义载体 + 运动 + 尾迹；null=使用 progressBar 样式） */
+  progressEffect: ProgressEffect | null;
   /** 开场动画样式 */
   introAnim: IntroAnimId;
   /** 开场动画时长（秒，0=无开场段） */
@@ -439,6 +679,7 @@ export const DEFAULT_OPTIONS: SongVideoOptions = {
   showTitle: true,
   titleText: '',
   progressBar: 'line',
+  progressEffect: null,
   introAnim: 'fade',
   introDur: 2.5,
   outroAnim: 'fade',

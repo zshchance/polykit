@@ -15,7 +15,15 @@
  */
 
 import { findLyricIndex, type LyricLine } from './lyrics';
-import { isCustomVisualizerId, type Aspect, SongVideoOptions, Theme, Timeline, VisualizerId } from './options';
+import {
+  isCustomVisualizerId,
+  type Aspect,
+  type ProgressTrailId,
+  SongVideoOptions,
+  Theme,
+  Timeline,
+  VisualizerId,
+} from './options';
 
 // ─────────────────────────── 输入类型 ───────────────────────────
 
@@ -68,6 +76,8 @@ export interface RenderInput {
   title: string;
   bgImage: ImageAsset | null;
   coverImage: ImageAsset | null;
+  /** 角色进度条载体图片（内置/上传素材；null 时渲染层回退发光圆点） */
+  actorImage?: ImageAsset | null;
   /**
    * 自定义频谱绘制函数（opts.visualizer 为 cviz: id 时由调用方解析注入；
    * 缺失（已被删除/编译失败）时回退条形频谱）。
@@ -102,6 +112,14 @@ export function computeBands(freq: Uint8Array, count: number, out: Uint8Array): 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
 /** cubic-out 缓动（开场入场更利落） */
 const easeOut = (p: number): number => 1 - Math.pow(1 - p, 3);
+
+/** hex → rgba（尾迹渐变用；非法色原样返回） */
+function withAlpha(hex: string, alpha: number): string {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1]!, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
 
 function fmtTime(sec: number): string {
   const s = Math.max(0, Math.floor(sec));
@@ -288,7 +306,7 @@ export function drawFrame(
   drawLyrics(ctx, W, H, S, layout, input, ta, dt);
 
   // —— 8. 进度条 ——
-  drawProgress(ctx, W, H, S, input, tc);
+  drawProgress(ctx, W, H, S, input, tc, bands);
 
   ctx.restore(); // 内容层变换结束
 
@@ -1055,6 +1073,9 @@ function drawLyrics(
     boundBottom = visMetrics(input, H, S).top - H * 0.012;
     boundTop = coverBottom + S * 0.03;
   }
+  // 角色进度条：载体 + 尾迹占用带状区域，歌词可用带需再上移避让
+  const actorTop = actorBandTop(input, W, H, S);
+  if (actorTop !== null) boundBottom = Math.min(boundBottom, actorTop);
   const n = opts.lyricAbove + 1 + opts.lyricBelow;
   const lineH = Math.max(S * 0.03, Math.min(S * 0.048, (boundBottom - boundTop) / n));
   // —— 句间切换滚动动画：目标行变化时从当前位置缓动滚向新目标（带轻微回弹） ——
@@ -1118,7 +1139,312 @@ function drawLyrics(
   ctx.restore();
 }
 
-/** 进度条：line 细线 / full 胶囊+时间（进度只随音频推进；开场 0%，结尾保持满格） */
+/** 播放进度轨道几何（角色模式与歌词避让共用） */
+function progressTrackGeometry(
+  W: number,
+  H: number,
+  S: number,
+): { marginX: number; barW: number; y: number; h: number } {
+  const isPortrait = H > S;
+  const marginX = W * 0.12;
+  return {
+    marginX,
+    barW: W - marginX * 2,
+    y: H - S * (isPortrait ? 0.065 : 0.052),
+    h: S * 0.006,
+  };
+}
+
+/** 角色进度条占用的带状上边界；未启用角色效果时返回 null（歌词避让用） */
+function actorBandTop(input: RenderInput, W: number, H: number, S: number): number | null {
+  const eff = input.opts.progressEffect;
+  if (!eff) return null;
+  const g = progressTrackGeometry(W, H, S);
+  const h = eff.size * S;
+  const lift =
+    eff.motion === 'fly' || eff.motion === 'float' ? h * 0.6 : eff.motion === 'run' ? h * 0.12 : 0;
+  return g.y - h - lift - H * 0.015;
+}
+
+/** 尾迹绘制参数 */
+interface ProgressTrailCtx {
+  x: number;
+  /** 载体中心 y */
+  y: number;
+  /** 尾迹长度（px） */
+  len: number;
+  aw: number;
+  ah: number;
+  angle: number;
+  theme: Theme;
+  /** 音频内时间（火星闪烁的确定性种子） */
+  ta: number;
+  img: ImageAsset | null;
+  /** 频段能量 0-1（tempoSync 时放大尾迹亮度） */
+  energy: number;
+  /** 内容层整体 alpha（尾迹必须乘上，不能打穿开场/结尾淡入淡出） */
+  baseAlpha: number;
+}
+
+/** 确定性伪随机 0-1（禁 Math.random，保证预览/导出逐帧一致） */
+function hash01(i: number, seed: number): number {
+  const v = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453;
+  return v - Math.floor(v);
+}
+
+/** 尾迹：光晕 / 火焰 / 粒子 / 残影（全部确定性生成） */
+function drawProgressTrail(
+  ctx: CanvasRenderingContext2D,
+  kind: ProgressTrailId,
+  c: ProgressTrailCtx,
+): void {
+  if (kind === 'glow') {
+    ctx.save();
+    const grad = ctx.createLinearGradient(c.x - c.len, 0, c.x, 0);
+    grad.addColorStop(0, withAlpha(c.theme.accent, 0));
+    grad.addColorStop(0.55, withAlpha(c.theme.accent, 0.24));
+    grad.addColorStop(1, withAlpha(c.theme.accent, 0.85));
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = Math.max(2, c.ah * 0.16);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(c.x - c.len, c.y);
+    ctx.lineTo(c.x, c.y);
+    ctx.stroke();
+    // 内芯提亮，避免长光带显得灰
+    ctx.strokeStyle = withAlpha('#ffffff', 0.34);
+    ctx.lineWidth = Math.max(1, c.ah * 0.045);
+    ctx.beginPath();
+    ctx.moveTo(c.x - c.len * 0.7, c.y);
+    ctx.lineTo(c.x, c.y);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  if (kind === 'fire' || kind === 'particles') {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const boost = 1 + c.energy * 0.3;
+
+    if (kind === 'fire') {
+      // 火焰核心：由细到粗的锥形光带
+      const grad = ctx.createLinearGradient(c.x - c.len, 0, c.x, 0);
+      grad.addColorStop(0, withAlpha(c.theme.accent, 0));
+      grad.addColorStop(1, withAlpha(c.theme.accent, 0.5));
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = Math.max(2, c.ah * 0.11);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(c.x - c.len, c.y);
+      ctx.lineTo(c.x, c.y);
+      ctx.stroke();
+    }
+
+    const n = kind === 'fire' ? 26 : 14;
+    for (let i = 0; i < n; i++) {
+      const q = i / (n - 1); // 0=头部，1=尾部
+      const seed = hash01(i, Math.floor(c.ta * 14));
+      const px = c.x - c.len * q;
+      const spread = kind === 'fire' ? c.ah * (0.08 + q * 0.16) : c.ah * (0.22 + q * 0.3);
+      const py = c.y + Math.sin(seed * 6.283 + q * 4.2) * spread;
+      const r = Math.max(
+        1,
+        (kind === 'fire' ? c.ah * (0.055 - q * 0.038) : c.ah * (0.03 - q * 0.018)) *
+          (0.6 + seed * 0.7),
+      );
+      const fade = Math.pow(1 - q, kind === 'fire' ? 1.5 : 1.2);
+      ctx.globalAlpha = c.baseAlpha * fade * (kind === 'fire' ? 0.9 : 0.6) * boost;
+      ctx.fillStyle = i % 5 === 0 ? '#ffffff' : c.theme.accent;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    return;
+  }
+
+  // echo：沿轨迹重复淡出的分身；没有图片时退化为光晕
+  if (kind === 'echo') {
+    ctx.save();
+    if (!c.img) {
+      const grad = ctx.createLinearGradient(c.x - c.len, 0, c.x, 0);
+      grad.addColorStop(0, withAlpha(c.theme.accent, 0));
+      grad.addColorStop(1, withAlpha(c.theme.accent, 0.7));
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = Math.max(2, c.ah * 0.14);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(c.x - c.len, c.y);
+      ctx.lineTo(c.x, c.y);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    const steps = [0.14, 0.32, 0.52, 0.74];
+    for (const q of steps) {
+      const px = c.x - c.len * q;
+      const scale = 1 - q * 0.12;
+      ctx.save();
+      ctx.globalAlpha = c.baseAlpha * (1 - q) * 0.35;
+      ctx.translate(px, c.y);
+      ctx.rotate(c.angle);
+      ctx.drawImage(
+        c.img.img,
+        (-c.aw * scale) / 2,
+        (-c.ah * scale) / 2,
+        c.aw * scale,
+        c.ah * scale,
+      );
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+}
+
+/** 角色进度条：轨道 + 尾迹 + 载体 + 时间（进度只随音频推进） */
+function drawActorProgress(
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  S: number,
+  input: RenderInput,
+  t: number,
+  bands: Uint8Array | null,
+): void {
+  const { opts, theme, timeline } = input;
+  const eff = opts.progressEffect;
+  if (!eff) return;
+
+  const ta = Math.max(0, t - timeline.intro);
+  const p = timeline.audio > 0 ? clamp01(ta / timeline.audio) : 0;
+  const g = progressTrackGeometry(W, H, S);
+  const x = g.marginX + g.barW * p;
+  const energy = eff.tempoSync && bands ? (bands[2] ?? 0) / 255 : 0;
+  const height = Math.max(S * 0.05, eff.size * S * (1 + energy * 0.08));
+
+  // —— 轨道 ——
+  ctx.save();
+  ctx.fillStyle = 'rgba(128,128,128,0.35)';
+  roundRectPath(ctx, g.marginX, g.y, g.barW, g.h, g.h / 2);
+  ctx.fill();
+  if (p > 0.001) {
+    ctx.fillStyle = withAlpha(theme.accent, 0.72);
+    roundRectPath(ctx, g.marginX, g.y, Math.max(g.h, g.barW * p), g.h, g.h / 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // —— 载体尺寸：contain 进 size 高度、宽度上限 1.9 倍的框 ——
+  const img = input.actorImage ?? null;
+  const maxW = height * 1.9;
+  let aw = height;
+  let ah = height;
+  if (img) {
+    const ratio = img.w / Math.max(1, img.h);
+    if (ratio > maxW / height) {
+      aw = maxW;
+      ah = maxW / ratio;
+    } else {
+      ah = height;
+      aw = height * ratio;
+    }
+  }
+
+  // —— 运动轨迹（bottom = 载体底边）；进度 x 与姿态互不干扰 ——
+  let bottom = g.y;
+  let angle = 0;
+  const phase = ta;
+  switch (eff.motion) {
+    case 'roll':
+      angle = (x - g.marginX) / Math.max(1, height / 2);
+      break;
+    case 'fly':
+      bottom = g.y - height * 0.55 + Math.sin(phase * 2.2) * height * 0.07;
+      angle = Math.sin(phase * 1.6) * 0.08;
+      break;
+    case 'run':
+      bottom = g.y - Math.abs(Math.sin(phase * Math.PI * 4.2)) * height * 0.1;
+      angle = Math.sin(phase * Math.PI * 4.2) * 0.06;
+      break;
+    case 'float':
+      bottom = g.y - height * 0.5 + Math.sin(phase * 1.5) * height * 0.1;
+      angle = Math.sin(phase * 1.1) * 0.1;
+      break;
+    default:
+      bottom = g.y;
+  }
+
+  const cy = bottom - ah / 2;
+  const trailLen = clamp01(eff.trailLen);
+  const trail = Math.min(x - g.marginX, g.barW * 0.45 * trailLen);
+  if (eff.trail !== 'none' && trail > S * 0.008) {
+    drawProgressTrail(ctx, eff.trail, {
+      x,
+      y: cy,
+      len: trail,
+      aw,
+      ah,
+      angle,
+      theme,
+      ta,
+      img,
+      energy,
+      baseAlpha: ctx.globalAlpha,
+    });
+  }
+
+  // 贴地投影：滚动/奔跑更像踩在轨道上
+  if (eff.motion === 'roll' || eff.motion === 'run' || eff.motion === 'glide') {
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(
+      x,
+      g.y + g.h,
+      Math.max(2, aw * 0.35),
+      Math.max(1.5, height * 0.035),
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.save();
+  ctx.translate(x, cy);
+  ctx.rotate(angle);
+  if (img) {
+    ctx.drawImage(img.img, -aw / 2, -ah / 2, aw, ah);
+  } else {
+    // 素材加载中/失败：发光圆点兜底，保证画面不空
+    ctx.fillStyle = withAlpha(theme.accent, 0.9);
+    ctx.beginPath();
+    ctx.arc(0, 0, height * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = withAlpha('#ffffff', 0.8);
+    ctx.lineWidth = Math.max(1, height * 0.035);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // —— 时间标签 ——
+  ctx.save();
+  ctx.fillStyle = 'rgba(200,200,200,0.85)';
+  ctx.font = fontOf('500', S * 0.02);
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  ctx.fillText(fmtTime(Math.max(0, ta)), g.marginX, g.y + g.h + S * 0.024);
+  ctx.textAlign = 'right';
+  ctx.fillText(fmtTime(timeline.audio), g.marginX + g.barW, g.y + g.h + S * 0.024);
+  ctx.restore();
+}
+
+/**
+ * 进度条：角色模式优先（轨道 + 载体 + 尾迹）；
+ * 否则 line 细线 / full 胶囊+时间（进度只随音频推进；开场 0%，结尾保持满格）。
+ */
 function drawProgress(
   ctx: CanvasRenderingContext2D,
   W: number,
@@ -1126,7 +1452,13 @@ function drawProgress(
   S: number,
   input: RenderInput,
   t: number,
+  bands: Uint8Array | null,
 ): void {
+  if (input.opts.progressEffect) {
+    drawActorProgress(ctx, W, H, S, input, t, bands);
+    return;
+  }
+
   const { opts, timeline } = input;
   const accent = input.theme.accent;
   if (opts.progressBar === 'none' || timeline.audio <= 0) return;
