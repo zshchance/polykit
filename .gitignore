@@ -49,3 +49,6 @@ _tmp-*-add.json
 
 # 临时 GUI 冒烟脚本（用完即删）
 _smoke*.mjs
+
+# 分享包导出产物（html 打包 zip，不入库）
+.trae-html-share-packages/
