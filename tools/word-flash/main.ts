@@ -19,6 +19,7 @@ import {
   removeCustomTheme,
   toRenderTheme,
 } from './custom-themes';
+import { openContentHelp } from './content-help';
 import { cardBudget, parseScript, SAMPLE_TEXT, type Card } from './script';
 import { computeTimeline } from './timeline';
 import {
@@ -650,6 +651,9 @@ function render(): void {
     class: 'hidden text-xs text-[var(--holiday-legal)]',
     textContent: '已达 200 张上限，超出部分被截断',
   });
+
+  /** 文案格式帮助：提示词里的字数上限跟随当前画幅 */
+  const openScriptHelp = (): void => openContentHelp(() => contentInput.value, () => opts.aspect);
 
   /** 卡片 chips（点击跳转预览；超过 CHIP_COMPACT 张切紧凑样式） */
   const cardChipsWrap = h('div', { class: 'flex flex-wrap gap-1.5' }, []);
@@ -1408,11 +1412,13 @@ function render(): void {
   }
 
   // ──────────────── 组装布局 ────────────────
+  // 预览列仅在 lg 及以上吸顶：单列布局下预览区高约 920px（>视口），
+  // 若也吸顶会一直盖住下方设置项，手机端连文案输入框都点不到。
   const previewCol = h(
     'div',
     {
       class:
-        'min-w-0 order-first lg:order-none sticky top-0 lg:top-6 z-10 bg-[var(--bg)] py-2 space-y-3',
+        'min-w-0 order-first lg:order-none lg:sticky lg:top-6 z-10 bg-[var(--bg)] py-2 space-y-3',
     },
     [
       h('div', { class: 'flex items-center justify-between gap-2' }, [
@@ -1504,14 +1510,25 @@ function render(): void {
       [
         h('div', { class: 'space-y-2' }, [
           h('div', { class: 'flex items-center justify-between gap-2' }, [
-            fieldLabel('快闪文案'),
+            h('div', { class: 'flex items-center gap-1.5' }, [
+              fieldLabel('快闪文案'),
+              h('button', {
+                type: 'button',
+                class:
+                  'inline-flex h-5 w-5 items-center justify-center rounded-full border border-[var(--border)] text-[11px] text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]',
+                textContent: '?',
+                title: '文案格式与 AI 改写提示词',
+                'aria-label': '文案格式与 AI 改写提示词',
+                onclick: openScriptHelp,
+              }),
+            ]),
             h('span', { class: 'flex items-center gap-2' }, [truncatedLabel, cardCountLabel]),
           ]),
           contentInput,
           h('p', {
             class: 'text-[11px] leading-relaxed text-[var(--fg-muted)]',
             textContent:
-              '一行 = 一张卡 · 一行多句自动按句读拆开 · # 开头是标题卡 · **整句** 或【整句】是强调卡 · 空行与 --- 仅作分隔。',
+              '一行 = 一张卡 · 一行多句自动按句读拆开 · # 开头是标题卡 · **整句** 或【整句】是强调卡 · 空行与 --- 仅作分隔。点击 ? 可复制 AI 改写提示词。',
           }),
           cardChipsWrap,
         ]),
