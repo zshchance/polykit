@@ -1,0 +1,602 @@
+/* 歌词校准专用样式：全站 token 负责页面，深色频谱工作区保持稳定的判读对比度。 */
+
+.ls-card {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--bg-elevated);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.03);
+}
+
+.ls-dropzone {
+  position: relative;
+  display: flex;
+  min-height: 7.5rem;
+  width: 100%;
+  cursor: pointer;
+  align-items: center;
+  gap: 1rem;
+  border: 1px dashed var(--border);
+  border-radius: 0.875rem;
+  background: var(--bg);
+  padding: 1.125rem;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.ls-dropzone:hover,
+.ls-dropzone.is-dragover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg));
+}
+
+.ls-dropzone:active {
+  transform: translateY(1px);
+}
+
+.ls-dropzone:focus-visible,
+.ls-lyric-row:focus-visible,
+.ls-btn:focus-visible,
+.ls-mode-btn:focus-visible,
+.ls-transport-btn:focus-visible,
+.ls-chip:focus-visible,
+.ls-line-act:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ls-file-icon {
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  background: var(--bg-elevated);
+  font-size: 1.5rem;
+}
+
+.ls-btn {
+  display: inline-flex;
+  min-height: 2.375rem;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  background: var(--bg-elevated);
+  padding: 0.5rem 0.875rem;
+  color: var(--fg-muted);
+  font-size: 0.875rem;
+  line-height: 1.2;
+  transition:
+    color 150ms ease,
+    border-color 150ms ease,
+    background 150ms ease,
+    opacity 150ms ease;
+}
+
+.ls-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ls-btn-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.ls-btn-primary:hover:not(:disabled) {
+  color: var(--accent-fg);
+  opacity: 0.9;
+}
+
+.ls-btn-dark {
+  border-color: rgb(255 255 255 / 0.14);
+  background: rgb(255 255 255 / 0.07);
+  color: #dbeafe;
+}
+
+.ls-btn-dark:hover:not(:disabled) {
+  border-color: #a5b4fc;
+  background: rgb(255 255 255 / 0.12);
+  color: #fff;
+}
+
+.ls-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.ls-mode-btn {
+  cursor: pointer;
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.75rem;
+  color: var(--fg-muted);
+  font-size: 0.8125rem;
+  transition:
+    color 150ms ease,
+    background 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.ls-mode-btn.is-active {
+  background: var(--bg-elevated);
+  color: var(--accent);
+  box-shadow: 0 1px 4px rgb(15 23 42 / 0.12);
+}
+
+.dark .ls-mode-btn.is-active {
+  background: #334155;
+}
+
+.ls-spectrum-panel {
+  overflow: hidden;
+  border: 1px solid #253251;
+  border-radius: 1rem;
+  background: #0b1120;
+  color: #e2e8f0;
+  box-shadow: 0 12px 36px rgb(15 23 42 / 0.1);
+}
+
+.ls-spectrum-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgb(148 163 184 / 0.12);
+  background: rgb(15 23 42 / 0.7);
+}
+
+/* 吸附面板：滚动歌词时保持可见；精确辅助开时承载局部频谱，关时承载全曲频谱。 */
+.ls-dock {
+  position: sticky;
+  top: 0.75rem;
+  z-index: 30;
+}
+
+.ls-spectrum-wrap {
+  position: relative;
+  height: 10.5rem;
+  width: 100%;
+  background: #080d19;
+}
+
+.ls-spectrum-detail {
+  height: 11.5rem;
+}
+
+/* 频谱正下方的紧凑播放条：圆形图标按钮 + 时间码 + 小胶囊开关。 */
+.ls-transport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.55rem 0.85rem;
+  border-top: 1px solid rgb(148 163 184 / 0.12);
+  background: rgb(15 23 42 / 0.72);
+}
+
+.ls-transport-btn {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: none;
+  place-items: center;
+  border: 1px solid rgb(148 163 184 / 0.28);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.05);
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    color 150ms ease,
+    background 150ms ease,
+    opacity 150ms ease;
+}
+
+.ls-transport-btn:hover:not(:disabled) {
+  border-color: #a5b4fc;
+  background: rgb(255 255 255 / 0.1);
+  color: #f8fafc;
+}
+
+.ls-transport-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.ls-transport-play {
+  width: 2.6rem;
+  height: 2.6rem;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 1.05rem;
+}
+
+.ls-transport-play:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+  opacity: 0.9;
+}
+
+.ls-transport-time {
+  padding-left: 0.25rem;
+}
+
+.ls-chip {
+  display: inline-flex;
+  min-height: 2rem;
+  flex: none;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid rgb(148 163 184 / 0.28);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.05);
+  padding: 0.25rem 0.75rem;
+  color: #cbd5e1;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    color 150ms ease,
+    background 150ms ease,
+    opacity 150ms ease;
+}
+
+.ls-chip:hover:not(:disabled) {
+  border-color: #a5b4fc;
+  color: #f8fafc;
+}
+
+.ls-chip.is-on {
+  border-color: #818cf8;
+  background: rgb(99 102 241 / 0.28);
+  color: #e0e7ff;
+}
+
+.ls-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.ls-spectrum-canvas {
+  display: block;
+  height: 100%;
+  width: 100%;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.ls-spectrum-canvas.is-dragging {
+  cursor: grabbing !important;
+}
+
+.ls-spectrum-canvas:focus-visible {
+  outline: 2px solid #a5b4fc;
+  outline-offset: -2px;
+}
+
+.ls-progress-track {
+  height: 0.25rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg);
+}
+
+.ls-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6366f1, #22d3ee);
+  transition: width 100ms linear;
+}
+
+.ls-lyrics-scroll {
+  max-height: 31rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--border) transparent;
+}
+
+.ls-lyric-row {
+  position: relative;
+  display: grid;
+  width: 100%;
+  cursor: pointer;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.625rem;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  color: var(--fg);
+  text-align: left;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
+}
+
+.ls-lyric-row + .ls-lyric-row {
+  margin-top: 0.25rem;
+}
+
+.ls-lyric-row:hover {
+  background: var(--bg);
+}
+
+.ls-lyric-row.is-in-range {
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elevated));
+}
+
+.ls-lyric-row.is-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+}
+
+.ls-lyric-row.is-active::before {
+  position: absolute;
+  top: 0.75rem;
+  bottom: 0.75rem;
+  left: -1px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  content: '';
+}
+
+.ls-lyric-index {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--fg-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.6875rem;
+}
+
+.ls-lyric-row.is-playing .ls-lyric-index {
+  background: #06b6d4;
+  color: #fff;
+}
+
+.ls-lyric-time {
+  flex: none;
+  color: var(--fg-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.6875rem;
+  white-space: nowrap;
+  transition: opacity 140ms ease;
+}
+
+/* 悬停浮现的行内操作组：播放/暂停、句后新增、删除；盖在时间码上方不挤占行高。 */
+.ls-line-actions {
+  position: absolute;
+  top: 50%;
+  right: 0.625rem;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.22rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elevated) 90%, transparent);
+  box-shadow: 0 4px 16px rgb(15 23 42 / 0.16);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) scale(0.92);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.ls-lyric-row:hover .ls-line-actions,
+.ls-lyric-row:focus-within .ls-line-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(-50%) scale(1);
+}
+
+.ls-line-act {
+  display: grid;
+  width: 1.8rem;
+  height: 1.8rem;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--fg-muted);
+  font-size: 0.72rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    background 140ms ease,
+    opacity 140ms ease;
+}
+
+.ls-line-act:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ls-line-play {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.ls-line-play:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+  opacity: 0.92;
+}
+
+/* 图标形态由行的真实发声状态驱动：is-playing 只在出声时存在。 */
+.ls-line-play .ls-icon-pause {
+  display: none;
+}
+
+.ls-lyric-row.is-playing .ls-line-play .ls-icon-play {
+  display: none;
+}
+
+.ls-lyric-row.is-playing .ls-line-play .ls-icon-pause {
+  display: block;
+}
+
+.ls-line-del:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+/* 双击编辑歌词文字时的行内输入框。 */
+.ls-lyric-edit {
+  width: 100%;
+  border: 1px dashed var(--accent);
+  border-radius: 0.5rem;
+  background: var(--bg);
+  padding: 0.3rem 0.5rem;
+  color: var(--fg);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  outline: none;
+}
+
+.ls-lyric-edit:focus {
+  border-style: solid;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+@media (hover: hover) {
+  .ls-lyric-row:hover .ls-lyric-time {
+    opacity: 0.25;
+  }
+}
+
+/* 触屏没有悬停：常显操作组，点击即试听、增删。 */
+@media (pointer: coarse) {
+  .ls-line-actions {
+    opacity: 0.96;
+    pointer-events: auto;
+    transform: translateY(-50%) scale(1);
+  }
+}
+
+.ls-time-input {
+  width: 8.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  background: var(--bg);
+  padding: 0.55rem 0.65rem;
+  color: var(--fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8125rem;
+  outline: none;
+}
+
+.ls-time-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.ls-status-error {
+  color: #dc2626;
+}
+
+.dark .ls-status-error {
+  color: #f87171;
+}
+
+.ls-status-success {
+  color: #059669;
+}
+
+.dark .ls-status-success {
+  color: #34d399;
+}
+
+@media (max-width: 639px) {
+  .ls-dock {
+    top: 0.5rem;
+  }
+
+  .ls-dropzone {
+    min-height: 6.5rem;
+    padding: 0.875rem;
+  }
+
+  .ls-spectrum-wrap {
+    height: 9rem;
+  }
+
+  .ls-spectrum-detail {
+    height: 10rem;
+  }
+
+  .ls-lyric-row {
+    grid-template-columns: 1.75rem minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    padding: 0.625rem;
+  }
+
+  .ls-lyric-time {
+    grid-column: 2;
+  }
+
+  /* 窄屏改为行内第三列，避免操作组盖住歌词文本。 */
+  .ls-line-actions {
+    position: static;
+    grid-column: 3;
+    grid-row: 2;
+    justify-self: end;
+    align-self: center;
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+    padding: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .ls-line-act {
+    width: 1.7rem;
+    height: 1.7rem;
+  }
+
+  .ls-time-input {
+    width: 7.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ls-dropzone,
+  .ls-btn,
+  .ls-mode-btn,
+  .ls-lyric-row,
+  .ls-lyric-time,
+  .ls-line-actions,
+  .ls-line-act,
+  .ls-transport-btn,
+  .ls-chip,
+  .ls-progress-bar {
+    transition: none;
+  }
+}
